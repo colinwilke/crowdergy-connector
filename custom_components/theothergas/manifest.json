@@ -3,8 +3,10 @@
   "name": "Crowdergy Connector",
   "version": "1.0.0",
   "config_flow": true,
+  "documentation": "https://github.com/colinwilke/crowdergy-connector",
+  "issue_tracker": "https://github.com/colinwilke/crowdergy-connector/issues",
+  "codeowners": ["@colinwilke"],
   "dependencies": [],
-  "codeowners": [],
   "requirements": ["httpx>=0.24.0"],
   "iot_class": "cloud_push"
 }

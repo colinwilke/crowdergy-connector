@@ -1,5 +1,7 @@
 # Crowdergy Connector
 
+[![hacs_badge](https://img.shields.io/badge/HACS-Custom-41BDF5.svg)](https://github.com/hacs/integration)
+
 Home Assistant custom integration that bridges your local energy entities
 (solar inverter, battery, wallbox, grid meter, heat pump …) into the
 Crowdergy platform.
@@ -10,11 +12,15 @@ Crowdergy iOS app and aggregated for community flexibility.
 
 ## Installation
 
-### HACS (custom repository)
+### HACS (recommended)
 
-1. HACS → Integrations → ⋮ → Custom repositories
+[![Open your Home Assistant instance and open a repository inside the Home Assistant Community Store.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=colinwilke&repository=crowdergy-connector&category=integration)
+
+Or manually:
+
+1. HACS → Integrations → ⋮ → **Custom repositories**
 2. URL: `https://github.com/colinwilke/crowdergy-connector`
-3. Category: Integration
+3. Category: **Integration**
 4. Install **Crowdergy Connector**
 5. Restart Home Assistant
 
@@ -51,4 +57,4 @@ Devices can be added or removed later via the integration's
 
 ## License
 
-MIT
+MIT — see [LICENSE](LICENSE).
