@@ -1,0 +1,10 @@
+{
+  "domain": "theothergas",
+  "name": "Crowdergy Connector",
+  "version": "1.0.0",
+  "config_flow": true,
+  "dependencies": [],
+  "codeowners": [],
+  "requirements": ["httpx>=0.24.0"],
+  "iot_class": "cloud_push"
+}

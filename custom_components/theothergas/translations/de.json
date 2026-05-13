@@ -1,0 +1,97 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Mit Crowdergy verbinden",
+        "description": "Melde dich mit deinem Crowdergy-Konto an. Erstelle zuerst ein Konto in der Crowdergy App.",
+        "data": {
+          "email": "E-Mail",
+          "password": "Passwort"
+        },
+        "data_description": {
+          "email": "E-Mail-Adresse deines Crowdergy-Kontos.",
+          "password": "Passwort deines Crowdergy-Kontos."
+        }
+      },
+      "location": {
+        "title": "Standort",
+        "description": "Gib den Standort deiner Geräte an. Wird für die Aggregation verwendet.",
+        "data": {
+          "district": "Stadtteil",
+          "city": "Stadt",
+          "region": "Region"
+        },
+        "data_description": {
+          "district": "Stadtteil oder Viertel (z.B. Schwabing).",
+          "city": "Stadt (z.B. München).",
+          "region": "Region (z.B. Bayern)."
+        }
+      },
+      "device": {
+        "title": "Gerät #{device_number} konfigurieren",
+        "description": "Richte ein Energiegerät ein. Wähle Name, Typ und verbinde Home Assistant Entitäten.",
+        "data": {
+          "device_name": "Gerätename",
+          "device_type": "Gerätetyp",
+          "entity_current_power_kw": "Leistung Entität",
+          "entity_soc_percent": "Ladezustand Entität (%)",
+          "entity_is_active": "Aktiv-Status Entität"
+        },
+        "data_description": {
+          "device_name": "Anzeigename für dieses Gerät.",
+          "device_type": "Typ des Energiegeräts (Solar, Batterie, Wallbox, etc.).",
+          "entity_current_power_kw": "Home Assistant Entität für die aktuelle Leistung.",
+          "entity_soc_percent": "Home Assistant Entität für den Ladezustand in Prozent (nur Batterie).",
+          "entity_is_active": "Home Assistant Entität für den Aktiv-Status des Geräts."
+        }
+      },
+      "add_more": {
+        "title": "Weiteres Gerät hinzufügen?",
+        "description": "Du kannst weitere Geräte hinzufügen oder die Einrichtung abschließen.",
+        "menu_options": {
+          "device": "Weiteres Gerät hinzufügen",
+          "finish": "Fertig — Einrichtung abschließen"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Verbindung zum Server fehlgeschlagen.",
+      "invalid_auth": "Login fehlgeschlagen. Bitte E-Mail und Passwort prüfen.",
+      "unknown": "Ein unerwarteter Fehler ist aufgetreten."
+    },
+    "abort": {
+      "already_configured": "Dieses Konto ist bereits konfiguriert."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Geräte verwalten",
+        "description": "Geräte hinzufügen, entfernen oder Einstellungen abschließen.",
+        "menu_options": {
+          "add_device": "Gerät hinzufügen",
+          "remove_device": "Gerät entfernen",
+          "done": "Fertig"
+        }
+      },
+      "add_device": {
+        "title": "Neues Gerät hinzufügen",
+        "description": "Konfiguriere ein neues Energiegerät.",
+        "data": {
+          "device_name": "Gerätename",
+          "device_type": "Gerätetyp",
+          "entity_current_power_kw": "Leistung Entität",
+          "entity_soc_percent": "Ladezustand Entität (%)",
+          "entity_is_active": "Aktiv-Status Entität"
+        }
+      },
+      "remove_device": {
+        "title": "Gerät entfernen",
+        "description": "Wähle das Gerät, das entfernt werden soll.",
+        "data": {
+          "device_to_remove": "Gerät"
+        }
+      }
+    }
+  }
+}
