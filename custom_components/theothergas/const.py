@@ -21,5 +21,9 @@ CONF_REGION = "region"
 CONF_ENTITY_POWER = "entity_current_power_kw"
 CONF_ENTITY_SOC = "entity_soc_percent"
 CONF_ENTITY_ACTIVE = "entity_is_active"
+# Settable number entities that the Crowdergy app writes to via commands.
+# Battery uses both, wallbox only uses SoC-min (vehicle target).
+CONF_ENTITY_SOC_MIN = "entity_soc_min_percent"
+CONF_ENTITY_SOC_MAX = "entity_soc_max_percent"
 
 PLATFORMS = ["sensor", "switch"]

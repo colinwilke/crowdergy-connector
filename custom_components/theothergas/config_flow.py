@@ -23,6 +23,8 @@ from .const import (
     CONF_ENTITY_ACTIVE,
     CONF_ENTITY_POWER,
     CONF_ENTITY_SOC,
+    CONF_ENTITY_SOC_MAX,
+    CONF_ENTITY_SOC_MIN,
     CONF_PASSWORD,
     CONF_REFRESH_TOKEN,
     CONF_REGION,
@@ -59,6 +61,14 @@ def _device_schema() -> vol.Schema:
                     domain=["switch", "binary_sensor", "input_boolean"]
                 )
             ),
+            # SoC limits as settable number entities. Battery uses both,
+            # wallbox uses only SoC-min (vehicle target). Others leave blank.
+            vol.Optional(CONF_ENTITY_SOC_MIN): selector.EntitySelector(
+                selector.EntitySelectorConfig(domain="number")
+            ),
+            vol.Optional(CONF_ENTITY_SOC_MAX): selector.EntitySelector(
+                selector.EntitySelectorConfig(domain="number")
+            ),
         }
     )
 
@@ -90,6 +100,8 @@ async def _register_device(
         CONF_ENTITY_POWER: device_input.get(CONF_ENTITY_POWER, ""),
         CONF_ENTITY_SOC: device_input.get(CONF_ENTITY_SOC, ""),
         CONF_ENTITY_ACTIVE: device_input.get(CONF_ENTITY_ACTIVE, ""),
+        CONF_ENTITY_SOC_MIN: device_input.get(CONF_ENTITY_SOC_MIN, ""),
+        CONF_ENTITY_SOC_MAX: device_input.get(CONF_ENTITY_SOC_MAX, ""),
     }
 
 

@@ -20,6 +20,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: TheOtherGasConfigEntry) 
 
     await coordinator.async_config_entry_first_refresh()
     coordinator.setup_listeners()
+    coordinator.start_ws_listener()
 
     hass.data.setdefault(DOMAIN, {})
     hass.data[DOMAIN][entry.entry_id] = coordinator
