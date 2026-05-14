@@ -32,7 +32,7 @@ from .const import (
 
 _LOGGER = logging.getLogger(__name__)
 
-HEARTBEAT_INTERVAL = 60
+HEARTBEAT_INTERVAL = 30
 WS_RECONNECT_INITIAL = 1
 WS_RECONNECT_MAX = 60
 
