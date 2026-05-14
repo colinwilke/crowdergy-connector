@@ -9,8 +9,9 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
+from homeassistant.util import slugify
 
-from .const import CONF_DEVICE_ID, CONF_DEVICES, DOMAIN
+from .const import CONF_DEVICE_ID, CONF_DEVICE_NAME, CONF_DEVICES, DOMAIN
 from .coordinator import TheOtherGasCoordinator
 from .device_registry import get_device_info
 
@@ -46,6 +47,8 @@ class TheOtherGasActiveSwitch(
         self._device_id = device[CONF_DEVICE_ID]
         self._attr_unique_id = f"{self._device_id}_is_active"
         self._attr_device_info = get_device_info(device)
+        device_slug = slugify(device.get(CONF_DEVICE_NAME, "device"))
+        self._attr_suggested_object_id = f"crowdergy_{device_slug}_active"
 
     @property
     def is_on(self) -> bool | None:

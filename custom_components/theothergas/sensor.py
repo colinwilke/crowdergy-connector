@@ -16,8 +16,9 @@ from homeassistant.const import PERCENTAGE, UnitOfPower
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
+from homeassistant.util import slugify
 
-from .const import CONF_DEVICE_ID, CONF_DEVICE_TYPE, CONF_DEVICES, DOMAIN
+from .const import CONF_DEVICE_ID, CONF_DEVICE_NAME, CONF_DEVICE_TYPE, CONF_DEVICES, DOMAIN
 from .coordinator import TheOtherGasCoordinator
 from .device_registry import get_device_info
 
@@ -90,6 +91,10 @@ class TheOtherGasSensor(
         self._device_id = device[CONF_DEVICE_ID]
         self._attr_unique_id = f"{self._device_id}_{description.key}"
         self._attr_device_info = get_device_info(device)
+        # Prefix entity_ids with "crowdergy_" so users can find them by domain.
+        # Only honoured on first registration; existing entities keep their ID.
+        device_slug = slugify(device.get(CONF_DEVICE_NAME, "device"))
+        self._attr_suggested_object_id = f"crowdergy_{device_slug}_{description.key}"
 
     @property
     def native_value(self) -> float | None:
