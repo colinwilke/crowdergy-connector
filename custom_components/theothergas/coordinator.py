@@ -245,14 +245,21 @@ class TheOtherGasCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
 
         return result
 
-    async def async_send_command(
-        self, device_id: str, command: str, value: Any
+    async def async_post_command(
+        self, device_id: str, payload: dict[str, Any]
     ) -> bool:
+        """POST a command body to the backend in the schema it expects.
+
+        Payload must include `action` plus the action-specific fields the
+        backend's DeviceCommand schema demands, e.g.:
+          {"action": "toggle_active",  "is_active": True}
+          {"action": "set_soc_min",    "soc_min_percent": 25.0}
+        """
         try:
             response = await self._authenticated_request(
                 "POST",
                 f"/api/v1/devices/{device_id}/commands",
-                json={"action": command, "value": value},
+                json=payload,
             )
             response.raise_for_status()
             return True

@@ -58,17 +58,16 @@ class TheOtherGasActiveSwitch(
         return device_data.get("is_active", False)
 
     async def async_turn_on(self, **kwargs: Any) -> None:
-        success = await self.coordinator.async_send_command(
-            self._device_id, "set_active", True
-        )
-        if success and self.coordinator.data and self._device_id in self.coordinator.data:
-            self.coordinator.data[self._device_id]["is_active"] = True
-            self.async_write_ha_state()
+        await self._set_active(True)
 
     async def async_turn_off(self, **kwargs: Any) -> None:
-        success = await self.coordinator.async_send_command(
-            self._device_id, "set_active", False
+        await self._set_active(False)
+
+    async def _set_active(self, on: bool) -> None:
+        success = await self.coordinator.async_post_command(
+            self._device_id,
+            {"action": "toggle_active", "is_active": on},
         )
         if success and self.coordinator.data and self._device_id in self.coordinator.data:
-            self.coordinator.data[self._device_id]["is_active"] = False
+            self.coordinator.data[self._device_id]["is_active"] = on
             self.async_write_ha_state()
