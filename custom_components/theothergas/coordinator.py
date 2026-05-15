@@ -16,15 +16,18 @@ from homeassistant.helpers.event import async_track_state_change_event
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 
 from .const import (
+    CHARGE_MODE_OPTIONS,
     CONF_ACCESS_TOKEN,
     CONF_API_URL,
     CONF_DEVICE_ID,
     CONF_DEVICES,
     CONF_ENTITY_ACTIVE,
+    CONF_ENTITY_CHARGE_MODE,
     CONF_ENTITY_POWER,
     CONF_ENTITY_SOC,
     CONF_ENTITY_SOC_MAX,
     CONF_ENTITY_SOC_MIN,
+    CONF_ENTITY_VEHICLE_STATUS,
     CONF_REFRESH_TOKEN,
     CONF_USER_ID,
     DOMAIN,
@@ -70,6 +73,8 @@ class TheOtherGasCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
                 CONF_ENTITY_ACTIVE,
                 CONF_ENTITY_SOC_MIN,
                 CONF_ENTITY_SOC_MAX,
+                CONF_ENTITY_VEHICLE_STATUS,
+                CONF_ENTITY_CHARGE_MODE,
             ):
                 entity_id = dev.get(key, "")
                 if entity_id:
@@ -184,6 +189,18 @@ class TheOtherGasCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
         value = self._read_entity_state(entity_id)
         return value if isinstance(value, (int, float)) else None
 
+    def _read_string(self, entity_id: str) -> str | None:
+        """Read an entity state as a plain string (incl. friendly_name fallback)."""
+        if not entity_id:
+            return None
+        state = self.hass.states.get(entity_id)
+        if state is None or state.state in ("unknown", "unavailable"):
+            return None
+        # Prefer the friendly representation if HA exposes one (sensor entities
+        # often carry a `friendly_value` or use the raw `state`).
+        text = str(state.state)
+        return text if text else None
+
     async def _async_update_data(self) -> dict[str, dict[str, Any]]:
         result: dict[str, dict[str, Any]] = {}
 
@@ -194,12 +211,16 @@ class TheOtherGasCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
             entity_active = dev.get(CONF_ENTITY_ACTIVE, "")
             entity_soc_min = dev.get(CONF_ENTITY_SOC_MIN, "")
             entity_soc_max = dev.get(CONF_ENTITY_SOC_MAX, "")
+            entity_vehicle_status = dev.get(CONF_ENTITY_VEHICLE_STATUS, "")
+            entity_charge_mode = dev.get(CONF_ENTITY_CHARGE_MODE, "")
 
             current_power = self._read_power_kw(entity_power)
             soc_percent = self._read_entity_state(entity_soc)
             is_active_raw = self._read_entity_state(entity_active)
             soc_min = self._read_number(entity_soc_min)
             soc_max = self._read_number(entity_soc_max)
+            vehicle_status = self._read_string(entity_vehicle_status)
+            charge_mode = self._read_string(entity_charge_mode)
 
             if isinstance(is_active_raw, (int, float)):
                 is_active = bool(is_active_raw)
@@ -219,6 +240,10 @@ class TheOtherGasCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
                 payload["soc_min_percent"] = soc_min
             if soc_max is not None:
                 payload["soc_max_percent"] = soc_max
+            if vehicle_status is not None:
+                payload["vehicle_status"] = vehicle_status
+            if charge_mode is not None:
+                payload["charge_mode"] = charge_mode
 
             if device_id:
                 try:
@@ -243,6 +268,8 @@ class TheOtherGasCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
                 "soc_percent": payload.get("soc_percent"),
                 "soc_min_percent": soc_min,
                 "soc_max_percent": soc_max,
+                "vehicle_status": vehicle_status,
+                "charge_mode": charge_mode,
                 "is_active": is_active,
                 "is_online": True,
             }
@@ -338,10 +365,31 @@ class TheOtherGasCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
             await self._set_number_entity(dev.get(CONF_ENTITY_SOC_MIN, ""), value)
         elif action == "set_soc_max":
             await self._set_number_entity(dev.get(CONF_ENTITY_SOC_MAX, ""), value)
+        elif action == "set_charge_mode":
+            await self._set_charge_mode_entity(dev.get(CONF_ENTITY_CHARGE_MODE, ""), value)
         elif action == "toggle_active":
             await self._set_active_entity(dev.get(CONF_ENTITY_ACTIVE, ""), bool(value))
         else:
             _LOGGER.debug("Ignoring unsupported inbound action: %s", action)
+
+    async def _set_charge_mode_entity(self, entity_id: str, value: Any) -> None:
+        if not entity_id:
+            _LOGGER.debug("No select entity configured for charge mode command")
+            return
+        option = str(value)
+        if option not in CHARGE_MODE_OPTIONS:
+            _LOGGER.warning(
+                "Refusing to apply unknown charge mode %r (allowed: %s)",
+                option,
+                CHARGE_MODE_OPTIONS,
+            )
+            return
+        await self.hass.services.async_call(
+            "select",
+            "select_option",
+            {"entity_id": entity_id, "option": option},
+            blocking=True,
+        )
 
     async def _set_number_entity(self, entity_id: str, value: Any) -> None:
         if not entity_id:

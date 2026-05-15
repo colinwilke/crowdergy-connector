@@ -29,20 +29,26 @@
       },
       "device": {
         "title": "Gerät #{device_number} konfigurieren",
-        "description": "Richte ein Energiegerät ein. Wähle Name, Typ und verbinde Home Assistant Entitäten.",
+        "description": "Richte ein Energiegerät ein. Wähle zuerst den Typ und einen Namen, anschließend die zugehörigen Home-Assistant-Entitäten.",
         "data": {
-          "device_name": "Gerätename",
           "device_type": "Gerätetyp",
-          "entity_current_power_kw": "Leistung Entität",
-          "entity_soc_percent": "Ladezustand Entität (%)",
-          "entity_is_active": "Aktiv-Status Entität"
+          "device_name": "Name",
+          "entity_current_power_kw": "Entität für aktuelle Leistung des Geräts in Watt",
+          "entity_soc_percent": "Entität für aktuellen Ladezustand",
+          "entity_vehicle_status": "Entität für Fahrzeugstatus",
+          "entity_is_active": "Entität für Aktiv-Status",
+          "entity_soc_min_percent": "Entität für minimalen Ladezustand",
+          "entity_soc_max_percent": "Entität für maximalen Ladezustand",
+          "entity_charge_mode": "Entität für Lademodus"
         },
         "data_description": {
-          "device_name": "Anzeigename für dieses Gerät.",
-          "device_type": "Typ des Energiegeräts (Solar, Batterie, Wallbox, etc.).",
-          "entity_current_power_kw": "Home Assistant Entität für die aktuelle Leistung.",
-          "entity_soc_percent": "Home Assistant Entität für den Ladezustand in Prozent (nur Batterie).",
-          "entity_is_active": "Home Assistant Entität für den Aktiv-Status des Geräts."
+          "entity_current_power_kw": "📊 Leistungsdaten (nur lesend) — aktuelle Leistung in W.",
+          "entity_soc_percent": "Nur Batterie & Wallbox.",
+          "entity_vehicle_status": "Nur Wallbox — Statustext (z. B. „connected“, „charging“).",
+          "entity_is_active": "Optional — Schalter/Sensor der die Aktivität des Geräts widerspiegelt.",
+          "entity_soc_min_percent": "🎛️ Steuerungsparameter für Batterie- & Wallbox-Geräte (werden von Crowdergy regelmäßig gesetzt). Number-Entität für den minimalen Ladezustand.",
+          "entity_soc_max_percent": "Number-Entität für den maximalen Ladezustand.",
+          "entity_charge_mode": "Nur Wallbox — Select-Entität mit den Optionen „Lock Mode“, „Power Mode“, „Solar Pure Mode“."
         }
       },
       "add_more": {
@@ -67,22 +73,56 @@
     "step": {
       "init": {
         "title": "Geräte verwalten",
-        "description": "Geräte hinzufügen, entfernen oder Einstellungen abschließen.",
+        "description": "Geräte hinzufügen, bearbeiten, entfernen oder die Einrichtung abschließen.",
         "menu_options": {
           "add_device": "Gerät hinzufügen",
+          "edit_device": "Gerät bearbeiten",
           "remove_device": "Gerät entfernen",
           "done": "Fertig"
         }
       },
       "add_device": {
-        "title": "Neues Gerät hinzufügen",
-        "description": "Konfiguriere ein neues Energiegerät.",
+        "title": "Gerät hinzufügen",
+        "description": "Konfiguriere ein neues Energiegerät. Erst Typ und Name, dann die HA-Entitäten.",
         "data": {
-          "device_name": "Gerätename",
           "device_type": "Gerätetyp",
-          "entity_current_power_kw": "Leistung Entität",
-          "entity_soc_percent": "Ladezustand Entität (%)",
-          "entity_is_active": "Aktiv-Status Entität"
+          "device_name": "Name",
+          "entity_current_power_kw": "Entität für aktuelle Leistung des Geräts in Watt",
+          "entity_soc_percent": "Entität für aktuellen Ladezustand",
+          "entity_vehicle_status": "Entität für Fahrzeugstatus",
+          "entity_is_active": "Entität für Aktiv-Status",
+          "entity_soc_min_percent": "Entität für minimalen Ladezustand",
+          "entity_soc_max_percent": "Entität für maximalen Ladezustand",
+          "entity_charge_mode": "Entität für Lademodus"
+        },
+        "data_description": {
+          "entity_current_power_kw": "📊 Leistungsdaten (nur lesend).",
+          "entity_soc_percent": "Nur Batterie & Wallbox.",
+          "entity_vehicle_status": "Nur Wallbox — Statustext.",
+          "entity_soc_min_percent": "🎛️ Steuerungsparameter für Batterie- & Wallbox-Geräte (werden von Crowdergy regelmäßig gesetzt).",
+          "entity_charge_mode": "Nur Wallbox — Select-Entität mit „Lock Mode“, „Power Mode“, „Solar Pure Mode“."
+        }
+      },
+      "edit_device": {
+        "title": "Gerät bearbeiten",
+        "description": "Wähle das Gerät, das geändert werden soll.",
+        "data": {
+          "device_to_edit": "Gerät"
+        }
+      },
+      "edit_device_form": {
+        "title": "{device_name} bearbeiten",
+        "description": "Passe Typ, Name und verknüpfte Home-Assistant-Entitäten an.",
+        "data": {
+          "device_type": "Gerätetyp",
+          "device_name": "Name",
+          "entity_current_power_kw": "Entität für aktuelle Leistung des Geräts in Watt",
+          "entity_soc_percent": "Entität für aktuellen Ladezustand",
+          "entity_vehicle_status": "Entität für Fahrzeugstatus",
+          "entity_is_active": "Entität für Aktiv-Status",
+          "entity_soc_min_percent": "Entität für minimalen Ladezustand",
+          "entity_soc_max_percent": "Entität für maximalen Ladezustand",
+          "entity_charge_mode": "Entität für Lademodus"
         }
       },
       "remove_device": {
@@ -92,6 +132,9 @@
           "device_to_remove": "Gerät"
         }
       }
+    },
+    "error": {
+      "cannot_connect": "Verbindung zum Server fehlgeschlagen."
     }
   }
 }

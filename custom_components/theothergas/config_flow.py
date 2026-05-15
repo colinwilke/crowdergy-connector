@@ -11,6 +11,7 @@ from homeassistant.core import callback
 from homeassistant.helpers import selector
 
 from .const import (
+    CHARGE_MODE_OPTIONS,
     CONF_ACCESS_TOKEN,
     CONF_API_URL,
     CONF_CITY,
@@ -21,10 +22,12 @@ from .const import (
     CONF_DISTRICT,
     CONF_EMAIL,
     CONF_ENTITY_ACTIVE,
+    CONF_ENTITY_CHARGE_MODE,
     CONF_ENTITY_POWER,
     CONF_ENTITY_SOC,
     CONF_ENTITY_SOC_MAX,
     CONF_ENTITY_SOC_MIN,
+    CONF_ENTITY_VEHICLE_STATUS,
     CONF_PASSWORD,
     CONF_REFRESH_TOKEN,
     CONF_REGION,
@@ -36,41 +39,107 @@ from .const import (
 
 _LOGGER = logging.getLogger(__name__)
 
+# German labels for the device-type picker.
+DEVICE_TYPE_LABELS_DE = {
+    "solar": "Solar",
+    "battery": "Batterie",
+    "wallbox": "Wallbox",
+    "grid": "Netz",
+    "heatpump": "Wärmepumpe",
+    "generic": "Sonstiges",
+}
 
-def _device_schema() -> vol.Schema:
+
+def _device_schema(defaults: dict[str, Any] | None = None) -> vol.Schema:
+    """Build the add/edit device form schema.
+
+    Order (top-to-bottom):
+      1. Gerätetyp
+      2. Name
+      3. Leistungsdaten (read-only):
+           - aktuelle Leistung in Watt
+           - aktueller Ladezustand (battery / wallbox)
+           - Fahrzeugstatus (wallbox)
+           - aktiv-Sensor / Schalter
+      4. Steuerungsparameter (battery / wallbox — written by Crowdergy):
+           - minimaler Ladezustand
+           - maximaler Ladezustand
+           - Lademodus (wallbox)
+    """
+    d = defaults or {}
+
+    def required_key(key: str) -> Any:
+        if d.get(key) is not None:
+            return vol.Required(key, default=d[key])
+        return vol.Required(key)
+
+    def optional_key(key: str) -> Any:
+        if d.get(key):
+            return vol.Optional(key, default=d[key])
+        return vol.Optional(key)
+
+    type_selector = selector.SelectSelector(
+        selector.SelectSelectorConfig(
+            options=[
+                selector.SelectOptionDict(
+                    value=dt,
+                    label=DEVICE_TYPE_LABELS_DE.get(dt, dt.capitalize()),
+                )
+                for dt in DEVICE_TYPES
+            ],
+            mode=selector.SelectSelectorMode.DROPDOWN,
+        )
+    )
+
     return vol.Schema(
         {
-            vol.Required(CONF_DEVICE_NAME): str,
-            vol.Required(CONF_DEVICE_TYPE): selector.SelectSelector(
-                selector.SelectSelectorConfig(
-                    options=[
-                        selector.SelectOptionDict(value=dt, label=dt.capitalize())
-                        for dt in DEVICE_TYPES
-                    ],
-                    mode=selector.SelectSelectorMode.DROPDOWN,
-                )
-            ),
-            vol.Optional(CONF_ENTITY_POWER): selector.EntitySelector(
+            required_key(CONF_DEVICE_TYPE): type_selector,
+            required_key(CONF_DEVICE_NAME): str,
+            # ── Leistungsdaten (nur lesend) ─────────────────────────
+            optional_key(CONF_ENTITY_POWER): selector.EntitySelector(
                 selector.EntitySelectorConfig(domain="sensor")
             ),
-            vol.Optional(CONF_ENTITY_SOC): selector.EntitySelector(
+            optional_key(CONF_ENTITY_SOC): selector.EntitySelector(
                 selector.EntitySelectorConfig(domain="sensor")
             ),
-            vol.Optional(CONF_ENTITY_ACTIVE): selector.EntitySelector(
+            optional_key(CONF_ENTITY_VEHICLE_STATUS): selector.EntitySelector(
+                selector.EntitySelectorConfig(domain=["sensor", "binary_sensor"])
+            ),
+            optional_key(CONF_ENTITY_ACTIVE): selector.EntitySelector(
                 selector.EntitySelectorConfig(
                     domain=["switch", "binary_sensor", "input_boolean"]
                 )
             ),
-            # SoC limits as settable number entities. Battery uses both,
-            # wallbox uses only SoC-min (vehicle target). Others leave blank.
-            vol.Optional(CONF_ENTITY_SOC_MIN): selector.EntitySelector(
+            # ── Steuerungsparameter (Batterie + Wallbox) ───────────
+            optional_key(CONF_ENTITY_SOC_MIN): selector.EntitySelector(
                 selector.EntitySelectorConfig(domain="number")
             ),
-            vol.Optional(CONF_ENTITY_SOC_MAX): selector.EntitySelector(
+            optional_key(CONF_ENTITY_SOC_MAX): selector.EntitySelector(
                 selector.EntitySelectorConfig(domain="number")
+            ),
+            optional_key(CONF_ENTITY_CHARGE_MODE): selector.EntitySelector(
+                selector.EntitySelectorConfig(domain="select")
             ),
         }
     )
+
+
+def _build_device_record(
+    backend_device_id: str, device_input: dict[str, Any]
+) -> dict[str, Any]:
+    """Map a submitted form into the dict we persist on the config entry."""
+    return {
+        CONF_DEVICE_ID: backend_device_id,
+        CONF_DEVICE_NAME: device_input[CONF_DEVICE_NAME],
+        CONF_DEVICE_TYPE: device_input[CONF_DEVICE_TYPE],
+        CONF_ENTITY_POWER: device_input.get(CONF_ENTITY_POWER, ""),
+        CONF_ENTITY_SOC: device_input.get(CONF_ENTITY_SOC, ""),
+        CONF_ENTITY_ACTIVE: device_input.get(CONF_ENTITY_ACTIVE, ""),
+        CONF_ENTITY_SOC_MIN: device_input.get(CONF_ENTITY_SOC_MIN, ""),
+        CONF_ENTITY_SOC_MAX: device_input.get(CONF_ENTITY_SOC_MAX, ""),
+        CONF_ENTITY_VEHICLE_STATUS: device_input.get(CONF_ENTITY_VEHICLE_STATUS, ""),
+        CONF_ENTITY_CHARGE_MODE: device_input.get(CONF_ENTITY_CHARGE_MODE, ""),
+    }
 
 
 async def _register_device(
@@ -93,16 +162,24 @@ async def _register_device(
         response.raise_for_status()
         result = response.json()
 
-    return {
-        CONF_DEVICE_ID: result["id"],
-        CONF_DEVICE_NAME: device_input[CONF_DEVICE_NAME],
-        CONF_DEVICE_TYPE: device_input[CONF_DEVICE_TYPE],
-        CONF_ENTITY_POWER: device_input.get(CONF_ENTITY_POWER, ""),
-        CONF_ENTITY_SOC: device_input.get(CONF_ENTITY_SOC, ""),
-        CONF_ENTITY_ACTIVE: device_input.get(CONF_ENTITY_ACTIVE, ""),
-        CONF_ENTITY_SOC_MIN: device_input.get(CONF_ENTITY_SOC_MIN, ""),
-        CONF_ENTITY_SOC_MAX: device_input.get(CONF_ENTITY_SOC_MAX, ""),
+    return _build_device_record(result["id"], device_input)
+
+
+async def _update_device_backend(
+    api_url: str, token: str, device_id: str, device_input: dict[str, Any]
+) -> None:
+    """PUT a device's mutable fields (name, type) to the backend."""
+    payload = {
+        "name": device_input[CONF_DEVICE_NAME],
+        "type": device_input[CONF_DEVICE_TYPE],
     }
+    async with httpx.AsyncClient(timeout=15.0) as client:
+        response = await client.put(
+            f"{api_url}/api/v1/devices/{device_id}",
+            headers={"Authorization": f"Bearer {token}"},
+            json=payload,
+        )
+        response.raise_for_status()
 
 
 async def _delete_device_backend(api_url: str, token: str, device_id: str) -> None:
@@ -238,7 +315,7 @@ class TheOtherGasConfigFlow(ConfigFlow, domain=DOMAIN):
         return self.async_create_entry(title=title, data=self._data)
 
 
-# ── Options Flow (add / remove devices after setup) ─────────────────────────
+# ── Options Flow (add / edit / remove devices after setup) ──────────────────
 
 
 class TheOtherGasOptionsFlow(OptionsFlow):
@@ -249,13 +326,15 @@ class TheOtherGasOptionsFlow(OptionsFlow):
         self._devices: list[dict[str, Any]] = list(
             config_entry.data.get(CONF_DEVICES, [])
         )
+        # Which device the user is currently editing.
+        self._edit_target_id: str | None = None
 
     async def async_step_init(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
         return self.async_show_menu(
             step_id="init",
-            menu_options=["add_device", "remove_device", "done"],
+            menu_options=["add_device", "edit_device", "remove_device", "done"],
         )
 
     async def async_step_add_device(
@@ -281,6 +360,79 @@ class TheOtherGasOptionsFlow(OptionsFlow):
             step_id="add_device",
             data_schema=_device_schema(),
             errors=errors,
+        )
+
+    async def async_step_edit_device(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Pick which device to edit."""
+        if not self._devices:
+            return await self.async_step_init()
+
+        if user_input is not None:
+            self._edit_target_id = user_input["device_to_edit"]
+            return await self.async_step_edit_device_form()
+
+        options = [
+            selector.SelectOptionDict(
+                value=d[CONF_DEVICE_ID],
+                label=f"{d[CONF_DEVICE_NAME]} ({DEVICE_TYPE_LABELS_DE.get(d[CONF_DEVICE_TYPE], d[CONF_DEVICE_TYPE])})",
+            )
+            for d in self._devices
+        ]
+        return self.async_show_form(
+            step_id="edit_device",
+            data_schema=vol.Schema(
+                {
+                    vol.Required("device_to_edit"): selector.SelectSelector(
+                        selector.SelectSelectorConfig(
+                            options=options,
+                            mode=selector.SelectSelectorMode.DROPDOWN,
+                        )
+                    ),
+                }
+            ),
+        )
+
+    async def async_step_edit_device_form(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Edit the entity mappings + name + type of the previously chosen device."""
+        errors: dict[str, str] = {}
+        target = next(
+            (d for d in self._devices if d.get(CONF_DEVICE_ID) == self._edit_target_id),
+            None,
+        )
+        if target is None:
+            return await self.async_step_init()
+
+        if user_input is not None:
+            try:
+                await _update_device_backend(
+                    self._entry.data[CONF_API_URL],
+                    self._entry.data[CONF_ACCESS_TOKEN],
+                    target[CONF_DEVICE_ID],
+                    user_input,
+                )
+                # Replace the device record in-place, preserving its backend id.
+                updated = _build_device_record(target[CONF_DEVICE_ID], user_input)
+                self._devices = [
+                    updated if d[CONF_DEVICE_ID] == target[CONF_DEVICE_ID] else d
+                    for d in self._devices
+                ]
+                self._edit_target_id = None
+                return await self.async_step_init()
+            except (httpx.HTTPStatusError, httpx.RequestError) as err:
+                _LOGGER.error("Failed to update device: %s", err)
+                errors["base"] = "cannot_connect"
+
+        return self.async_show_form(
+            step_id="edit_device_form",
+            data_schema=_device_schema(defaults=target),
+            errors=errors,
+            description_placeholders={
+                "device_name": target.get(CONF_DEVICE_NAME, ""),
+            },
         )
 
     async def async_step_remove_device(
@@ -312,7 +464,7 @@ class TheOtherGasOptionsFlow(OptionsFlow):
         options = [
             selector.SelectOptionDict(
                 value=d[CONF_DEVICE_ID],
-                label=f"{d[CONF_DEVICE_NAME]} ({d[CONF_DEVICE_TYPE]})",
+                label=f"{d[CONF_DEVICE_NAME]} ({DEVICE_TYPE_LABELS_DE.get(d[CONF_DEVICE_TYPE], d[CONF_DEVICE_TYPE])})",
             )
             for d in self._devices
         ]
