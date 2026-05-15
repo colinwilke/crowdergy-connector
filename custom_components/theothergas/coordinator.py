@@ -317,7 +317,13 @@ class TheOtherGasCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
                 async with session.ws_connect(
                     self._ws_url(),
                     headers=self._auth_headers(),
-                    heartbeat=30,
+                    # No app-level heartbeat — Starlette's WS endpoint blocks
+                    # on receive_text() and doesn't actively answer ping frames
+                    # the way aiohttp's heartbeat protocol expects, so we'd
+                    # get spurious disconnects. TCP keepalive handles dead
+                    # sockets, and the reconnect loop below covers the rest.
+                    heartbeat=None,
+                    autoping=False,
                 ) as ws:
                     delay = WS_RECONNECT_INITIAL
                     _LOGGER.warning("Crowdergy WS connected to %s", self._ws_url())
