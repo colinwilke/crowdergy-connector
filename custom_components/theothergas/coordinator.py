@@ -83,7 +83,11 @@ class TheOtherGasCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
 
         @callback
         def _on_state_change(event: Event) -> None:
-            self.hass.async_create_task(self.async_request_refresh())
+            # async_refresh bypasses DataUpdateCoordinator's built-in
+            # debouncer so a user-driven HA change propagates immediately
+            # (sub-second) to the backend / iOS, instead of waiting up to
+            # the next 30 s heartbeat.
+            self.hass.async_create_task(self.async_refresh())
 
         self._unsub_listeners.append(
             async_track_state_change_event(self.hass, entity_ids, _on_state_change)
