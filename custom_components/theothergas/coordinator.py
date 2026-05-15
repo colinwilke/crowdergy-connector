@@ -298,53 +298,57 @@ class TheOtherGasCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
             _LOGGER.error("Command failed: %s", err)
             return False
 
-    # ── Inbound WS: commands pushed from the Crowdergy backend ────────────
+    # ── Inbound SSE: commands pushed from the Crowdergy backend ────────────
+    #
+    # Replaces the previous WebSocket-based listener on 2026-05-15. The
+    # backend now exposes /api/v1/stream as Server-Sent Events: an open
+    # HTTP/1.1 GET that yields `data: {…json…}` lines. No ping/pong
+    # protocol-level handshake, no aiohttp/Starlette idiosyncrasies — the
+    # server also emits a `{"type":"ping"}` every 15 s as application-
+    # level heartbeat.
 
-    def _ws_url(self) -> str:
-        base = self.api_url
-        if base.startswith("https://"):
-            base = "wss://" + base[len("https://"):]
-        elif base.startswith("http://"):
-            base = "ws://" + base[len("http://"):]
-        return f"{base}/api/v1/ws/{self._user_id}"
+    def _sse_url(self) -> str:
+        return f"{self.api_url}/api/v1/stream?token={self._access_token}"
 
     async def _run_ws_loop(self) -> None:
-        """Reconnecting WS listener for inbound commands from the backend."""
+        """Reconnecting SSE listener for inbound commands from the backend."""
         delay = WS_RECONNECT_INITIAL
         session = aiohttp_client.async_get_clientsession(self.hass)
         while True:
             try:
-                async with session.ws_connect(
-                    self._ws_url(),
-                    headers=self._auth_headers(),
-                    # No outbound heartbeat from us (Starlette's blocking
-                    # receive_text() wouldn't answer it), but autoping=True
-                    # so we DO answer inbound pings from the server, which
-                    # otherwise drops the connection every ~40 s.
-                    heartbeat=None,
-                    autoping=True,
-                ) as ws:
+                async with session.get(
+                    self._sse_url(),
+                    headers={
+                        "Accept": "text/event-stream",
+                        "Cache-Control": "no-cache",
+                    },
+                    timeout=aiohttp.ClientTimeout(total=None, sock_read=None),
+                ) as resp:
+                    if resp.status == 401 and await self._refresh_access_token():
+                        continue
+                    if resp.status != 200:
+                        _LOGGER.warning(
+                            "Crowdergy SSE handshake failed (%s) — retrying in %ss",
+                            resp.status, delay,
+                        )
+                        raise aiohttp.ClientError(f"status {resp.status}")
                     delay = WS_RECONNECT_INITIAL
-                    _LOGGER.warning("Crowdergy WS connected to %s", self._ws_url())
-                    async for msg in ws:
-                        if msg.type == aiohttp.WSMsgType.TEXT:
-                            try:
-                                await self._handle_ws_message(json.loads(msg.data))
-                            except Exception as err:  # noqa: BLE001
-                                _LOGGER.exception("Failed to handle WS message: %s", err)
-                        elif msg.type in (aiohttp.WSMsgType.CLOSED, aiohttp.WSMsgType.ERROR):
-                            break
+                    _LOGGER.warning("Crowdergy SSE connected to %s/api/v1/stream", self.api_url)
+                    async for raw in resp.content:
+                        line = raw.decode("utf-8", errors="replace").rstrip("\r\n")
+                        if not line.startswith("data: "):
+                            continue
+                        body = line[len("data: "):]
+                        try:
+                            await self._handle_ws_message(json.loads(body))
+                        except Exception as err:  # noqa: BLE001
+                            _LOGGER.exception("Failed to handle SSE event: %s", err)
             except asyncio.CancelledError:
                 raise
-            except aiohttp.WSServerHandshakeError as err:
-                # 401 = token expired/invalid → try refresh, then reconnect
-                if err.status == 401 and await self._refresh_access_token():
-                    continue
-                _LOGGER.warning("WS handshake failed (%s), backing off %ss", err.status, delay)
             except aiohttp.ClientError as err:
-                _LOGGER.warning("WS client error: %s — reconnecting in %ss", err, delay)
+                _LOGGER.warning("Crowdergy SSE client error: %s — reconnecting in %ss", err, delay)
             except Exception as err:  # noqa: BLE001
-                _LOGGER.exception("Unexpected WS error: %s", err)
+                _LOGGER.exception("Unexpected SSE error: %s", err)
 
             await asyncio.sleep(delay)
             delay = min(delay * 2, WS_RECONNECT_MAX)
@@ -356,7 +360,7 @@ class TheOtherGasCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
         device_id = data.get("device_id")
         value = data.get("value")
         _LOGGER.warning(
-            "Crowdergy WS inbound command: action=%s device=%s value=%r",
+            "Crowdergy SSE inbound command: action=%s device=%s value=%r",
             action, device_id, value,
         )
         if not action or not device_id:
