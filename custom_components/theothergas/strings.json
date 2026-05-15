@@ -22,40 +22,70 @@
           "region": "Region"
         },
         "data_description": {
-          "district": "Stadtteil oder Viertel (z.B. Schwabing).",
-          "city": "Stadt (z.B. München).",
-          "region": "Region (z.B. Bayern)."
+          "district": "Stadtteil oder Viertel (z. B. Schwabing).",
+          "city": "Stadt (z. B. München).",
+          "region": "Region (z. B. Bayern)."
         }
       },
-      "device": {
-        "title": "Gerät #{device_number} konfigurieren",
-        "description": "Richte ein Energiegerät ein. Wähle zuerst den Typ und einen Namen, anschließend die zugehörigen Home-Assistant-Entitäten.",
+      "device_type": {
+        "title": "Gerät #{device_number} — Typ & Name",
+        "description": "Wähle Gerätetyp und Namen. Im nächsten Schritt verknüpfst du die zugehörigen Home-Assistant-Entitäten.",
         "data": {
           "device_type": "Gerätetyp",
-          "device_name": "Name",
-          "entity_current_power_kw": "Entität für aktuelle Leistung des Geräts in Watt",
-          "entity_soc_percent": "Entität für aktuellen Ladezustand",
-          "entity_vehicle_status": "Entität für Fahrzeugstatus",
-          "entity_is_active": "Entität für Aktiv-Status",
-          "entity_soc_min_percent": "Entität für minimalen Ladezustand",
-          "entity_soc_max_percent": "Entität für maximalen Ladezustand",
-          "entity_charge_mode": "Entität für Lademodus"
+          "device_name": "Name"
         },
         "data_description": {
-          "entity_current_power_kw": "📊 Leistungsdaten (nur lesend) — aktuelle Leistung in W.",
-          "entity_soc_percent": "Nur Batterie & Wallbox.",
-          "entity_vehicle_status": "Nur Wallbox — Statustext (z. B. „connected“, „charging“).",
-          "entity_is_active": "Optional — Schalter/Sensor der die Aktivität des Geräts widerspiegelt.",
-          "entity_soc_min_percent": "🎛️ Steuerungsparameter für Batterie- & Wallbox-Geräte (werden von Crowdergy regelmäßig gesetzt). Number-Entität für den minimalen Ladezustand.",
-          "entity_soc_max_percent": "Number-Entität für den maximalen Ladezustand.",
-          "entity_charge_mode": "Nur Wallbox — Select-Entität mit den Optionen „Lock Mode“, „Power Mode“, „Solar Pure Mode“."
+          "device_type": "Bestimmt, welche Entitäten im nächsten Schritt abgefragt werden.",
+          "device_name": "Anzeigename in der Crowdergy App und in Home Assistant."
+        }
+      },
+      "device_entities": {
+        "title": "{device_name} ({device_type}) — Entitäten verknüpfen",
+        "description": "Verknüpfe die für diesen Gerätetyp relevanten Home-Assistant-Entitäten. Alle Felder sind optional, fehlende Werte werden ignoriert.",
+        "data": {
+          "entity_current_power_kw": "Entität für aktuelle Leistung des Geräts",
+          "entity_is_active": "Entität/Switch für Gerät An/Aus (bei Gerätetyp: Sonstiges)"
+        },
+        "data_description": {
+          "entity_current_power_kw": "Sensor, der die aktuelle Leistung in W oder kW liefert.",
+          "entity_is_active": "Schaltbare Switch- oder Input-Boolean-Entität, die die Crowdergy-App ein- und ausschalten kann."
+        },
+        "sections": {
+          "read_section": {
+            "name": "Leistungsdaten (nur lesend)",
+            "description": "Diese Entitäten werden von Crowdergy ausschließlich ausgelesen.",
+            "data": {
+              "entity_current_power_kw": "Entität für aktuelle Leistung des Geräts",
+              "entity_soc_percent": "Entität für aktuellen Ladezustand",
+              "entity_vehicle_status": "Entität für Fahrzeugstatus"
+            },
+            "data_description": {
+              "entity_current_power_kw": "Sensor, der die aktuelle Leistung in W oder kW liefert.",
+              "entity_soc_percent": "Sensor, der den aktuellen Ladezustand in Prozent liefert.",
+              "entity_vehicle_status": "Sensor- oder Binary-Sensor-Entität für den Fahrzeugstatus (z. B. „connected“, „charging“)."
+            }
+          },
+          "write_section": {
+            "name": "Steuerungsparameter für steuerbare Geräte (werden von Crowdergy regelmäßig gesetzt)",
+            "description": "Diese Entitäten werden von Crowdergy per Befehl regelmäßig beschrieben — verknüpfe nur schreibbare Entitäten.",
+            "data": {
+              "entity_soc_min_percent": "Entität für minimalen Ladezustand",
+              "entity_soc_max_percent": "Entität für maximalen Ladezustand",
+              "entity_charge_mode": "Entität für Lademodus"
+            },
+            "data_description": {
+              "entity_soc_min_percent": "Number-Entität für den minimalen Ladezustand. Crowdergy schreibt hier regelmäßig neue Werte.",
+              "entity_soc_max_percent": "Number-Entität für den maximalen Ladezustand. Crowdergy schreibt hier regelmäßig neue Werte.",
+              "entity_charge_mode": "Select-Entität mit den Optionen „Lock Mode“, „Power Mode“, „Solar Pure Mode“."
+            }
+          }
         }
       },
       "add_more": {
         "title": "Weiteres Gerät hinzufügen?",
         "description": "Du kannst weitere Geräte hinzufügen oder die Einrichtung abschließen.",
         "menu_options": {
-          "device": "Weiteres Gerät hinzufügen",
+          "device_type": "Weiteres Gerät hinzufügen",
           "finish": "Fertig — Einrichtung abschließen"
         }
       }
@@ -82,25 +112,57 @@
         }
       },
       "add_device": {
-        "title": "Gerät hinzufügen",
-        "description": "Konfiguriere ein neues Energiegerät. Erst Typ und Name, dann die HA-Entitäten.",
+        "title": "Gerät hinzufügen — Typ & Name",
+        "description": "Wähle Gerätetyp und Namen. Im nächsten Schritt verknüpfst du die zugehörigen Home-Assistant-Entitäten.",
         "data": {
           "device_type": "Gerätetyp",
-          "device_name": "Name",
-          "entity_current_power_kw": "Entität für aktuelle Leistung des Geräts in Watt",
-          "entity_soc_percent": "Entität für aktuellen Ladezustand",
-          "entity_vehicle_status": "Entität für Fahrzeugstatus",
-          "entity_is_active": "Entität für Aktiv-Status",
-          "entity_soc_min_percent": "Entität für minimalen Ladezustand",
-          "entity_soc_max_percent": "Entität für maximalen Ladezustand",
-          "entity_charge_mode": "Entität für Lademodus"
+          "device_name": "Name"
         },
         "data_description": {
-          "entity_current_power_kw": "📊 Leistungsdaten (nur lesend).",
-          "entity_soc_percent": "Nur Batterie & Wallbox.",
-          "entity_vehicle_status": "Nur Wallbox — Statustext.",
-          "entity_soc_min_percent": "🎛️ Steuerungsparameter für Batterie- & Wallbox-Geräte (werden von Crowdergy regelmäßig gesetzt).",
-          "entity_charge_mode": "Nur Wallbox — Select-Entität mit „Lock Mode“, „Power Mode“, „Solar Pure Mode“."
+          "device_type": "Bestimmt, welche Entitäten im nächsten Schritt abgefragt werden.",
+          "device_name": "Anzeigename in der Crowdergy App und in Home Assistant."
+        }
+      },
+      "add_device_entities": {
+        "title": "{device_name} ({device_type}) — Entitäten verknüpfen",
+        "description": "Verknüpfe die für diesen Gerätetyp relevanten Home-Assistant-Entitäten. Alle Felder sind optional.",
+        "data": {
+          "entity_current_power_kw": "Entität für aktuelle Leistung des Geräts",
+          "entity_is_active": "Entität/Switch für Gerät An/Aus (bei Gerätetyp: Sonstiges)"
+        },
+        "data_description": {
+          "entity_current_power_kw": "Sensor, der die aktuelle Leistung in W oder kW liefert.",
+          "entity_is_active": "Schaltbare Switch- oder Input-Boolean-Entität, die die Crowdergy-App ein- und ausschalten kann."
+        },
+        "sections": {
+          "read_section": {
+            "name": "Leistungsdaten (nur lesend)",
+            "description": "Diese Entitäten werden von Crowdergy ausschließlich ausgelesen.",
+            "data": {
+              "entity_current_power_kw": "Entität für aktuelle Leistung des Geräts",
+              "entity_soc_percent": "Entität für aktuellen Ladezustand",
+              "entity_vehicle_status": "Entität für Fahrzeugstatus"
+            },
+            "data_description": {
+              "entity_current_power_kw": "Sensor, der die aktuelle Leistung in W oder kW liefert.",
+              "entity_soc_percent": "Sensor, der den aktuellen Ladezustand in Prozent liefert.",
+              "entity_vehicle_status": "Sensor- oder Binary-Sensor-Entität für den Fahrzeugstatus (z. B. „connected“, „charging“)."
+            }
+          },
+          "write_section": {
+            "name": "Steuerungsparameter für steuerbare Geräte (werden von Crowdergy regelmäßig gesetzt)",
+            "description": "Diese Entitäten werden von Crowdergy per Befehl regelmäßig beschrieben — verknüpfe nur schreibbare Entitäten.",
+            "data": {
+              "entity_soc_min_percent": "Entität für minimalen Ladezustand",
+              "entity_soc_max_percent": "Entität für maximalen Ladezustand",
+              "entity_charge_mode": "Entität für Lademodus"
+            },
+            "data_description": {
+              "entity_soc_min_percent": "Number-Entität für den minimalen Ladezustand. Crowdergy schreibt hier regelmäßig neue Werte.",
+              "entity_soc_max_percent": "Number-Entität für den maximalen Ladezustand. Crowdergy schreibt hier regelmäßig neue Werte.",
+              "entity_charge_mode": "Select-Entität mit den Optionen „Lock Mode“, „Power Mode“, „Solar Pure Mode“."
+            }
+          }
         }
       },
       "edit_device": {
@@ -110,24 +172,63 @@
           "device_to_edit": "Gerät"
         }
       },
-      "edit_device_form": {
-        "title": "{device_name} bearbeiten",
-        "description": "Passe Typ, Name und verknüpfte Home-Assistant-Entitäten an.",
+      "edit_device_type": {
+        "title": "{device_name} bearbeiten — Typ & Name",
+        "description": "Passe Typ und Name an. Im nächsten Schritt verknüpfst du die zugehörigen Entitäten.",
         "data": {
           "device_type": "Gerätetyp",
-          "device_name": "Name",
-          "entity_current_power_kw": "Entität für aktuelle Leistung des Geräts in Watt",
-          "entity_soc_percent": "Entität für aktuellen Ladezustand",
-          "entity_vehicle_status": "Entität für Fahrzeugstatus",
-          "entity_is_active": "Entität für Aktiv-Status",
-          "entity_soc_min_percent": "Entität für minimalen Ladezustand",
-          "entity_soc_max_percent": "Entität für maximalen Ladezustand",
-          "entity_charge_mode": "Entität für Lademodus"
+          "device_name": "Name"
+        },
+        "data_description": {
+          "device_type": "Bestimmt, welche Entitäten im nächsten Schritt abgefragt werden.",
+          "device_name": "Anzeigename in der Crowdergy App und in Home Assistant."
+        }
+      },
+      "edit_device_entities": {
+        "title": "{device_name} ({device_type}) — Entitäten verknüpfen",
+        "description": "Passe die verknüpften Home-Assistant-Entitäten an. Alle Felder sind optional.",
+        "data": {
+          "entity_current_power_kw": "Entität für aktuelle Leistung des Geräts",
+          "entity_is_active": "Entität/Switch für Gerät An/Aus (bei Gerätetyp: Sonstiges)"
+        },
+        "data_description": {
+          "entity_current_power_kw": "Sensor, der die aktuelle Leistung in W oder kW liefert.",
+          "entity_is_active": "Schaltbare Switch- oder Input-Boolean-Entität, die die Crowdergy-App ein- und ausschalten kann."
+        },
+        "sections": {
+          "read_section": {
+            "name": "Leistungsdaten (nur lesend)",
+            "description": "Diese Entitäten werden von Crowdergy ausschließlich ausgelesen.",
+            "data": {
+              "entity_current_power_kw": "Entität für aktuelle Leistung des Geräts",
+              "entity_soc_percent": "Entität für aktuellen Ladezustand",
+              "entity_vehicle_status": "Entität für Fahrzeugstatus"
+            },
+            "data_description": {
+              "entity_current_power_kw": "Sensor, der die aktuelle Leistung in W oder kW liefert.",
+              "entity_soc_percent": "Sensor, der den aktuellen Ladezustand in Prozent liefert.",
+              "entity_vehicle_status": "Sensor- oder Binary-Sensor-Entität für den Fahrzeugstatus (z. B. „connected“, „charging“)."
+            }
+          },
+          "write_section": {
+            "name": "Steuerungsparameter für steuerbare Geräte (werden von Crowdergy regelmäßig gesetzt)",
+            "description": "Diese Entitäten werden von Crowdergy per Befehl regelmäßig beschrieben — verknüpfe nur schreibbare Entitäten.",
+            "data": {
+              "entity_soc_min_percent": "Entität für minimalen Ladezustand",
+              "entity_soc_max_percent": "Entität für maximalen Ladezustand",
+              "entity_charge_mode": "Entität für Lademodus"
+            },
+            "data_description": {
+              "entity_soc_min_percent": "Number-Entität für den minimalen Ladezustand. Crowdergy schreibt hier regelmäßig neue Werte.",
+              "entity_soc_max_percent": "Number-Entität für den maximalen Ladezustand. Crowdergy schreibt hier regelmäßig neue Werte.",
+              "entity_charge_mode": "Select-Entität mit den Optionen „Lock Mode“, „Power Mode“, „Solar Pure Mode“."
+            }
+          }
         }
       },
       "remove_device": {
         "title": "Gerät entfernen",
-        "description": "Wähle das Gerät, das entfernt werden soll.",
+        "description": "Wähle das Gerät, das entfernt werden soll. Das Gerät wird sowohl in Crowdergy als auch in Home Assistant gelöscht.",
         "data": {
           "device_to_remove": "Gerät"
         }

@@ -8,11 +8,12 @@
 - **Coordinator** (`DataUpdateCoordinator`-Subklasse, 30 s Heartbeat, State-Change-Listener, Telemetrie-Push, JWT-Refresh, Power-W→kW-Konvertierung, **SSE-Listener** auf `/api/v1/stream` mit reconnect/backoff, Command-Dispatch): `custom_components/theothergas/coordinator.py`
 - **Sensor-Plattform** (`current_power_kw`, `soc_percent`, `vehicle_status`, `charge_mode`): `custom_components/theothergas/sensor.py`
 - **Switch-Plattform** (`async_turn_on/off` → `toggle_active`-Command): `custom_components/theothergas/switch.py`
-- **Config-Flow** (Login → Location → Device-Loop mit Entities für power/soc/active/soc_min/soc_max/vehicle_status/charge_mode; Options-Flow + Edit-Device-Flow): `custom_components/theothergas/config_flow.py`
+- **Config-Flow** (Login → Location → **zwei Schritte pro Gerät**: erst Typ+Name, dann typ-spezifische Entity-Auswahl; Options-Flow + Edit-Device-Flow in der gleichen Struktur): `custom_components/theothergas/config_flow.py`. Schemas pro Typ in `_TYPE_FIELDS`; Batterie/Wallbox-Formulare in zwei Sektionen "Leistungsdaten (nur lesend)" und "Steuerungsparameter (werden von Crowdergy regelmäßig gesetzt)"
 - **Device-Registry-Mapping** (`solar|battery|wallbox|grid|heatpump|generic`): `custom_components/theothergas/device_registry.py`
 - **Brand-Icons** lokal unter `custom_components/theothergas/brand/` (seit HA 2026.3 reicht das, kein PR an `home-assistant/brands` mehr nötig)
 - **HACS-Manifest** (`hacs.json` mit `render_readme`, `homeassistant: 2024.6.0`, `country: DE`)
-- **Release**: aktuell `v1.4.0` (SSE-Migration + Brand-Icons + Charge-Mode/Vehicle-Status-Entities)
+- **Device-Removal sauber HA-seitig**: `async_remove_config_entry_device` in `__init__.py` (HA-eigener Löschen-Knopf) plus `_remove_ha_device()` im Options-Flow-Remove-Pfad — beide löschen den DeviceRegistry-Eintrag, nicht nur die Crowdergy-DB
+- **Release**: aktuell `v1.5.0` (Zwei-Schritt-Config-Flow mit typ-spezifischen Schemas, Sektions-Gruppierung, HA-Device-Cleanup beim Entfernen, Switch-Mapping für Sonstiges-Typ via `entity_is_active`)
 
 ### In Arbeit (was offen ist)
 - Keine offenen `TODO`/`FIXME` im Code
