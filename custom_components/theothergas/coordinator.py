@@ -320,7 +320,7 @@ class TheOtherGasCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
                     heartbeat=30,
                 ) as ws:
                     delay = WS_RECONNECT_INITIAL
-                    _LOGGER.info("Crowdergy WS connected")
+                    _LOGGER.warning("Crowdergy WS connected to %s", self._ws_url())
                     async for msg in ws:
                         if msg.type == aiohttp.WSMsgType.TEXT:
                             try:
@@ -350,6 +350,10 @@ class TheOtherGasCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
         action = data.get("action")
         device_id = data.get("device_id")
         value = data.get("value")
+        _LOGGER.warning(
+            "Crowdergy WS inbound command: action=%s device=%s value=%r",
+            action, device_id, value,
+        )
         if not action or not device_id:
             return
 
@@ -358,7 +362,7 @@ class TheOtherGasCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
             None,
         )
         if dev is None:
-            _LOGGER.debug("Ignoring command for unknown device %s", device_id)
+            _LOGGER.warning("No matching device for inbound command (device_id=%s)", device_id)
             return
 
         if action == "set_soc_min":
@@ -374,22 +378,29 @@ class TheOtherGasCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
 
     async def _set_charge_mode_entity(self, entity_id: str, value: Any) -> None:
         if not entity_id:
-            _LOGGER.debug("No select entity configured for charge mode command")
+            _LOGGER.warning("set_charge_mode: no select entity mapped, skipping")
             return
         option = str(value)
         if option not in CHARGE_MODE_OPTIONS:
             _LOGGER.warning(
-                "Refusing to apply unknown charge mode %r (allowed: %s)",
+                "set_charge_mode: refusing unknown charge mode %r (allowed: %s)",
                 option,
                 CHARGE_MODE_OPTIONS,
             )
             return
-        await self.hass.services.async_call(
-            "select",
-            "select_option",
-            {"entity_id": entity_id, "option": option},
-            blocking=True,
+        _LOGGER.warning(
+            "set_charge_mode: calling select.select_option on %s → %s",
+            entity_id, option,
         )
+        try:
+            await self.hass.services.async_call(
+                "select",
+                "select_option",
+                {"entity_id": entity_id, "option": option},
+                blocking=True,
+            )
+        except Exception as err:  # noqa: BLE001
+            _LOGGER.exception("select.select_option failed: %s", err)
 
     async def _set_number_entity(self, entity_id: str, value: Any) -> None:
         if not entity_id:
