@@ -1,21 +1,22 @@
 # crowdergy-connector
 
-## Stand: 2026-05-14
+## Stand: 2026-05-15
 
 ### Fertig (mit Dateinamen)
 - **Integration-Setup** (`async_setup_entry` / `async_unload_entry`): `custom_components/theothergas/__init__.py`
-- **Konstanten** (Domain, Default-API-URL, Config-Keys, Plattform-Liste): `custom_components/theothergas/const.py`
-- **Coordinator** (`DataUpdateCoordinator`-Subklasse, 60 s Heartbeat, State-Change-Listener, Telemetrie-Push, JWT-Refresh, Power-W→kW-Konvertierung, Command-Dispatch): `custom_components/theothergas/coordinator.py`
-- **Sensor-Plattform** (`current_power_kw` mit `SensorDeviceClass.POWER`; `soc_percent` mit `SensorDeviceClass.BATTERY` für Batterien): `custom_components/theothergas/sensor.py`
-- **Switch-Plattform** (`TheOtherGasActiveSwitch` mit `async_turn_on/off` → `set_active`-Command): `custom_components/theothergas/switch.py`
-- **Config-Flow** (3 Schritte + Device-Loop: Login → Location → Device-Add; Options-Flow zum nachträglichen Hinzufügen/Entfernen): `custom_components/theothergas/config_flow.py`
+- **Konstanten** (Domain, Default-API-URL, Config-Keys, Plattform-Liste, `CHARGE_MODE_OPTIONS`): `custom_components/theothergas/const.py`
+- **Coordinator** (`DataUpdateCoordinator`-Subklasse, 30 s Heartbeat, State-Change-Listener, Telemetrie-Push, JWT-Refresh, Power-W→kW-Konvertierung, **SSE-Listener** auf `/api/v1/stream` mit reconnect/backoff, Command-Dispatch): `custom_components/theothergas/coordinator.py`
+- **Sensor-Plattform** (`current_power_kw`, `soc_percent`, `vehicle_status`, `charge_mode`): `custom_components/theothergas/sensor.py`
+- **Switch-Plattform** (`async_turn_on/off` → `toggle_active`-Command): `custom_components/theothergas/switch.py`
+- **Config-Flow** (Login → Location → Device-Loop mit Entities für power/soc/active/soc_min/soc_max/vehicle_status/charge_mode; Options-Flow + Edit-Device-Flow): `custom_components/theothergas/config_flow.py`
 - **Device-Registry-Mapping** (`solar|battery|wallbox|grid|heatpump|generic`): `custom_components/theothergas/device_registry.py`
+- **Brand-Icons** lokal unter `custom_components/theothergas/brand/` (seit HA 2026.3 reicht das, kein PR an `home-assistant/brands` mehr nötig)
 - **HACS-Manifest** (`hacs.json` mit `render_readme`, `homeassistant: 2024.6.0`, `country: DE`)
-- **Release**: Tag `v1.0.0` (initialer Release + HACS-Vorbereitung)
+- **Release**: aktuell `v1.4.0` (SSE-Migration + Brand-Icons + Charge-Mode/Vehicle-Status-Entities)
 
 ### In Arbeit (was offen ist)
-- Keine offenen `TODO`/`FIXME` im Code; Funktionsumfang für v1 vollständig
-- Command-Set begrenzt auf `set_active` — `set_flex` / weitere Steuerbefehle noch nicht implementiert
+- Keine offenen `TODO`/`FIXME` im Code
+- Pytest-homeassistant-Test-Suite noch nicht aufgesetzt (Tier 3 der Test-Roadmap)
 
 ### Bekannte Probleme / TODOs
 - **Domain noch `theothergas`** (Legacy) — Migration auf `crowdergy` ausstehend (Manifest, `const.py`, Strings, Ordner-Rename → Breaking Change für bestehende Installs)
@@ -23,7 +24,7 @@
 - **Kein Retry/Backoff** bei fehlgeschlagenem `PATCH /devices/{id}/telemetry` — Fehler nur geloggt, kein Re-Enqueue
 - **Token-Refresh nur reaktiv** (auf 401) — kein proaktives Refresh vor Ablauf → Heartbeat kann fehlschlagen, wenn Token zwischen Intervallen abläuft
 - **HACS**: Repo nicht im Default-Index — User müssen Custom-Repo manuell hinzufügen
-- **Brand-Icon** nicht in `home-assistant/brands`-Repo eingereicht → kein Icon in HA-UI/HACS
+- **Brand-Icon** liegt lokal im `brand/`-Ordner (HA 2026.3+ unterstützt das); ein PR an `home-assistant/brands` wurde geschlossen, weil nicht mehr nötig
 - **Refresh-Tokens** stehen im Klartext in `config_entries` (HA-Standardpraxis, aber nicht ideal)
 - **Keine Tests** — kein `tests/`-Verzeichnis
 
@@ -42,12 +43,13 @@
       "soc_percent": float      // optional, nur Battery
     }
     ```
-  - `POST /api/v1/devices/{id}/commands` — `{action: "set_active", value: bool}`
+  - `POST /api/v1/devices/{id}/commands` — App→HA-Befehle: für `set_soc_min`/`set_soc_max`/`set_charge_mode`/`toggle_active`
+  - **`GET /api/v1/stream?token=…`** (SSE) — empfängt downstream Command-Frames vom Backend (`{type:"command", action, device_id, value}`) und setzt sie auf HA-Entities um. Heartbeat: `{type:"ping"}` alle 15 s
   - Auth: Bearer-JWT im `Authorization`-Header (`access_token`)
-- **iOS (crowdergy-ios):** keine direkte Verbindung — iOS bekommt Connector-Daten via Backend-WS-Broadcast
+- **iOS (crowdergy-ios):** keine direkte Verbindung — iOS bekommt Connector-Daten via Backend-SSE-Broadcast
 
 ### Plattform-Anforderungen (`manifest.json`)
 - `homeassistant: 2024.6.0`
-- `requirements: ["httpx>=0.24.0"]`
+- `requirements: ["httpx>=0.24.0"]` (Coordinator nutzt zusätzlich `aiohttp` aus HA's `aiohttp_client` für den SSE-Stream)
 - Domain: `theothergas` (Legacy-Name; siehe oben)
-- Version: `1.0.0`
+- Version: `1.4.0`
