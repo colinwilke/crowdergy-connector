@@ -83,6 +83,18 @@
           }
         }
       },
+      "device_values": {
+        "title": "{device_name} ({device_type}) — Steuer-Werte",
+        "description": "Welche Werte soll Crowdergy auf „{entity_control}“ schreiben, wenn das Gerät an oder aus geht? Bei Select-/Number-/Climate-Entities wird der Picker automatisch passend befüllt.",
+        "data": {
+          "value_on": "Wert für „Gerät an“",
+          "value_off": "Wert für „Gerät aus“"
+        },
+        "data_description": {
+          "value_on": "z. B. „Power Mode“, 16, „on“, „heat“.",
+          "value_off": "z. B. „Lock Mode“, 0, „off“."
+        }
+      },
       "add_more": {
         "title": "Weiteres Gerät hinzufügen?",
         "description": "Du kannst weitere Geräte hinzufügen oder die Einrichtung abschließen.",
@@ -169,6 +181,18 @@
           }
         }
       },
+      "add_device_values": {
+        "title": "{device_name} ({device_type}) — Steuer-Werte",
+        "description": "Welche Werte soll Crowdergy auf „{entity_control}“ schreiben, wenn das Gerät an oder aus geht? Bei Select-/Number-/Climate-Entities wird der Picker automatisch passend befüllt.",
+        "data": {
+          "value_on": "Wert für „Gerät an“",
+          "value_off": "Wert für „Gerät aus“"
+        },
+        "data_description": {
+          "value_on": "z. B. „Power Mode“, 16, „on“, „heat“.",
+          "value_off": "z. B. „Lock Mode“, 0, „off“."
+        }
+      },
       "edit_device": {
         "title": "Gerät bearbeiten",
         "description": "Wähle das Gerät, das geändert werden soll.",
@@ -230,6 +254,18 @@
               "value_off": "Beispiele: „Lock Mode“, 0, „off“."
             }
           }
+        }
+      },
+      "edit_device_values": {
+        "title": "{device_name} ({device_type}) — Steuer-Werte",
+        "description": "Welche Werte soll Crowdergy auf „{entity_control}“ schreiben, wenn das Gerät an oder aus geht? Bei Select-/Number-/Climate-Entities wird der Picker automatisch passend befüllt.",
+        "data": {
+          "value_on": "Wert für „Gerät an“",
+          "value_off": "Wert für „Gerät aus“"
+        },
+        "data_description": {
+          "value_on": "z. B. „Power Mode“, 16, „on“, „heat“.",
+          "value_off": "z. B. „Lock Mode“, 0, „off“."
         }
       },
       "remove_device": {

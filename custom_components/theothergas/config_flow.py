@@ -162,17 +162,11 @@ def _entities_schema(
         )
 
     if device_type in _CONTROLLABLE_TYPES:
-        # The Steuer-Trippel: which entity, with which on/off values.
-        # Value fields are plain strings — the connector parses + casts
-        # them at runtime based on the entity_control's domain.
+        # Just the entity here; value_on / value_off are asked in the
+        # follow-up step where the schema can adapt to the entity domain
+        # (Select → dropdown of options, Number → min/max slider, …).
         control_schema = vol.Schema({
             _entity_field(CONF_ENTITY_CONTROL, d): _ENTITY_SELECTORS[CONF_ENTITY_CONTROL],
-            vol.Optional(
-                CONF_VALUE_ON, default=d.get(CONF_VALUE_ON, "")
-            ): str,
-            vol.Optional(
-                CONF_VALUE_OFF, default=d.get(CONF_VALUE_OFF, "")
-            ): str,
         })
         schema_dict[vol.Required("control_section")] = section(
             control_schema, {"collapsed": False}
@@ -194,6 +188,90 @@ def _flatten_sections(user_input: dict[str, Any]) -> dict[str, Any]:
         else:
             flat[key] = value
     return flat
+
+
+# ── Step 3 (Crowdergize-fähig): value_on / value_off, typ-bewusst ──────────
+
+
+def _value_selector(hass, entity_id: str):
+    """Build a type-aware selector for value_on / value_off based on the
+    chosen entity_control. Returns None when no useful introspection is
+    available — caller falls back to a plain string field then.
+    """
+    if not entity_id:
+        return None
+    domain = entity_id.split(".", 1)[0]
+    state = hass.states.get(entity_id)
+    if state is None:
+        return None
+    if domain in ("select", "input_select"):
+        options = state.attributes.get("options") or []
+        if options:
+            return selector.SelectSelector(
+                selector.SelectSelectorConfig(
+                    options=[
+                        selector.SelectOptionDict(value=o, label=o) for o in options
+                    ],
+                    mode=selector.SelectSelectorMode.DROPDOWN,
+                )
+            )
+    if domain in ("number", "input_number"):
+        min_v = state.attributes.get("min")
+        max_v = state.attributes.get("max")
+        step_v = state.attributes.get("step", 1)
+        if min_v is not None and max_v is not None:
+            return selector.NumberSelector(
+                selector.NumberSelectorConfig(
+                    min=float(min_v),
+                    max=float(max_v),
+                    step=float(step_v),
+                    mode=selector.NumberSelectorMode.BOX,
+                )
+            )
+    if domain == "climate":
+        modes = state.attributes.get("hvac_modes") or []
+        if modes:
+            return selector.SelectSelector(
+                selector.SelectSelectorConfig(
+                    options=[
+                        selector.SelectOptionDict(value=m, label=m) for m in modes
+                    ],
+                    mode=selector.SelectSelectorMode.DROPDOWN,
+                )
+            )
+    return None
+
+
+def _values_schema(
+    hass, entity_control: str, defaults: dict[str, Any]
+) -> vol.Schema:
+    """Step C schema: value_on + value_off, typed if entity_control supports it."""
+    value_sel = _value_selector(hass, entity_control)
+
+    def _field(key: str):
+        default = defaults.get(key, "")
+        # NumberSelector chokes on empty-string defaults; use None there.
+        is_number = (
+            entity_control
+            and entity_control.split(".", 1)[0] in ("number", "input_number")
+        )
+        if default == "" and is_number:
+            return vol.Optional(key)
+        if default == "":
+            return vol.Optional(key)
+        # Cast for NumberSelector consistency
+        if is_number:
+            try:
+                return vol.Optional(key, default=float(default))
+            except (TypeError, ValueError):
+                return vol.Optional(key)
+        return vol.Optional(key, default=str(default))
+
+    field_type: Any = value_sel if value_sel is not None else str
+    return vol.Schema({
+        _field(CONF_VALUE_ON): field_type,
+        _field(CONF_VALUE_OFF): field_type,
+    })
 
 
 # ── Persistence helpers ─────────────────────────────────────────────────────
@@ -368,6 +446,8 @@ class TheOtherGasConfigFlow(ConfigFlow, domain=DOMAIN):
         # Carry the device-type/name picked in step 1 into step 2.
         self._pending_type: str | None = None
         self._pending_name: str | None = None
+        # Entity-mapping kept between step 2 and step 3 (values).
+        self._pending_entity_input: dict[str, Any] | None = None
 
     @staticmethod
     @callback
@@ -461,39 +541,80 @@ class TheOtherGasConfigFlow(ConfigFlow, domain=DOMAIN):
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
         """Step 2: type-specific entity mapping."""
-        errors: dict[str, str] = {}
         device_type = self._pending_type or "generic"
         device_name = self._pending_name or ""
 
         if user_input is not None:
-            try:
-                entity_input = _flatten_sections(user_input)
-                dev = await _register_device(
-                    self._data[CONF_API_URL],
-                    self._data[CONF_ACCESS_TOKEN],
-                    device_type,
-                    device_name,
-                    entity_input,
-                    self._data,
-                )
-                self._devices.append(dev)
-                self._pending_type = None
-                self._pending_name = None
-                return await self.async_step_add_more()
-            except (httpx.HTTPStatusError, httpx.RequestError) as err:
-                _LOGGER.error("Failed to register device: %s", err)
-                errors["base"] = "cannot_connect"
+            entity_input = _flatten_sections(user_input)
+            # Controllable devices get a follow-up step to type the on/off
+            # values; read-only ones can register directly.
+            if device_type in _CONTROLLABLE_TYPES and entity_input.get(CONF_ENTITY_CONTROL):
+                self._pending_entity_input = entity_input
+                return await self.async_step_device_values()
+            return await self._register_with_entities(entity_input)
 
         return self.async_show_form(
             step_id="device_entities",
             data_schema=_entities_schema(device_type),
-            errors=errors,
             description_placeholders={
                 "device_number": str(len(self._devices) + 1),
                 "device_type": DEVICE_TYPE_LABELS_DE.get(device_type, device_type),
                 "device_name": device_name,
             },
         )
+
+    async def async_step_device_values(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Step 3: typ-bewusste value_on / value_off für entity_control."""
+        device_type = self._pending_type or "generic"
+        device_name = self._pending_name or ""
+        entity_input = dict(self._pending_entity_input or {})
+        entity_control = entity_input.get(CONF_ENTITY_CONTROL, "")
+
+        if user_input is not None:
+            entity_input[CONF_VALUE_ON] = user_input.get(CONF_VALUE_ON, "")
+            entity_input[CONF_VALUE_OFF] = user_input.get(CONF_VALUE_OFF, "")
+            return await self._register_with_entities(entity_input)
+
+        return self.async_show_form(
+            step_id="device_values",
+            data_schema=_values_schema(self.hass, entity_control, {}),
+            description_placeholders={
+                "device_type": DEVICE_TYPE_LABELS_DE.get(device_type, device_type),
+                "device_name": device_name,
+                "entity_control": entity_control,
+            },
+        )
+
+    async def _register_with_entities(
+        self, entity_input: dict[str, Any]
+    ) -> ConfigFlowResult:
+        errors: dict[str, str] = {}
+        device_type = self._pending_type or "generic"
+        device_name = self._pending_name or ""
+        try:
+            dev = await _register_device(
+                self._data[CONF_API_URL],
+                self._data[CONF_ACCESS_TOKEN],
+                device_type,
+                device_name,
+                entity_input,
+                self._data,
+            )
+            self._devices.append(dev)
+            self._pending_type = None
+            self._pending_name = None
+            self._pending_entity_input = None
+            return await self.async_step_add_more()
+        except (httpx.HTTPStatusError, httpx.RequestError) as err:
+            _LOGGER.error("Failed to register device: %s", err)
+            errors["base"] = "cannot_connect"
+            return self.async_show_form(
+                step_id="device_entities",
+                data_schema=_entities_schema(device_type),
+                errors=errors,
+            )
 
     async def async_step_add_more(
         self, user_input: dict[str, Any] | None = None
@@ -525,10 +646,12 @@ class TheOtherGasOptionsFlow(OptionsFlow):
         # Add-flow scratch state.
         self._pending_type: str | None = None
         self._pending_name: str | None = None
+        self._pending_entity_input: dict[str, Any] | None = None
         # Edit-flow scratch state.
         self._edit_target_id: str | None = None
         self._edit_pending_type: str | None = None
         self._edit_pending_name: str | None = None
+        self._edit_pending_entity_input: dict[str, Any] | None = None
 
     async def async_step_init(
         self, user_input: dict[str, Any] | None = None
@@ -558,38 +681,77 @@ class TheOtherGasOptionsFlow(OptionsFlow):
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
         """Step 2 (add): type-specific entity mapping."""
-        errors: dict[str, str] = {}
         device_type = self._pending_type or "generic"
         device_name = self._pending_name or ""
 
         if user_input is not None:
-            try:
-                entity_input = _flatten_sections(user_input)
-                dev = await _register_device(
-                    self._entry.data[CONF_API_URL],
-                    self._entry.data[CONF_ACCESS_TOKEN],
-                    device_type,
-                    device_name,
-                    entity_input,
-                    self._entry.data,
-                )
-                self._devices.append(dev)
-                self._pending_type = None
-                self._pending_name = None
-                return await self.async_step_init()
-            except (httpx.HTTPStatusError, httpx.RequestError) as err:
-                _LOGGER.error("Failed to register device: %s", err)
-                errors["base"] = "cannot_connect"
+            entity_input = _flatten_sections(user_input)
+            if device_type in _CONTROLLABLE_TYPES and entity_input.get(CONF_ENTITY_CONTROL):
+                self._pending_entity_input = entity_input
+                return await self.async_step_add_device_values()
+            return await self._options_register(entity_input)
 
         return self.async_show_form(
             step_id="add_device_entities",
             data_schema=_entities_schema(device_type),
-            errors=errors,
             description_placeholders={
                 "device_type": DEVICE_TYPE_LABELS_DE.get(device_type, device_type),
                 "device_name": device_name,
             },
         )
+
+    async def async_step_add_device_values(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Step 3 (add): typ-bewusste value_on / value_off."""
+        device_type = self._pending_type or "generic"
+        device_name = self._pending_name or ""
+        entity_input = dict(self._pending_entity_input or {})
+        entity_control = entity_input.get(CONF_ENTITY_CONTROL, "")
+
+        if user_input is not None:
+            entity_input[CONF_VALUE_ON] = user_input.get(CONF_VALUE_ON, "")
+            entity_input[CONF_VALUE_OFF] = user_input.get(CONF_VALUE_OFF, "")
+            return await self._options_register(entity_input)
+
+        return self.async_show_form(
+            step_id="add_device_values",
+            data_schema=_values_schema(self.hass, entity_control, {}),
+            description_placeholders={
+                "device_type": DEVICE_TYPE_LABELS_DE.get(device_type, device_type),
+                "device_name": device_name,
+                "entity_control": entity_control,
+            },
+        )
+
+    async def _options_register(
+        self, entity_input: dict[str, Any]
+    ) -> ConfigFlowResult:
+        errors: dict[str, str] = {}
+        device_type = self._pending_type or "generic"
+        device_name = self._pending_name or ""
+        try:
+            dev = await _register_device(
+                self._entry.data[CONF_API_URL],
+                self._entry.data[CONF_ACCESS_TOKEN],
+                device_type,
+                device_name,
+                entity_input,
+                self._entry.data,
+            )
+            self._devices.append(dev)
+            self._pending_type = None
+            self._pending_name = None
+            self._pending_entity_input = None
+            return await self.async_step_init()
+        except (httpx.HTTPStatusError, httpx.RequestError) as err:
+            _LOGGER.error("Failed to register device: %s", err)
+            errors["base"] = "cannot_connect"
+            return self.async_show_form(
+                step_id="add_device_entities",
+                data_schema=_entities_schema(device_type),
+                errors=errors,
+            )
 
     # ── Edit-Device (two-step, defaults pre-filled) ─────────────────────────
 
@@ -658,7 +820,6 @@ class TheOtherGasOptionsFlow(OptionsFlow):
         beim Speichern automatisch weg (siehe `_build_device_record`),
         damit kein stale-Mapping liegen bleibt.
         """
-        errors: dict[str, str] = {}
         target = next(
             (d for d in self._devices if d.get(CONF_DEVICE_ID) == self._edit_target_id),
             None,
@@ -670,39 +831,99 @@ class TheOtherGasOptionsFlow(OptionsFlow):
         device_name = self._edit_pending_name or target[CONF_DEVICE_NAME]
 
         if user_input is not None:
-            try:
-                entity_input = _flatten_sections(user_input)
-                await _update_device_backend(
-                    self._entry.data[CONF_API_URL],
-                    self._entry.data[CONF_ACCESS_TOKEN],
-                    target[CONF_DEVICE_ID],
-                    device_type,
-                    device_name,
-                )
-                updated = _build_device_record(
-                    target[CONF_DEVICE_ID], device_type, device_name, entity_input
-                )
-                self._devices = [
-                    updated if d[CONF_DEVICE_ID] == target[CONF_DEVICE_ID] else d
-                    for d in self._devices
-                ]
-                self._edit_target_id = None
-                self._edit_pending_type = None
-                self._edit_pending_name = None
-                return await self.async_step_init()
-            except (httpx.HTTPStatusError, httpx.RequestError) as err:
-                _LOGGER.error("Failed to update device: %s", err)
-                errors["base"] = "cannot_connect"
+            entity_input = _flatten_sections(user_input)
+            # If the user remapped to a new entity_control, ask for fresh
+            # value_on / value_off in step 3 — the old ones probably don't
+            # apply to the new entity domain.
+            new_entity_control = entity_input.get(CONF_ENTITY_CONTROL, "")
+            old_entity_control = target.get(CONF_ENTITY_CONTROL, "")
+            if device_type in _CONTROLLABLE_TYPES and new_entity_control:
+                if new_entity_control != old_entity_control:
+                    # Remapped — drop old values, force step 3 to start fresh.
+                    entity_input.pop(CONF_VALUE_ON, None)
+                    entity_input.pop(CONF_VALUE_OFF, None)
+                else:
+                    # Same entity — carry stored values into step 3 defaults.
+                    entity_input[CONF_VALUE_ON] = target.get(CONF_VALUE_ON, "")
+                    entity_input[CONF_VALUE_OFF] = target.get(CONF_VALUE_OFF, "")
+                self._edit_pending_entity_input = entity_input
+                return await self.async_step_edit_device_values()
+            return await self._edit_save(target, entity_input)
 
         return self.async_show_form(
             step_id="edit_device_entities",
             data_schema=_entities_schema(device_type, defaults=target),
-            errors=errors,
             description_placeholders={
                 "device_type": DEVICE_TYPE_LABELS_DE.get(device_type, device_type),
                 "device_name": device_name,
             },
         )
+
+    async def async_step_edit_device_values(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Edit-Step 3: typ-bewusste value_on / value_off."""
+        target = next(
+            (d for d in self._devices if d.get(CONF_DEVICE_ID) == self._edit_target_id),
+            None,
+        )
+        if target is None:
+            return await self.async_step_init()
+
+        device_type = self._edit_pending_type or target[CONF_DEVICE_TYPE]
+        device_name = self._edit_pending_name or target[CONF_DEVICE_NAME]
+        entity_input = dict(self._edit_pending_entity_input or {})
+        entity_control = entity_input.get(CONF_ENTITY_CONTROL, "")
+
+        if user_input is not None:
+            entity_input[CONF_VALUE_ON] = user_input.get(CONF_VALUE_ON, "")
+            entity_input[CONF_VALUE_OFF] = user_input.get(CONF_VALUE_OFF, "")
+            return await self._edit_save(target, entity_input)
+
+        return self.async_show_form(
+            step_id="edit_device_values",
+            data_schema=_values_schema(self.hass, entity_control, entity_input),
+            description_placeholders={
+                "device_type": DEVICE_TYPE_LABELS_DE.get(device_type, device_type),
+                "device_name": device_name,
+                "entity_control": entity_control,
+            },
+        )
+
+    async def _edit_save(
+        self, target: dict[str, Any], entity_input: dict[str, Any]
+    ) -> ConfigFlowResult:
+        errors: dict[str, str] = {}
+        device_type = self._edit_pending_type or target[CONF_DEVICE_TYPE]
+        device_name = self._edit_pending_name or target[CONF_DEVICE_NAME]
+        try:
+            await _update_device_backend(
+                self._entry.data[CONF_API_URL],
+                self._entry.data[CONF_ACCESS_TOKEN],
+                target[CONF_DEVICE_ID],
+                device_type,
+                device_name,
+            )
+            updated = _build_device_record(
+                target[CONF_DEVICE_ID], device_type, device_name, entity_input
+            )
+            self._devices = [
+                updated if d[CONF_DEVICE_ID] == target[CONF_DEVICE_ID] else d
+                for d in self._devices
+            ]
+            self._edit_target_id = None
+            self._edit_pending_type = None
+            self._edit_pending_name = None
+            self._edit_pending_entity_input = None
+            return await self.async_step_init()
+        except (httpx.HTTPStatusError, httpx.RequestError) as err:
+            _LOGGER.error("Failed to update device: %s", err)
+            errors["base"] = "cannot_connect"
+            return self.async_show_form(
+                step_id="edit_device_entities",
+                data_schema=_entities_schema(device_type, defaults=target),
+                errors=errors,
+            )
 
     # ── Remove ──────────────────────────────────────────────────────────────
 
