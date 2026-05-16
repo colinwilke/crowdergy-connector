@@ -484,26 +484,32 @@ class TheOtherGasCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
                 device_id,
             )
             return
-        raw_value = dev.get(CONF_VALUE_ON if on else CONF_VALUE_OFF, "")
-        if raw_value == "" or raw_value is None:
-            _LOGGER.warning(
-                "Device %s has no value_%s configured — skipping HA write",
-                device_id, "on" if on else "off",
-            )
-            return
-
         domain = entity_id.split(".", 1)[0]
+        raw_value = dev.get(CONF_VALUE_ON if on else CONF_VALUE_OFF, "")
+
         try:
             if domain in ("switch", "input_boolean", "light", "fan"):
-                # Bool-style entities: any truthy value_on flips the
-                # service to turn_on. We respect the configured strings
-                # in case the user typed e.g. "off" for value_on by mistake.
-                want_on = str(raw_value).lower() in ("on", "true", "1", "yes", "an")
-                service = "turn_on" if want_on else "turn_off"
+                # Bool-style entities: on/off is implicit (turn_on /
+                # turn_off services). Honour any configured value_on /
+                # value_off string only as an override — empty string is
+                # fine and just maps to the natural on/off semantic.
+                if raw_value in ("", None):
+                    service = "turn_on" if on else "turn_off"
+                else:
+                    want_on = str(raw_value).lower() in ("on", "true", "1", "yes", "an")
+                    service = "turn_on" if want_on else "turn_off"
                 await self.hass.services.async_call(
                     domain, service, {"entity_id": entity_id}, blocking=True,
                 )
-            elif domain in ("number", "input_number"):
+                return
+            # All non-binary domains below need an explicit value.
+            if raw_value in ("", None):
+                _LOGGER.warning(
+                    "Device %s has no value_%s configured — skipping HA write",
+                    device_id, "on" if on else "off",
+                )
+                return
+            if domain in ("number", "input_number"):
                 await self.hass.services.async_call(
                     domain, "set_value",
                     {"entity_id": entity_id, "value": float(raw_value)},

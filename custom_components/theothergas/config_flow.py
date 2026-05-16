@@ -54,6 +54,16 @@ DEVICE_TYPE_LABELS_DE = {
 # user-mapped entity_control. Solar / Grid / Haushalt are read-only.
 _CONTROLLABLE_TYPES = {"battery", "wallbox", "heatpump", "generic"}
 
+# Entity domains where on/off is implicit (turn_on / turn_off services) —
+# no value_on / value_off needs to be typed by the user.
+_BINARY_DOMAINS = {"switch", "input_boolean", "light", "fan"}
+
+
+def _is_binary_entity(entity_id: str) -> bool:
+    if not entity_id:
+        return False
+    return entity_id.split(".", 1)[0] in _BINARY_DOMAINS
+
 # Which read-side telemetry fields each device type exposes. Crowdergize-
 # capable types additionally get the control trio (entity_control +
 # value_on + value_off) rendered as a separate section.
@@ -569,13 +579,15 @@ class TheOtherGasConfigFlow(ConfigFlow, domain=DOMAIN):
 
         if user_input is not None:
             entity_input = _flatten_sections(user_input)
-            # Step 3 only when entity_control is mapped — that's the path
-            # that needs value_on / value_off typed. Wallbox can have both
-            # entity_charge_mode and entity_control; only the latter
-            # triggers step 3.
+            # Step 3 only when entity_control is mapped AND it's not a
+            # binary on/off entity (switch / input_boolean / light / fan)
+            # — for those the connector uses turn_on / turn_off implicitly,
+            # no value_on / value_off needs typing.
+            entity_control = entity_input.get(CONF_ENTITY_CONTROL, "")
             needs_values = (
                 device_type in _CONTROLLABLE_TYPES
-                and entity_input.get(CONF_ENTITY_CONTROL)
+                and entity_control
+                and not _is_binary_entity(entity_control)
             )
             if needs_values:
                 self._pending_entity_input = entity_input
@@ -715,9 +727,11 @@ class TheOtherGasOptionsFlow(OptionsFlow):
 
         if user_input is not None:
             entity_input = _flatten_sections(user_input)
+            entity_control = entity_input.get(CONF_ENTITY_CONTROL, "")
             needs_values = (
                 device_type in _CONTROLLABLE_TYPES
-                and entity_input.get(CONF_ENTITY_CONTROL)
+                and entity_control
+                and not _is_binary_entity(entity_control)
             )
             if needs_values:
                 self._pending_entity_input = entity_input
@@ -867,12 +881,13 @@ class TheOtherGasOptionsFlow(OptionsFlow):
             entity_input = _flatten_sections(user_input)
             new_entity_control = entity_input.get(CONF_ENTITY_CONTROL, "")
             old_entity_control = target.get(CONF_ENTITY_CONTROL, "")
-            # Step 3 only when entity_control is mapped. Wallbox can also
-            # have entity_charge_mode (manual Lademodus); that path
-            # doesn't need a value step.
+            # Step 3 only when entity_control is mapped AND non-binary.
+            # Switch/Light/Fan/Input-Boolean skip the values step since
+            # turn_on / turn_off is implicit.
             needs_values = (
                 device_type in _CONTROLLABLE_TYPES
                 and new_entity_control
+                and not _is_binary_entity(new_entity_control)
             )
             if needs_values:
                 if new_entity_control != old_entity_control:
