@@ -286,6 +286,67 @@ async def _update_device_backend(
         response.raise_for_status()
 
 
+async def _resolve_location_defaults(hass) -> dict[str, str]:
+    """Best-effort defaults for the district/city/region form fields.
+
+    Strategy:
+      1. Read `hass.config.latitude` / `longitude`. If both are usable,
+         reverse-geocode via Nominatim and map the returned address to
+         our Stadtteil/Stadt/Region buckets.
+      2. On any failure (network, rate-limit, missing coords) fall back
+         to `hass.config.location_name` as the city default. District
+         and region stay empty.
+    """
+    fallback_city = (getattr(hass.config, "location_name", "") or "").strip()
+    fallback = {CONF_DISTRICT: "", CONF_CITY: fallback_city, CONF_REGION: ""}
+
+    lat = getattr(hass.config, "latitude", 0.0) or 0.0
+    lon = getattr(hass.config, "longitude", 0.0) or 0.0
+    if abs(lat) < 0.01 and abs(lon) < 0.01:
+        return fallback
+
+    url = "https://nominatim.openstreetmap.org/reverse"
+    params = {
+        "format": "json",
+        "lat": f"{lat}",
+        "lon": f"{lon}",
+        "addressdetails": "1",
+        "accept-language": "de",
+    }
+    headers = {
+        # Nominatim's usage policy requires a descriptive UA on every request.
+        "User-Agent": "crowdergy-connector/1.6.0 (+https://github.com/colinwilke/crowdergy-connector)"
+    }
+    try:
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            response = await client.get(url, params=params, headers=headers)
+            response.raise_for_status()
+            data = response.json()
+    except (httpx.HTTPStatusError, httpx.RequestError, ValueError) as err:
+        _LOGGER.debug("Reverse-geocode failed (%s); using location_name fallback", err)
+        return fallback
+
+    address = data.get("address", {}) if isinstance(data, dict) else {}
+
+    # Take the first non-empty value across the candidate keys for each bucket.
+    def _pick(keys: list[str]) -> str:
+        for key in keys:
+            value = address.get(key, "")
+            if value:
+                return str(value)
+        return ""
+
+    district = _pick(["suburb", "city_district", "borough", "quarter", "neighbourhood", "residential"])
+    city = _pick(["city", "town", "village", "municipality"])
+    region = _pick(["state", "region"])
+
+    return {
+        CONF_DISTRICT: district,
+        CONF_CITY: city or fallback_city,
+        CONF_REGION: region,
+    }
+
+
 async def _delete_device_backend(api_url: str, token: str, device_id: str) -> None:
     """Delete a device from the backend."""
     async with httpx.AsyncClient(timeout=15.0) as client:
@@ -383,13 +444,17 @@ class TheOtherGasConfigFlow(ConfigFlow, domain=DOMAIN):
             self._data[CONF_REGION] = user_input.get(CONF_REGION, "")
             return await self.async_step_device_type()
 
+        # Pre-fill from HA's configured coordinates so the user usually
+        # just hits Submit. Resolved once per fresh location step; if the
+        # user goes back and edits we keep whatever they typed.
+        defaults = await _resolve_location_defaults(self.hass)
         return self.async_show_form(
             step_id="location",
             data_schema=vol.Schema(
                 {
-                    vol.Optional(CONF_DISTRICT, default=""): str,
-                    vol.Optional(CONF_CITY, default=""): str,
-                    vol.Optional(CONF_REGION, default=""): str,
+                    vol.Optional(CONF_DISTRICT, default=defaults[CONF_DISTRICT]): str,
+                    vol.Optional(CONF_CITY, default=defaults[CONF_CITY]): str,
+                    vol.Optional(CONF_REGION, default=defaults[CONF_REGION]): str,
                 }
             ),
         )
