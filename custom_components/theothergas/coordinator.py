@@ -397,10 +397,12 @@ class TheOtherGasCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
             action = data.get("action")
             device_id = data.get("device_id")
             value = data.get("value")
+            _LOGGER.warning(
+                "Crowdergy SSE command frame: action=%s device=%s value=%r",
+                action, device_id, value,
+            )
             if action == "set_charge_mode" and device_id and value is not None:
                 await self._apply_charge_mode(device_id, str(value))
-            else:
-                _LOGGER.debug("Ignoring command frame: action=%s", action)
 
     async def _apply_charge_mode(self, device_id: str, mode: str) -> None:
         """Write the wallbox's configured entity_charge_mode select entity."""
@@ -409,20 +411,30 @@ class TheOtherGasCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
             None,
         )
         if dev is None:
+            _LOGGER.warning(
+                "set_charge_mode: no matching device config for %s",
+                device_id,
+            )
             return
         entity_id = dev.get(CONF_ENTITY_CHARGE_MODE, "") or ""
         if not entity_id:
-            _LOGGER.debug(
-                "Device %s has no entity_charge_mode mapped — skipping", device_id,
+            _LOGGER.warning(
+                "set_charge_mode: device %s has no entity_charge_mode "
+                "configured — re-add the device with v1.10.0+",
+                device_id,
             )
             return
         domain = entity_id.split(".", 1)[0]
         if domain not in ("select", "input_select"):
             _LOGGER.warning(
-                "entity_charge_mode for %s is not a select entity (%s)",
-                device_id, domain,
+                "set_charge_mode: entity_charge_mode for %s is not a select "
+                "entity (%s)", device_id, domain,
             )
             return
+        _LOGGER.warning(
+            "set_charge_mode: %s → %s",
+            entity_id, mode,
+        )
         try:
             await self.hass.services.async_call(
                 domain, "select_option",
@@ -430,7 +442,7 @@ class TheOtherGasCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
                 blocking=True,
             )
         except Exception as err:  # noqa: BLE001
-            _LOGGER.exception("set_charge_mode write failed: %s", err)
+            _LOGGER.exception("select.select_option failed: %s", err)
 
     def _sync_field_into_data(self, device_id: str, field: str, value: Any) -> None:
         """Mutate `self.data[device_id][field]` and notify CoordinatorEntities.
