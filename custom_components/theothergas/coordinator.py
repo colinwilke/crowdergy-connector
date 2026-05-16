@@ -16,20 +16,18 @@ from homeassistant.helpers.event import async_track_state_change_event
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 
 from .const import (
-    CHARGE_MODE_OPTIONS,
     CONF_ACCESS_TOKEN,
     CONF_API_URL,
     CONF_DEVICE_ID,
     CONF_DEVICES,
-    CONF_ENTITY_ACTIVE,
-    CONF_ENTITY_CHARGE_MODE,
+    CONF_ENTITY_CONTROL,
     CONF_ENTITY_POWER,
     CONF_ENTITY_SOC,
-    CONF_ENTITY_SOC_MAX,
-    CONF_ENTITY_SOC_MIN,
     CONF_ENTITY_VEHICLE_STATUS,
     CONF_REFRESH_TOKEN,
     CONF_USER_ID,
+    CONF_VALUE_OFF,
+    CONF_VALUE_ON,
     DOMAIN,
 )
 
@@ -69,6 +67,9 @@ class TheOtherGasCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
         # `toggle_active` (whether the toggle came from iOS or HA).
         self._active_state: dict[str, bool] = {}
         self._active_state_bootstrapped: bool = False
+        # Per-device on/off state — what the backend says the device
+        # should currently be set to. Updated via SSE telemetry mirror.
+        self._on_state: dict[str, bool] = {}
         self._build_entity_map()
 
     def _build_entity_map(self) -> None:
@@ -78,11 +79,7 @@ class TheOtherGasCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
             for key in (
                 CONF_ENTITY_POWER,
                 CONF_ENTITY_SOC,
-                CONF_ENTITY_ACTIVE,
-                CONF_ENTITY_SOC_MIN,
-                CONF_ENTITY_SOC_MAX,
                 CONF_ENTITY_VEHICLE_STATUS,
-                CONF_ENTITY_CHARGE_MODE,
             ):
                 entity_id = dev.get(key, "")
                 if entity_id:
@@ -210,22 +207,23 @@ class TheOtherGasCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
         return text if text else None
 
     async def _bootstrap_active_state(self) -> None:
-        """One-shot GET /devices to seed the local Crowdergize cache.
+        """One-shot GET /devices to seed the Crowdergize + on/off caches.
 
         Without this the HA switch entity boots showing `False` (the
         coordinator-default) until the user toggles something — and a fresh
         HA restart would silently drop a previously-on state. The backend
-        is the source of truth for `is_active`, so we mirror it once here.
+        is the source of truth for both flags, so we mirror them once here.
         """
         try:
             response = await self._authenticated_request("GET", "/api/v1/devices")
             response.raise_for_status()
             for d in response.json():
                 self._active_state[d["id"]] = bool(d.get("is_active", False))
+                self._on_state[d["id"]] = bool(d.get("is_on", False))
             self._active_state_bootstrapped = True
         except (httpx.HTTPStatusError, httpx.RequestError) as err:
             _LOGGER.warning(
-                "Bootstrap of Crowdergize state failed (%s) — will retry next refresh", err,
+                "Bootstrap of device state failed (%s) — will retry next refresh", err,
             )
 
     async def _async_update_data(self) -> dict[str, dict[str, Any]]:
@@ -238,17 +236,11 @@ class TheOtherGasCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
             device_id = dev[CONF_DEVICE_ID]
             entity_power = dev.get(CONF_ENTITY_POWER, "")
             entity_soc = dev.get(CONF_ENTITY_SOC, "")
-            entity_soc_min = dev.get(CONF_ENTITY_SOC_MIN, "")
-            entity_soc_max = dev.get(CONF_ENTITY_SOC_MAX, "")
             entity_vehicle_status = dev.get(CONF_ENTITY_VEHICLE_STATUS, "")
-            entity_charge_mode = dev.get(CONF_ENTITY_CHARGE_MODE, "")
 
             current_power = self._read_power_kw(entity_power)
             soc_percent = self._read_entity_state(entity_soc)
-            soc_min = self._read_number(entity_soc_min)
-            soc_max = self._read_number(entity_soc_max)
             vehicle_status = self._read_string(entity_vehicle_status)
-            charge_mode = self._read_string(entity_charge_mode)
 
             # is_active is the "Crowdergize" consent flag — owned by the
             # backend, NOT derived from any HA entity. We deliberately do
@@ -261,14 +253,8 @@ class TheOtherGasCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
             }
             if soc_percent is not None:
                 payload["soc_percent"] = soc_percent
-            if soc_min is not None:
-                payload["soc_min_percent"] = soc_min
-            if soc_max is not None:
-                payload["soc_max_percent"] = soc_max
             if vehicle_status is not None:
                 payload["vehicle_status"] = vehicle_status
-            if charge_mode is not None:
-                payload["charge_mode"] = charge_mode
 
             if device_id:
                 try:
@@ -291,11 +277,9 @@ class TheOtherGasCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
             result[device_id] = {
                 "current_power_kw": payload["power_kw"],
                 "soc_percent": payload.get("soc_percent"),
-                "soc_min_percent": soc_min,
-                "soc_max_percent": soc_max,
                 "vehicle_status": vehicle_status,
-                "charge_mode": charge_mode,
                 "is_active": self._active_state.get(device_id, False),
+                "is_on": self._on_state.get(device_id, False),
                 "is_online": True,
             }
 
@@ -380,126 +364,125 @@ class TheOtherGasCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
 
     async def _handle_ws_message(self, data: dict[str, Any]) -> None:
         # Telemetry mirror frames carry device-level state changes the user
-        # may have driven from the iOS app. We care specifically about
-        # `is_active` (Crowdergize) — keep the local cache fresh and ask
-        # HA to re-render any entities reading from coordinator.data.
+        # may have driven from the iOS app. We watch two flags:
+        #   - is_active (Crowdergize consent) — just update the local cache
+        #     so the HA switch entity reflects the right value.
+        #   - is_on (current on/off state) — drive the actual entity write
+        #     using the user-configured entity_control + value_on/value_off.
         if data.get("type") == "telemetry":
             device_id = data.get("device_id")
             payload = data.get("data") or {}
-            if device_id and "is_active" in payload:
+            if not device_id:
+                return
+            if "is_active" in payload:
                 new_value = bool(payload["is_active"])
                 if self._active_state.get(device_id) != new_value:
                     self._active_state[device_id] = new_value
-                    self._sync_active_into_data(device_id, new_value)
+                    self._sync_field_into_data(device_id, "is_active", new_value)
+            if "is_on" in payload:
+                new_on = bool(payload["is_on"])
+                if self._on_state.get(device_id) != new_on:
+                    self._on_state[device_id] = new_on
+                    self._sync_field_into_data(device_id, "is_on", new_on)
+                    await self._apply_device_state(device_id, new_on)
             return
 
-        if data.get("type") != "command":
-            return
-        action = data.get("action")
-        device_id = data.get("device_id")
-        value = data.get("value")
-        _LOGGER.warning(
-            "Crowdergy SSE inbound command: action=%s device=%s value=%r",
-            action, device_id, value,
-        )
-        if not action or not device_id:
-            return
+        # `command` frames are no longer used in v1.8.0+ (set_device_state
+        # flows through the telemetry-mirror path above). Older backend
+        # builds may still send set_soc_min / set_soc_max / set_charge_mode
+        # — silently ignore; the matching entity mappings are gone too.
+        if data.get("type") == "command":
+            _LOGGER.debug(
+                "Ignoring legacy command frame: %s",
+                data.get("action"),
+            )
 
+    def _sync_field_into_data(self, device_id: str, field: str, value: Any) -> None:
+        """Mutate `self.data[device_id][field]` and notify CoordinatorEntities.
+
+        The HA switch entities read from `coordinator.data` — we copy the
+        dict (DataUpdateCoordinator equality-checks references), update
+        the field, and push via `async_set_updated_data` to trigger a
+        re-render without waiting for the next refresh tick.
+        """
+        if self.data is None:
+            return
+        bucket = self.data.get(device_id)
+        if bucket is None or bucket.get(field) == value:
+            return
+        new_data = dict(self.data)
+        new_bucket = dict(bucket)
+        new_bucket[field] = value
+        new_data[device_id] = new_bucket
+        self.async_set_updated_data(new_data)
+
+    async def _apply_device_state(self, device_id: str, on: bool) -> None:
+        """Write the user-configured entity_control to value_on / value_off.
+
+        Looks up the device's `entity_control` + `value_on` / `value_off`
+        from the config entry and dispatches the right HA service based
+        on the entity's domain. No-ops cleanly if anything's missing so
+        a partial / new-style config can't crash the coordinator.
+        """
         dev = next(
             (d for d in self.devices if d.get(CONF_DEVICE_ID) == device_id),
             None,
         )
         if dev is None:
-            _LOGGER.warning("No matching device for inbound command (device_id=%s)", device_id)
             return
-
-        if action == "set_soc_min":
-            await self._set_number_entity(dev.get(CONF_ENTITY_SOC_MIN, ""), value)
-        elif action == "set_soc_max":
-            await self._set_number_entity(dev.get(CONF_ENTITY_SOC_MAX, ""), value)
-        elif action == "set_charge_mode":
-            await self._set_charge_mode_entity(dev.get(CONF_ENTITY_CHARGE_MODE, ""), value)
-        elif action == "toggle_active":
-            await self._set_active_entity(dev.get(CONF_ENTITY_ACTIVE, ""), bool(value))
-        else:
-            _LOGGER.debug("Ignoring unsupported inbound action: %s", action)
-
-    async def _set_charge_mode_entity(self, entity_id: str, value: Any) -> None:
+        entity_id = dev.get(CONF_ENTITY_CONTROL, "") or ""
         if not entity_id:
-            _LOGGER.warning("set_charge_mode: no select entity mapped, skipping")
-            return
-        option = str(value)
-        if option not in CHARGE_MODE_OPTIONS:
-            _LOGGER.warning(
-                "set_charge_mode: refusing unknown charge mode %r (allowed: %s)",
-                option,
-                CHARGE_MODE_OPTIONS,
+            _LOGGER.debug(
+                "Device %s has no entity_control mapped — Crowdergy can't switch it yet",
+                device_id,
             )
             return
-        _LOGGER.warning(
-            "set_charge_mode: calling select.select_option on %s → %s",
-            entity_id, option,
-        )
+        raw_value = dev.get(CONF_VALUE_ON if on else CONF_VALUE_OFF, "")
+        if raw_value == "" or raw_value is None:
+            _LOGGER.warning(
+                "Device %s has no value_%s configured — skipping HA write",
+                device_id, "on" if on else "off",
+            )
+            return
+
+        domain = entity_id.split(".", 1)[0]
         try:
-            await self.hass.services.async_call(
-                "select",
-                "select_option",
-                {"entity_id": entity_id, "option": option},
-                blocking=True,
+            if domain in ("switch", "input_boolean", "light", "fan"):
+                # Bool-style entities: any truthy value_on flips the
+                # service to turn_on. We respect the configured strings
+                # in case the user typed e.g. "off" for value_on by mistake.
+                want_on = str(raw_value).lower() in ("on", "true", "1", "yes", "an")
+                service = "turn_on" if want_on else "turn_off"
+                await self.hass.services.async_call(
+                    domain, service, {"entity_id": entity_id}, blocking=True,
+                )
+            elif domain in ("number", "input_number"):
+                await self.hass.services.async_call(
+                    domain, "set_value",
+                    {"entity_id": entity_id, "value": float(raw_value)},
+                    blocking=True,
+                )
+            elif domain in ("select", "input_select"):
+                await self.hass.services.async_call(
+                    domain, "select_option",
+                    {"entity_id": entity_id, "option": str(raw_value)},
+                    blocking=True,
+                )
+            elif domain == "climate":
+                await self.hass.services.async_call(
+                    domain, "set_hvac_mode",
+                    {"entity_id": entity_id, "hvac_mode": str(raw_value)},
+                    blocking=True,
+                )
+            else:
+                _LOGGER.warning(
+                    "Unsupported entity_control domain %s for device %s",
+                    domain, device_id,
+                )
+        except (ValueError, TypeError) as err:
+            _LOGGER.warning(
+                "Bad value_%s=%r for %s (%s) — %s",
+                "on" if on else "off", raw_value, entity_id, domain, err,
             )
         except Exception as err:  # noqa: BLE001
-            _LOGGER.exception("select.select_option failed: %s", err)
-
-    async def _set_number_entity(self, entity_id: str, value: Any) -> None:
-        if not entity_id:
-            _LOGGER.debug("No number entity configured for SoC command")
-            return
-        try:
-            numeric = float(value)
-        except (TypeError, ValueError):
-            _LOGGER.warning("Invalid SoC value %r for %s", value, entity_id)
-            return
-        await self.hass.services.async_call(
-            "number",
-            "set_value",
-            {"entity_id": entity_id, "value": numeric},
-            blocking=True,
-        )
-
-    def _sync_active_into_data(self, device_id: str, new_value: bool) -> None:
-        """Push the Crowdergize value into `self.data` and notify listeners.
-
-        The HA switch entity reads from `coordinator.data[device_id]["is_active"]`,
-        so we mutate that dict in place + call `async_set_updated_data` to
-        force a re-render. If `self.data` isn't initialised yet (very first
-        SSE frame before the first refresh), we just keep the cache value;
-        the next refresh will pick it up.
-        """
-        if self.data is None:
-            return
-        bucket = self.data.get(device_id)
-        if bucket is None:
-            return
-        if bucket.get("is_active") == new_value:
-            return
-        new_data = dict(self.data)
-        new_bucket = dict(bucket)
-        new_bucket["is_active"] = new_value
-        new_data[device_id] = new_bucket
-        self.async_set_updated_data(new_data)
-
-    async def _set_active_entity(self, entity_id: str, on: bool) -> None:
-        if not entity_id:
-            return
-        domain = entity_id.split(".", 1)[0]
-        # Only switch-like domains support turn_on/turn_off.
-        if domain not in ("switch", "input_boolean", "light", "fan"):
-            _LOGGER.debug("Cannot toggle entity %s — unsupported domain", entity_id)
-            return
-        service = "turn_on" if on else "turn_off"
-        await self.hass.services.async_call(
-            domain,
-            service,
-            {"entity_id": entity_id},
-            blocking=True,
-        )
+            _LOGGER.exception("entity_control write failed: %s", err)

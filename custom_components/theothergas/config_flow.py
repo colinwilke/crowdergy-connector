@@ -12,7 +12,6 @@ from homeassistant.data_entry_flow import section
 from homeassistant.helpers import selector
 
 from .const import (
-    CHARGE_MODE_OPTIONS,
     CONF_ACCESS_TOKEN,
     CONF_API_URL,
     CONF_CITY,
@@ -22,17 +21,16 @@ from .const import (
     CONF_DEVICES,
     CONF_DISTRICT,
     CONF_EMAIL,
-    CONF_ENTITY_ACTIVE,
-    CONF_ENTITY_CHARGE_MODE,
+    CONF_ENTITY_CONTROL,
     CONF_ENTITY_POWER,
     CONF_ENTITY_SOC,
-    CONF_ENTITY_SOC_MAX,
-    CONF_ENTITY_SOC_MIN,
     CONF_ENTITY_VEHICLE_STATUS,
     CONF_PASSWORD,
     CONF_REFRESH_TOKEN,
     CONF_REGION,
     CONF_USER_ID,
+    CONF_VALUE_OFF,
+    CONF_VALUE_ON,
     DEFAULT_API_URL,
     DEVICE_TYPES,
     DOMAIN,
@@ -48,42 +46,24 @@ DEVICE_TYPE_LABELS_DE = {
     "grid": "Netz",
     "heatpump": "Wärmepumpe",
     "generic": "Sonstiges",
+    "haushalt": "Haushalt",
 }
 
-# Which fields each device type exposes in the entity-mapping step.
-# `read_section`  → Felder unter "Leistungsdaten (nur lesend)"
-# `write_section` → Felder unter "Steuerungsparameter (werden von Crowdergy gesetzt)"
-# `flat`          → Felder, die ohne Sektions-Wrapper angezeigt werden
-#                   (für Typen mit nur einem Feld, wo eine einsame Sektion albern wäre)
-_TYPE_FIELDS: dict[str, dict[str, list[str]]] = {
-    "solar": {
-        "flat": [CONF_ENTITY_POWER],
-    },
-    "grid": {
-        "flat": [CONF_ENTITY_POWER],
-    },
-    "heatpump": {
-        "flat": [CONF_ENTITY_POWER],
-    },
-    "battery": {
-        "read_section": [CONF_ENTITY_POWER, CONF_ENTITY_SOC],
-        "write_section": [CONF_ENTITY_SOC_MIN, CONF_ENTITY_SOC_MAX],
-    },
-    "wallbox": {
-        "read_section": [
-            CONF_ENTITY_POWER,
-            CONF_ENTITY_SOC,
-            CONF_ENTITY_VEHICLE_STATUS,
-        ],
-        "write_section": [
-            CONF_ENTITY_SOC_MIN,
-            CONF_ENTITY_SOC_MAX,
-            CONF_ENTITY_CHARGE_MODE,
-        ],
-    },
-    "generic": {
-        "flat": [CONF_ENTITY_POWER, CONF_ENTITY_ACTIVE],
-    },
+# Device types that the Crowdergy app can switch on/off through the
+# user-mapped entity_control. Solar / Grid / Haushalt are read-only.
+_CONTROLLABLE_TYPES = {"battery", "wallbox", "heatpump", "generic"}
+
+# Which read-side telemetry fields each device type exposes. Crowdergize-
+# capable types additionally get the control trio (entity_control +
+# value_on + value_off) rendered as a separate section.
+_READ_FIELDS: dict[str, list[str]] = {
+    "solar":     [CONF_ENTITY_POWER],
+    "grid":      [CONF_ENTITY_POWER],
+    "heatpump":  [CONF_ENTITY_POWER],
+    "haushalt":  [CONF_ENTITY_POWER],
+    "battery":   [CONF_ENTITY_POWER, CONF_ENTITY_SOC],
+    "wallbox":   [CONF_ENTITY_POWER, CONF_ENTITY_SOC, CONF_ENTITY_VEHICLE_STATUS],
+    "generic":   [CONF_ENTITY_POWER],
 }
 
 # Entity-selector configs keyed by the CONF_ENTITY_* name.
@@ -97,17 +77,14 @@ _ENTITY_SELECTORS: dict[str, selector.EntitySelector] = {
     CONF_ENTITY_VEHICLE_STATUS: selector.EntitySelector(
         selector.EntitySelectorConfig(domain=["sensor", "binary_sensor"])
     ),
-    CONF_ENTITY_ACTIVE: selector.EntitySelector(
-        selector.EntitySelectorConfig(domain=["switch", "input_boolean"])
-    ),
-    CONF_ENTITY_SOC_MIN: selector.EntitySelector(
-        selector.EntitySelectorConfig(domain="number")
-    ),
-    CONF_ENTITY_SOC_MAX: selector.EntitySelector(
-        selector.EntitySelectorConfig(domain="number")
-    ),
-    CONF_ENTITY_CHARGE_MODE: selector.EntitySelector(
-        selector.EntitySelectorConfig(domain="select")
+    # Any settable HA entity — connector adapts the service call to the
+    # entity's domain at runtime (switch.turn_on/off, number.set_value,
+    # select.select_option, climate.set_hvac_mode, …).
+    CONF_ENTITY_CONTROL: selector.EntitySelector(
+        selector.EntitySelectorConfig(domain=[
+            "switch", "input_boolean", "number", "select",
+            "light", "fan", "climate", "input_number", "input_select",
+        ])
     ),
 }
 
@@ -159,39 +136,46 @@ def _entities_schema(
 ) -> vol.Schema:
     """Step 2: entity-selector schema customised for the chosen device type.
 
-    Wraps fields in `section()` blocks when both Leistungs- AND
-    Steuerungs-Felder vorhanden sind (Batterie + Wallbox).
-    For single-purpose types (Solar/Grid/Heatpump/Sonstiges) the fields
-    sit at the top level — eine einsame Sektion wäre nur Lärm.
+    Layout:
+      - Read-side telemetry fields at top (power, soc, vehicle_status as
+        applicable) — always present at least with `entity_current_power_kw`.
+      - For controllable types (battery / wallbox / heatpump / generic) a
+        "Steuerung (Crowdergize)" section with the entity_control + value_on
+        + value_off trio. The user picks any settable HA entity and the two
+        string values Crowdergy should write to it for "Gerät an" / "Gerät aus".
     """
     d = defaults or {}
-    fields_map = _TYPE_FIELDS.get(device_type, {})
+    read_fields = _READ_FIELDS.get(device_type, [CONF_ENTITY_POWER])
     schema_dict: dict[Any, Any] = {}
 
-    if "flat" in fields_map:
-        for key in fields_map["flat"]:
+    if len(read_fields) == 1 and device_type not in _CONTROLLABLE_TYPES:
+        # Single-purpose read-only types (solar/grid/haushalt): no
+        # section wrapping — looks silly with one field.
+        for key in read_fields:
             schema_dict[_entity_field(key, d)] = _ENTITY_SELECTORS[key]
-
-    if "read_section" in fields_map:
+    else:
         read_schema = vol.Schema(
-            {
-                _entity_field(key, d): _ENTITY_SELECTORS[key]
-                for key in fields_map["read_section"]
-            }
+            {_entity_field(key, d): _ENTITY_SELECTORS[key] for key in read_fields}
         )
         schema_dict[vol.Required("read_section")] = section(
             read_schema, {"collapsed": False}
         )
 
-    if "write_section" in fields_map:
-        write_schema = vol.Schema(
-            {
-                _entity_field(key, d): _ENTITY_SELECTORS[key]
-                for key in fields_map["write_section"]
-            }
-        )
-        schema_dict[vol.Required("write_section")] = section(
-            write_schema, {"collapsed": False}
+    if device_type in _CONTROLLABLE_TYPES:
+        # The Steuer-Trippel: which entity, with which on/off values.
+        # Value fields are plain strings — the connector parses + casts
+        # them at runtime based on the entity_control's domain.
+        control_schema = vol.Schema({
+            _entity_field(CONF_ENTITY_CONTROL, d): _ENTITY_SELECTORS[CONF_ENTITY_CONTROL],
+            vol.Optional(
+                CONF_VALUE_ON, default=d.get(CONF_VALUE_ON, "")
+            ): str,
+            vol.Optional(
+                CONF_VALUE_OFF, default=d.get(CONF_VALUE_OFF, "")
+            ): str,
+        })
+        schema_dict[vol.Required("control_section")] = section(
+            control_schema, {"collapsed": False}
         )
 
     return vol.Schema(schema_dict)
@@ -205,7 +189,7 @@ def _flatten_sections(user_input: dict[str, Any]) -> dict[str, Any]:
     """
     flat: dict[str, Any] = {}
     for key, value in user_input.items():
-        if key in ("read_section", "write_section") and isinstance(value, dict):
+        if key in ("read_section", "control_section") and isinstance(value, dict):
             flat.update(value)
         else:
             flat[key] = value
@@ -232,11 +216,10 @@ def _build_device_record(
         CONF_DEVICE_TYPE: device_type,
         CONF_ENTITY_POWER: entity_input.get(CONF_ENTITY_POWER, ""),
         CONF_ENTITY_SOC: entity_input.get(CONF_ENTITY_SOC, ""),
-        CONF_ENTITY_ACTIVE: entity_input.get(CONF_ENTITY_ACTIVE, ""),
-        CONF_ENTITY_SOC_MIN: entity_input.get(CONF_ENTITY_SOC_MIN, ""),
-        CONF_ENTITY_SOC_MAX: entity_input.get(CONF_ENTITY_SOC_MAX, ""),
         CONF_ENTITY_VEHICLE_STATUS: entity_input.get(CONF_ENTITY_VEHICLE_STATUS, ""),
-        CONF_ENTITY_CHARGE_MODE: entity_input.get(CONF_ENTITY_CHARGE_MODE, ""),
+        CONF_ENTITY_CONTROL: entity_input.get(CONF_ENTITY_CONTROL, ""),
+        CONF_VALUE_ON: entity_input.get(CONF_VALUE_ON, ""),
+        CONF_VALUE_OFF: entity_input.get(CONF_VALUE_OFF, ""),
     }
 
 

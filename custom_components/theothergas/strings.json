@@ -15,7 +15,7 @@
       },
       "location": {
         "title": "Standort",
-        "description": "Gib den Standort deiner Geräte an. Wird für die Aggregation verwendet.",
+        "description": "Gib den Standort deiner Geräte an. Wird für die Aggregation verwendet — vorausgefüllt aus deinen HA-Koordinaten.",
         "data": {
           "district": "Stadtteil",
           "city": "Stadt",
@@ -43,12 +43,10 @@
         "title": "{device_name} ({device_type}) — Entitäten verknüpfen",
         "description": "Verknüpfe die für diesen Gerätetyp relevanten Home-Assistant-Entitäten. Alle Felder sind optional, fehlende Werte werden ignoriert.",
         "data": {
-          "entity_current_power_kw": "Entität für aktuelle Leistung des Geräts",
-          "entity_is_active": "Entität/Switch für Gerät An/Aus (bei Gerätetyp: Sonstiges)"
+          "entity_current_power_kw": "Entität für aktuelle Leistung des Geräts"
         },
         "data_description": {
-          "entity_current_power_kw": "Sensor, der die aktuelle Leistung in W oder kW liefert.",
-          "entity_is_active": "Schaltbare Switch- oder Input-Boolean-Entität, die die Crowdergy-App ein- und ausschalten kann."
+          "entity_current_power_kw": "Sensor, der die aktuelle Leistung in W oder kW liefert."
         },
         "sections": {
           "read_section": {
@@ -65,18 +63,18 @@
               "entity_vehicle_status": "Sensor- oder Binary-Sensor-Entität für den Fahrzeugstatus (z. B. „connected“, „charging“)."
             }
           },
-          "write_section": {
-            "name": "Steuerungsparameter für steuerbare Geräte (werden von Crowdergy regelmäßig gesetzt)",
-            "description": "Diese Entitäten werden von Crowdergy per Befehl regelmäßig beschrieben — verknüpfe nur schreibbare Entitäten.",
+          "control_section": {
+            "name": "Steuerung (Crowdergize)",
+            "description": "Crowdergy steuert das Gerät, indem es die folgende Entität auf einen der beiden Werte schreibt — „Gerät an“ → value_on, „Gerät aus“ → value_off.",
             "data": {
-              "entity_soc_min_percent": "Entität für minimalen Ladezustand",
-              "entity_soc_max_percent": "Entität für maximalen Ladezustand",
-              "entity_charge_mode": "Entität für Lademodus"
+              "entity_control": "Steuer-Entität",
+              "value_on": "Wert für „Gerät an“",
+              "value_off": "Wert für „Gerät aus“"
             },
             "data_description": {
-              "entity_soc_min_percent": "Number-Entität für den minimalen Ladezustand. Crowdergy schreibt hier regelmäßig neue Werte.",
-              "entity_soc_max_percent": "Number-Entität für den maximalen Ladezustand. Crowdergy schreibt hier regelmäßig neue Werte.",
-              "entity_charge_mode": "Select-Entität mit den Optionen „Lock Mode“, „Power Mode“, „Solar Pure Mode“."
+              "entity_control": "Beliebige schreibbare HA-Entität: Switch, Number, Select, Input-Helfer, Climate, Light, Fan.",
+              "value_on": "Beispiele: „Power Mode“ (Select), 16 (Number/Ampere), „on“ (Switch), „heat“ (Climate).",
+              "value_off": "Beispiele: „Lock Mode“, 0, „off“."
             }
           }
         }
@@ -127,12 +125,10 @@
         "title": "{device_name} ({device_type}) — Entitäten verknüpfen",
         "description": "Verknüpfe die für diesen Gerätetyp relevanten Home-Assistant-Entitäten. Alle Felder sind optional.",
         "data": {
-          "entity_current_power_kw": "Entität für aktuelle Leistung des Geräts",
-          "entity_is_active": "Entität/Switch für Gerät An/Aus (bei Gerätetyp: Sonstiges)"
+          "entity_current_power_kw": "Entität für aktuelle Leistung des Geräts"
         },
         "data_description": {
-          "entity_current_power_kw": "Sensor, der die aktuelle Leistung in W oder kW liefert.",
-          "entity_is_active": "Schaltbare Switch- oder Input-Boolean-Entität, die die Crowdergy-App ein- und ausschalten kann."
+          "entity_current_power_kw": "Sensor, der die aktuelle Leistung in W oder kW liefert."
         },
         "sections": {
           "read_section": {
@@ -149,18 +145,18 @@
               "entity_vehicle_status": "Sensor- oder Binary-Sensor-Entität für den Fahrzeugstatus (z. B. „connected“, „charging“)."
             }
           },
-          "write_section": {
-            "name": "Steuerungsparameter für steuerbare Geräte (werden von Crowdergy regelmäßig gesetzt)",
-            "description": "Diese Entitäten werden von Crowdergy per Befehl regelmäßig beschrieben — verknüpfe nur schreibbare Entitäten.",
+          "control_section": {
+            "name": "Steuerung (Crowdergize)",
+            "description": "Crowdergy steuert das Gerät, indem es die folgende Entität auf einen der beiden Werte schreibt — „Gerät an“ → value_on, „Gerät aus“ → value_off.",
             "data": {
-              "entity_soc_min_percent": "Entität für minimalen Ladezustand",
-              "entity_soc_max_percent": "Entität für maximalen Ladezustand",
-              "entity_charge_mode": "Entität für Lademodus"
+              "entity_control": "Steuer-Entität",
+              "value_on": "Wert für „Gerät an“",
+              "value_off": "Wert für „Gerät aus“"
             },
             "data_description": {
-              "entity_soc_min_percent": "Number-Entität für den minimalen Ladezustand. Crowdergy schreibt hier regelmäßig neue Werte.",
-              "entity_soc_max_percent": "Number-Entität für den maximalen Ladezustand. Crowdergy schreibt hier regelmäßig neue Werte.",
-              "entity_charge_mode": "Select-Entität mit den Optionen „Lock Mode“, „Power Mode“, „Solar Pure Mode“."
+              "entity_control": "Beliebige schreibbare HA-Entität: Switch, Number, Select, Input-Helfer, Climate, Light, Fan.",
+              "value_on": "Beispiele: „Power Mode“ (Select), 16 (Number/Ampere), „on“ (Switch), „heat“ (Climate).",
+              "value_off": "Beispiele: „Lock Mode“, 0, „off“."
             }
           }
         }
@@ -188,12 +184,10 @@
         "title": "{device_name} ({device_type}) — Entitäten verknüpfen",
         "description": "Passe die verknüpften Home-Assistant-Entitäten an. Alle Felder sind optional.",
         "data": {
-          "entity_current_power_kw": "Entität für aktuelle Leistung des Geräts",
-          "entity_is_active": "Entität/Switch für Gerät An/Aus (bei Gerätetyp: Sonstiges)"
+          "entity_current_power_kw": "Entität für aktuelle Leistung des Geräts"
         },
         "data_description": {
-          "entity_current_power_kw": "Sensor, der die aktuelle Leistung in W oder kW liefert.",
-          "entity_is_active": "Schaltbare Switch- oder Input-Boolean-Entität, die die Crowdergy-App ein- und ausschalten kann."
+          "entity_current_power_kw": "Sensor, der die aktuelle Leistung in W oder kW liefert."
         },
         "sections": {
           "read_section": {
@@ -210,18 +204,18 @@
               "entity_vehicle_status": "Sensor- oder Binary-Sensor-Entität für den Fahrzeugstatus (z. B. „connected“, „charging“)."
             }
           },
-          "write_section": {
-            "name": "Steuerungsparameter für steuerbare Geräte (werden von Crowdergy regelmäßig gesetzt)",
-            "description": "Diese Entitäten werden von Crowdergy per Befehl regelmäßig beschrieben — verknüpfe nur schreibbare Entitäten.",
+          "control_section": {
+            "name": "Steuerung (Crowdergize)",
+            "description": "Crowdergy steuert das Gerät, indem es die folgende Entität auf einen der beiden Werte schreibt — „Gerät an“ → value_on, „Gerät aus“ → value_off.",
             "data": {
-              "entity_soc_min_percent": "Entität für minimalen Ladezustand",
-              "entity_soc_max_percent": "Entität für maximalen Ladezustand",
-              "entity_charge_mode": "Entität für Lademodus"
+              "entity_control": "Steuer-Entität",
+              "value_on": "Wert für „Gerät an“",
+              "value_off": "Wert für „Gerät aus“"
             },
             "data_description": {
-              "entity_soc_min_percent": "Number-Entität für den minimalen Ladezustand. Crowdergy schreibt hier regelmäßig neue Werte.",
-              "entity_soc_max_percent": "Number-Entität für den maximalen Ladezustand. Crowdergy schreibt hier regelmäßig neue Werte.",
-              "entity_charge_mode": "Select-Entität mit den Optionen „Lock Mode“, „Power Mode“, „Solar Pure Mode“."
+              "entity_control": "Beliebige schreibbare HA-Entität: Switch, Number, Select, Input-Helfer, Climate, Light, Fan.",
+              "value_on": "Beispiele: „Power Mode“ (Select), 16 (Number/Ampere), „on“ (Switch), „heat“ (Climate).",
+              "value_off": "Beispiele: „Lock Mode“, 0, „off“."
             }
           }
         }

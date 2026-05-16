@@ -10,7 +10,7 @@ CONF_REFRESH_TOKEN = "refresh_token"
 CONF_USER_ID = "user_id"
 CONF_DEVICES = "devices"
 CONF_DEVICE_ID = "device_id"
-DEVICE_TYPES = ["solar", "battery", "wallbox", "grid", "heatpump", "generic"]
+DEVICE_TYPES = ["solar", "battery", "wallbox", "grid", "heatpump", "generic", "haushalt"]
 UPDATE_INTERVAL = 30
 
 CONF_DEVICE_NAME = "device_name"
@@ -20,16 +20,17 @@ CONF_CITY = "city"
 CONF_REGION = "region"
 CONF_ENTITY_POWER = "entity_current_power_kw"
 CONF_ENTITY_SOC = "entity_soc_percent"
-CONF_ENTITY_ACTIVE = "entity_is_active"
-# Settable number entities that the Crowdergy app writes to via commands.
-CONF_ENTITY_SOC_MIN = "entity_soc_min_percent"
-CONF_ENTITY_SOC_MAX = "entity_soc_max_percent"
-# Wallbox-only: read-only vehicle status string + settable charge mode (select).
+# Wallbox-only read-only field.
 CONF_ENTITY_VEHICLE_STATUS = "entity_vehicle_status"
-CONF_ENTITY_CHARGE_MODE = "entity_charge_mode"
 
-# Allowed charge mode values (must match the options exposed by the HA
-# select entity the user maps to CONF_ENTITY_CHARGE_MODE).
-CHARGE_MODE_OPTIONS = ["Lock Mode", "Power Mode", "Solar Pure Mode"]
+# As of v1.8.0 Crowdergy controls each device via a single user-mapped
+# entity. When the Crowdergy app flips the device on/off (or, later, the
+# smart controller does), the connector writes `value_on` / `value_off`
+# to `entity_control`. Replaces the previous typ-specific writable
+# entity mappings (entity_is_active / entity_soc_min / entity_soc_max /
+# entity_charge_mode) which are no longer used.
+CONF_ENTITY_CONTROL = "entity_control"
+CONF_VALUE_ON = "value_on"
+CONF_VALUE_OFF = "value_off"
 
 PLATFORMS = ["sensor", "switch"]

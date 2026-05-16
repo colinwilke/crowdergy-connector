@@ -14,6 +14,7 @@ DEVICE_TYPE_MODELS = {
     "grid": "Grid Connection",
     "heatpump": "Heat Pump",
     "generic": "Generic Energy Device",
+    "haushalt": "Household Consumption",
 }
 
 
