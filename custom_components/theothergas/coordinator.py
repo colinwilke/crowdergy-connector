@@ -61,6 +61,14 @@ class TheOtherGasCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
         self._unsub_listeners: list[Any] = []
         self._entity_to_devices: dict[str, list[str]] = {}
         self._ws_task: asyncio.Task | None = None
+        # Crowdergize state per device — authoritative source is the backend
+        # (`devices.is_active`). We mirror it locally so the HA switch
+        # entity can render the latest value without round-tripping each
+        # time. Bootstrapped from GET /devices on first refresh, kept fresh
+        # by SSE telemetry mirror frames the backend emits after every
+        # `toggle_active` (whether the toggle came from iOS or HA).
+        self._active_state: dict[str, bool] = {}
+        self._active_state_bootstrapped: bool = False
         self._build_entity_map()
 
     def _build_entity_map(self) -> None:
@@ -201,14 +209,35 @@ class TheOtherGasCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
         text = str(state.state)
         return text if text else None
 
+    async def _bootstrap_active_state(self) -> None:
+        """One-shot GET /devices to seed the local Crowdergize cache.
+
+        Without this the HA switch entity boots showing `False` (the
+        coordinator-default) until the user toggles something — and a fresh
+        HA restart would silently drop a previously-on state. The backend
+        is the source of truth for `is_active`, so we mirror it once here.
+        """
+        try:
+            response = await self._authenticated_request("GET", "/api/v1/devices")
+            response.raise_for_status()
+            for d in response.json():
+                self._active_state[d["id"]] = bool(d.get("is_active", False))
+            self._active_state_bootstrapped = True
+        except (httpx.HTTPStatusError, httpx.RequestError) as err:
+            _LOGGER.warning(
+                "Bootstrap of Crowdergize state failed (%s) — will retry next refresh", err,
+            )
+
     async def _async_update_data(self) -> dict[str, dict[str, Any]]:
+        if not self._active_state_bootstrapped:
+            await self._bootstrap_active_state()
+
         result: dict[str, dict[str, Any]] = {}
 
         for dev in self.devices:
             device_id = dev[CONF_DEVICE_ID]
             entity_power = dev.get(CONF_ENTITY_POWER, "")
             entity_soc = dev.get(CONF_ENTITY_SOC, "")
-            entity_active = dev.get(CONF_ENTITY_ACTIVE, "")
             entity_soc_min = dev.get(CONF_ENTITY_SOC_MIN, "")
             entity_soc_max = dev.get(CONF_ENTITY_SOC_MAX, "")
             entity_vehicle_status = dev.get(CONF_ENTITY_VEHICLE_STATUS, "")
@@ -216,23 +245,19 @@ class TheOtherGasCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
 
             current_power = self._read_power_kw(entity_power)
             soc_percent = self._read_entity_state(entity_soc)
-            is_active_raw = self._read_entity_state(entity_active)
             soc_min = self._read_number(entity_soc_min)
             soc_max = self._read_number(entity_soc_max)
             vehicle_status = self._read_string(entity_vehicle_status)
             charge_mode = self._read_string(entity_charge_mode)
 
-            if isinstance(is_active_raw, (int, float)):
-                is_active = bool(is_active_raw)
-            elif isinstance(is_active_raw, str):
-                is_active = is_active_raw.lower() in ("on", "true", "1")
-            else:
-                is_active = True
-
+            # is_active is the "Crowdergize" consent flag — owned by the
+            # backend, NOT derived from any HA entity. We deliberately do
+            # not include it in the telemetry payload anymore (the backend
+            # would ignore it anyway since 2026-05-16, but keeping it out
+            # also keeps the payload honest).
             payload: dict[str, Any] = {
                 "power_kw": current_power if current_power is not None else 0.0,
                 "is_online": True,
-                "is_active": is_active,
             }
             if soc_percent is not None:
                 payload["soc_percent"] = soc_percent
@@ -270,7 +295,7 @@ class TheOtherGasCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
                 "soc_max_percent": soc_max,
                 "vehicle_status": vehicle_status,
                 "charge_mode": charge_mode,
-                "is_active": is_active,
+                "is_active": self._active_state.get(device_id, False),
                 "is_online": True,
             }
 
@@ -354,6 +379,20 @@ class TheOtherGasCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
             delay = min(delay * 2, WS_RECONNECT_MAX)
 
     async def _handle_ws_message(self, data: dict[str, Any]) -> None:
+        # Telemetry mirror frames carry device-level state changes the user
+        # may have driven from the iOS app. We care specifically about
+        # `is_active` (Crowdergize) — keep the local cache fresh and ask
+        # HA to re-render any entities reading from coordinator.data.
+        if data.get("type") == "telemetry":
+            device_id = data.get("device_id")
+            payload = data.get("data") or {}
+            if device_id and "is_active" in payload:
+                new_value = bool(payload["is_active"])
+                if self._active_state.get(device_id) != new_value:
+                    self._active_state[device_id] = new_value
+                    self._sync_active_into_data(device_id, new_value)
+            return
+
         if data.get("type") != "command":
             return
         action = data.get("action")
@@ -426,6 +465,28 @@ class TheOtherGasCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
             {"entity_id": entity_id, "value": numeric},
             blocking=True,
         )
+
+    def _sync_active_into_data(self, device_id: str, new_value: bool) -> None:
+        """Push the Crowdergize value into `self.data` and notify listeners.
+
+        The HA switch entity reads from `coordinator.data[device_id]["is_active"]`,
+        so we mutate that dict in place + call `async_set_updated_data` to
+        force a re-render. If `self.data` isn't initialised yet (very first
+        SSE frame before the first refresh), we just keep the cache value;
+        the next refresh will pick it up.
+        """
+        if self.data is None:
+            return
+        bucket = self.data.get(device_id)
+        if bucket is None:
+            return
+        if bucket.get("is_active") == new_value:
+            return
+        new_data = dict(self.data)
+        new_bucket = dict(bucket)
+        new_bucket["is_active"] = new_value
+        new_data[device_id] = new_bucket
+        self.async_set_updated_data(new_data)
 
     async def _set_active_entity(self, entity_id: str, on: bool) -> None:
         if not entity_id:

@@ -34,9 +34,18 @@ async def async_setup_entry(
 class TheOtherGasActiveSwitch(
     CoordinatorEntity[TheOtherGasCoordinator], SwitchEntity
 ):
+    """HA-side mirror of the per-device Crowdergize consent flag.
+
+    Toggling this switch in HA POSTs `toggle_active` to the backend (and
+    optimistically updates the local state). When the same flag flips
+    from the iOS app, the backend emits an SSE telemetry mirror frame —
+    the coordinator picks that up and re-renders this entity. The two
+    surfaces (HA switch ↔ iOS toggle) are kept in sync via the backend.
+    """
+
     _attr_has_entity_name = True
-    _attr_name = "Active"
-    _attr_icon = "mdi:power"
+    _attr_name = "Crowdergize"
+    _attr_icon = "mdi:transmission-tower"
 
     def __init__(
         self,
@@ -48,7 +57,7 @@ class TheOtherGasActiveSwitch(
         self._attr_unique_id = f"{self._device_id}_is_active"
         self._attr_device_info = get_device_info(device)
         device_slug = slugify(device.get(CONF_DEVICE_NAME, "device"))
-        self._attr_suggested_object_id = f"crowdergy_{device_slug}_active"
+        self._attr_suggested_object_id = f"crowdergy_{device_slug}_crowdergize"
 
     @property
     def is_on(self) -> bool | None:
@@ -68,6 +77,11 @@ class TheOtherGasActiveSwitch(
             self._device_id,
             {"action": "toggle_active", "is_active": on},
         )
-        if success and self.coordinator.data and self._device_id in self.coordinator.data:
-            self.coordinator.data[self._device_id]["is_active"] = on
-            self.async_write_ha_state()
+        if success:
+            # Keep both the cache and the data dict in sync; the SSE
+            # telemetry mirror frame will arrive shortly and re-confirm
+            # this value but applying optimistically avoids UI lag.
+            self.coordinator._active_state[self._device_id] = on
+            if self.coordinator.data and self._device_id in self.coordinator.data:
+                self.coordinator.data[self._device_id]["is_active"] = on
+                self.async_write_ha_state()
