@@ -69,13 +69,13 @@
           },
           "control_section": {
             "name": "Steuerung (Crowdergize)",
-            "description": "Crowdergy steuert das Gerät über die folgende Entität. Wallbox: nur die Lademodus-Select-Entität, der Lademodus wird direkt aus der App gewählt. Andere Typen: beliebige schreibbare Entity + „an“/„aus“-Werte im nächsten Schritt.",
+            "description": "Welche HA-Entitäten darf Crowdergy steuern? Wallbox: Lademodus-Select für den App-Picker UND optional eine Steuer-Entität für die spätere Smart-An/Aus-Logik. Andere Typen: nur die Steuer-Entität + „an“/„aus“-Werte im nächsten Schritt.",
             "data": {
-              "entity_control": "Steuer-Entität",
+              "entity_control": "Steuer-Entität (Smart-An/Aus)",
               "entity_charge_mode": "Lademodus-Entität (Wallbox)"
             },
             "data_description": {
-              "entity_control": "Beliebige schreibbare HA-Entität: Switch, Number, Select, Input-Helfer, Climate, Light, Fan.",
+              "entity_control": "Beliebige schreibbare HA-Entität: Switch, Number, Select, Input-Helfer, Climate, Light, Fan. Wird von Crowdergy automatisch geschaltet, sobald Crowdergize an ist (Smart-Logik kommt später).",
               "entity_charge_mode": "Select-Entität, die die App-Lademodi (z. B. „Power Mode“ / „Lock Mode“ / „Solar Pure Mode“) als Optionen anbietet."
             }
           }
@@ -165,13 +165,13 @@
           },
           "control_section": {
             "name": "Steuerung (Crowdergize)",
-            "description": "Crowdergy steuert das Gerät über die folgende Entität. Wallbox: nur die Lademodus-Select-Entität, der Lademodus wird direkt aus der App gewählt. Andere Typen: beliebige schreibbare Entity + „an“/„aus“-Werte im nächsten Schritt.",
+            "description": "Welche HA-Entitäten darf Crowdergy steuern? Wallbox: Lademodus-Select für den App-Picker UND optional eine Steuer-Entität für die spätere Smart-An/Aus-Logik. Andere Typen: nur die Steuer-Entität + „an“/„aus“-Werte im nächsten Schritt.",
             "data": {
-              "entity_control": "Steuer-Entität",
+              "entity_control": "Steuer-Entität (Smart-An/Aus)",
               "entity_charge_mode": "Lademodus-Entität (Wallbox)"
             },
             "data_description": {
-              "entity_control": "Beliebige schreibbare HA-Entität: Switch, Number, Select, Input-Helfer, Climate, Light, Fan.",
+              "entity_control": "Beliebige schreibbare HA-Entität: Switch, Number, Select, Input-Helfer, Climate, Light, Fan. Wird von Crowdergy automatisch geschaltet, sobald Crowdergize an ist (Smart-Logik kommt später).",
               "entity_charge_mode": "Select-Entität, die die App-Lademodi (z. B. „Power Mode“ / „Lock Mode“ / „Solar Pure Mode“) als Optionen anbietet."
             }
           }
@@ -238,13 +238,13 @@
           },
           "control_section": {
             "name": "Steuerung (Crowdergize)",
-            "description": "Crowdergy steuert das Gerät über die folgende Entität. Wallbox: nur die Lademodus-Select-Entität, der Lademodus wird direkt aus der App gewählt. Andere Typen: beliebige schreibbare Entity + „an“/„aus“-Werte im nächsten Schritt.",
+            "description": "Welche HA-Entitäten darf Crowdergy steuern? Wallbox: Lademodus-Select für den App-Picker UND optional eine Steuer-Entität für die spätere Smart-An/Aus-Logik. Andere Typen: nur die Steuer-Entität + „an“/„aus“-Werte im nächsten Schritt.",
             "data": {
-              "entity_control": "Steuer-Entität",
+              "entity_control": "Steuer-Entität (Smart-An/Aus)",
               "entity_charge_mode": "Lademodus-Entität (Wallbox)"
             },
             "data_description": {
-              "entity_control": "Beliebige schreibbare HA-Entität: Switch, Number, Select, Input-Helfer, Climate, Light, Fan.",
+              "entity_control": "Beliebige schreibbare HA-Entität: Switch, Number, Select, Input-Helfer, Climate, Light, Fan. Wird von Crowdergy automatisch geschaltet, sobald Crowdergize an ist (Smart-Logik kommt später).",
               "entity_charge_mode": "Select-Entität, die die App-Lademodi (z. B. „Power Mode“ / „Lock Mode“ / „Solar Pure Mode“) als Optionen anbietet."
             }
           }

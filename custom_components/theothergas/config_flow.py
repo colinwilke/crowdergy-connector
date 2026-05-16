@@ -169,12 +169,16 @@ def _entities_schema(
         )
 
     if device_type == "wallbox":
-        # Wallbox keeps the dedicated Lademodus-select rather than the
-        # universal on/off mapping — the iOS UI exposes a 3-option
-        # picker, not a binary toggle.
+        # Wallbox uses BOTH:
+        #  - entity_charge_mode: user-driven Lademodus picker in the iOS app
+        #    (manual: Lock / Power / Solar Pure / …)
+        #  - entity_control + value_on/value_off (next step): future smart
+        #    on/off when Crowdergize is active.
+        # Either / both can stay empty if the user only wants one path.
         control_schema = vol.Schema({
             _entity_field(CONF_ENTITY_CHARGE_MODE, d):
                 _ENTITY_SELECTORS[CONF_ENTITY_CHARGE_MODE],
+            _entity_field(CONF_ENTITY_CONTROL, d): _ENTITY_SELECTORS[CONF_ENTITY_CONTROL],
         })
         schema_dict[vol.Required("control_section")] = section(
             control_schema, {"collapsed": False}
@@ -565,12 +569,12 @@ class TheOtherGasConfigFlow(ConfigFlow, domain=DOMAIN):
 
         if user_input is not None:
             entity_input = _flatten_sections(user_input)
-            # Wallbox + read-only types register straight away; the
-            # universal entity_control flow only needs a follow-up
-            # step when value_on / value_off are involved.
+            # Step 3 only when entity_control is mapped — that's the path
+            # that needs value_on / value_off typed. Wallbox can have both
+            # entity_charge_mode and entity_control; only the latter
+            # triggers step 3.
             needs_values = (
                 device_type in _CONTROLLABLE_TYPES
-                and device_type != "wallbox"
                 and entity_input.get(CONF_ENTITY_CONTROL)
             )
             if needs_values:
@@ -713,7 +717,6 @@ class TheOtherGasOptionsFlow(OptionsFlow):
             entity_input = _flatten_sections(user_input)
             needs_values = (
                 device_type in _CONTROLLABLE_TYPES
-                and device_type != "wallbox"
                 and entity_input.get(CONF_ENTITY_CONTROL)
             )
             if needs_values:
@@ -864,11 +867,11 @@ class TheOtherGasOptionsFlow(OptionsFlow):
             entity_input = _flatten_sections(user_input)
             new_entity_control = entity_input.get(CONF_ENTITY_CONTROL, "")
             old_entity_control = target.get(CONF_ENTITY_CONTROL, "")
-            # Only the entity_control flow has a step 3. Wallbox uses
-            # entity_charge_mode and saves immediately.
+            # Step 3 only when entity_control is mapped. Wallbox can also
+            # have entity_charge_mode (manual Lademodus); that path
+            # doesn't need a value step.
             needs_values = (
                 device_type in _CONTROLLABLE_TYPES
-                and device_type != "wallbox"
                 and new_entity_control
             )
             if needs_values:
