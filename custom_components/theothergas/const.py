@@ -33,4 +33,11 @@ CONF_ENTITY_CONTROL = "entity_control"
 CONF_VALUE_ON = "value_on"
 CONF_VALUE_OFF = "value_off"
 
+# Wallbox-only: separate write-target for the Lademodus picker in the iOS
+# app. Settable HA select entity (typically with "Lock Mode" / "Power Mode" /
+# "Solar Pure Mode" — or any other options the user has configured on their
+# wallbox integration). Distinct from entity_control because the user
+# wants three-way manual control rather than a binary on/off mapping.
+CONF_ENTITY_CHARGE_MODE = "entity_charge_mode"
+
 PLATFORMS = ["sensor", "switch"]

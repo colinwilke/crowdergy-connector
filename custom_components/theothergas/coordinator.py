@@ -20,6 +20,7 @@ from .const import (
     CONF_API_URL,
     CONF_DEVICE_ID,
     CONF_DEVICES,
+    CONF_ENTITY_CHARGE_MODE,
     CONF_ENTITY_CONTROL,
     CONF_ENTITY_POWER,
     CONF_ENTITY_SOC,
@@ -387,15 +388,49 @@ class TheOtherGasCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
                     await self._apply_device_state(device_id, new_on)
             return
 
-        # `command` frames are no longer used in v1.8.0+ (set_device_state
-        # flows through the telemetry-mirror path above). Older backend
-        # builds may still send set_soc_min / set_soc_max / set_charge_mode
-        # — silently ignore; the matching entity mappings are gone too.
+        # `command` frames are mostly handled via the telemetry mirror
+        # above. The one that still needs explicit handling is
+        # `set_charge_mode` (wallbox Lademodus), which writes a
+        # dedicated entity_charge_mode select entity outside the
+        # generic entity_control mechanism.
         if data.get("type") == "command":
+            action = data.get("action")
+            device_id = data.get("device_id")
+            value = data.get("value")
+            if action == "set_charge_mode" and device_id and value is not None:
+                await self._apply_charge_mode(device_id, str(value))
+            else:
+                _LOGGER.debug("Ignoring command frame: action=%s", action)
+
+    async def _apply_charge_mode(self, device_id: str, mode: str) -> None:
+        """Write the wallbox's configured entity_charge_mode select entity."""
+        dev = next(
+            (d for d in self.devices if d.get(CONF_DEVICE_ID) == device_id),
+            None,
+        )
+        if dev is None:
+            return
+        entity_id = dev.get(CONF_ENTITY_CHARGE_MODE, "") or ""
+        if not entity_id:
             _LOGGER.debug(
-                "Ignoring legacy command frame: %s",
-                data.get("action"),
+                "Device %s has no entity_charge_mode mapped — skipping", device_id,
             )
+            return
+        domain = entity_id.split(".", 1)[0]
+        if domain not in ("select", "input_select"):
+            _LOGGER.warning(
+                "entity_charge_mode for %s is not a select entity (%s)",
+                device_id, domain,
+            )
+            return
+        try:
+            await self.hass.services.async_call(
+                domain, "select_option",
+                {"entity_id": entity_id, "option": mode},
+                blocking=True,
+            )
+        except Exception as err:  # noqa: BLE001
+            _LOGGER.exception("set_charge_mode write failed: %s", err)
 
     def _sync_field_into_data(self, device_id: str, field: str, value: Any) -> None:
         """Mutate `self.data[device_id][field]` and notify CoordinatorEntities.

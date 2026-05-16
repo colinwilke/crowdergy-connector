@@ -21,6 +21,7 @@ from .const import (
     CONF_DEVICES,
     CONF_DISTRICT,
     CONF_EMAIL,
+    CONF_ENTITY_CHARGE_MODE,
     CONF_ENTITY_CONTROL,
     CONF_ENTITY_POWER,
     CONF_ENTITY_SOC,
@@ -85,6 +86,12 @@ _ENTITY_SELECTORS: dict[str, selector.EntitySelector] = {
             "switch", "input_boolean", "number", "select",
             "light", "fan", "climate", "input_number", "input_select",
         ])
+    ),
+    # Wallbox-only Lademodus target — restricted to select entities since
+    # the iOS picker offers a multi-option choice (typically the wallbox
+    # integration's own charge-mode select).
+    CONF_ENTITY_CHARGE_MODE: selector.EntitySelector(
+        selector.EntitySelectorConfig(domain=["select", "input_select"])
     ),
 }
 
@@ -161,10 +168,21 @@ def _entities_schema(
             read_schema, {"collapsed": False}
         )
 
-    if device_type in _CONTROLLABLE_TYPES:
-        # Just the entity here; value_on / value_off are asked in the
-        # follow-up step where the schema can adapt to the entity domain
-        # (Select → dropdown of options, Number → min/max slider, …).
+    if device_type == "wallbox":
+        # Wallbox keeps the dedicated Lademodus-select rather than the
+        # universal on/off mapping — the iOS UI exposes a 3-option
+        # picker, not a binary toggle.
+        control_schema = vol.Schema({
+            _entity_field(CONF_ENTITY_CHARGE_MODE, d):
+                _ENTITY_SELECTORS[CONF_ENTITY_CHARGE_MODE],
+        })
+        schema_dict[vol.Required("control_section")] = section(
+            control_schema, {"collapsed": False}
+        )
+    elif device_type in _CONTROLLABLE_TYPES:
+        # Other controllable types (battery / heatpump / generic):
+        # universal entity_control here, value_on/off in the follow-up
+        # step where the schema can adapt to the entity domain.
         control_schema = vol.Schema({
             _entity_field(CONF_ENTITY_CONTROL, d): _ENTITY_SELECTORS[CONF_ENTITY_CONTROL],
         })
@@ -298,6 +316,7 @@ def _build_device_record(
         CONF_ENTITY_CONTROL: entity_input.get(CONF_ENTITY_CONTROL, ""),
         CONF_VALUE_ON: entity_input.get(CONF_VALUE_ON, ""),
         CONF_VALUE_OFF: entity_input.get(CONF_VALUE_OFF, ""),
+        CONF_ENTITY_CHARGE_MODE: entity_input.get(CONF_ENTITY_CHARGE_MODE, ""),
     }
 
 
@@ -546,9 +565,15 @@ class TheOtherGasConfigFlow(ConfigFlow, domain=DOMAIN):
 
         if user_input is not None:
             entity_input = _flatten_sections(user_input)
-            # Controllable devices get a follow-up step to type the on/off
-            # values; read-only ones can register directly.
-            if device_type in _CONTROLLABLE_TYPES and entity_input.get(CONF_ENTITY_CONTROL):
+            # Wallbox + read-only types register straight away; the
+            # universal entity_control flow only needs a follow-up
+            # step when value_on / value_off are involved.
+            needs_values = (
+                device_type in _CONTROLLABLE_TYPES
+                and device_type != "wallbox"
+                and entity_input.get(CONF_ENTITY_CONTROL)
+            )
+            if needs_values:
                 self._pending_entity_input = entity_input
                 return await self.async_step_device_values()
             return await self._register_with_entities(entity_input)
@@ -686,7 +711,12 @@ class TheOtherGasOptionsFlow(OptionsFlow):
 
         if user_input is not None:
             entity_input = _flatten_sections(user_input)
-            if device_type in _CONTROLLABLE_TYPES and entity_input.get(CONF_ENTITY_CONTROL):
+            needs_values = (
+                device_type in _CONTROLLABLE_TYPES
+                and device_type != "wallbox"
+                and entity_input.get(CONF_ENTITY_CONTROL)
+            )
+            if needs_values:
                 self._pending_entity_input = entity_input
                 return await self.async_step_add_device_values()
             return await self._options_register(entity_input)
@@ -832,12 +862,16 @@ class TheOtherGasOptionsFlow(OptionsFlow):
 
         if user_input is not None:
             entity_input = _flatten_sections(user_input)
-            # If the user remapped to a new entity_control, ask for fresh
-            # value_on / value_off in step 3 — the old ones probably don't
-            # apply to the new entity domain.
             new_entity_control = entity_input.get(CONF_ENTITY_CONTROL, "")
             old_entity_control = target.get(CONF_ENTITY_CONTROL, "")
-            if device_type in _CONTROLLABLE_TYPES and new_entity_control:
+            # Only the entity_control flow has a step 3. Wallbox uses
+            # entity_charge_mode and saves immediately.
+            needs_values = (
+                device_type in _CONTROLLABLE_TYPES
+                and device_type != "wallbox"
+                and new_entity_control
+            )
+            if needs_values:
                 if new_entity_control != old_entity_control:
                     # Remapped — drop old values, force step 3 to start fresh.
                     entity_input.pop(CONF_VALUE_ON, None)

@@ -69,16 +69,14 @@
           },
           "control_section": {
             "name": "Steuerung (Crowdergize)",
-            "description": "Crowdergy steuert das Gerät, indem es die folgende Entität auf einen der beiden Werte schreibt — „Gerät an“ → value_on, „Gerät aus“ → value_off.",
+            "description": "Crowdergy steuert das Gerät über die folgende Entität. Wallbox: nur die Lademodus-Select-Entität, der Lademodus wird direkt aus der App gewählt. Andere Typen: beliebige schreibbare Entity + „an“/„aus“-Werte im nächsten Schritt.",
             "data": {
               "entity_control": "Steuer-Entität",
-              "value_on": "Wert für „Gerät an“",
-              "value_off": "Wert für „Gerät aus“"
+              "entity_charge_mode": "Lademodus-Entität (Wallbox)"
             },
             "data_description": {
               "entity_control": "Beliebige schreibbare HA-Entität: Switch, Number, Select, Input-Helfer, Climate, Light, Fan.",
-              "value_on": "Beispiele: „Power Mode“ (Select), 16 (Number/Ampere), „on“ (Switch), „heat“ (Climate).",
-              "value_off": "Beispiele: „Lock Mode“, 0, „off“."
+              "entity_charge_mode": "Select-Entität, die die App-Lademodi (z. B. „Power Mode“ / „Lock Mode“ / „Solar Pure Mode“) als Optionen anbietet."
             }
           }
         }
@@ -167,16 +165,14 @@
           },
           "control_section": {
             "name": "Steuerung (Crowdergize)",
-            "description": "Crowdergy steuert das Gerät, indem es die folgende Entität auf einen der beiden Werte schreibt — „Gerät an“ → value_on, „Gerät aus“ → value_off.",
+            "description": "Crowdergy steuert das Gerät über die folgende Entität. Wallbox: nur die Lademodus-Select-Entität, der Lademodus wird direkt aus der App gewählt. Andere Typen: beliebige schreibbare Entity + „an“/„aus“-Werte im nächsten Schritt.",
             "data": {
               "entity_control": "Steuer-Entität",
-              "value_on": "Wert für „Gerät an“",
-              "value_off": "Wert für „Gerät aus“"
+              "entity_charge_mode": "Lademodus-Entität (Wallbox)"
             },
             "data_description": {
               "entity_control": "Beliebige schreibbare HA-Entität: Switch, Number, Select, Input-Helfer, Climate, Light, Fan.",
-              "value_on": "Beispiele: „Power Mode“ (Select), 16 (Number/Ampere), „on“ (Switch), „heat“ (Climate).",
-              "value_off": "Beispiele: „Lock Mode“, 0, „off“."
+              "entity_charge_mode": "Select-Entität, die die App-Lademodi (z. B. „Power Mode“ / „Lock Mode“ / „Solar Pure Mode“) als Optionen anbietet."
             }
           }
         }
@@ -242,16 +238,14 @@
           },
           "control_section": {
             "name": "Steuerung (Crowdergize)",
-            "description": "Crowdergy steuert das Gerät, indem es die folgende Entität auf einen der beiden Werte schreibt — „Gerät an“ → value_on, „Gerät aus“ → value_off.",
+            "description": "Crowdergy steuert das Gerät über die folgende Entität. Wallbox: nur die Lademodus-Select-Entität, der Lademodus wird direkt aus der App gewählt. Andere Typen: beliebige schreibbare Entity + „an“/„aus“-Werte im nächsten Schritt.",
             "data": {
               "entity_control": "Steuer-Entität",
-              "value_on": "Wert für „Gerät an“",
-              "value_off": "Wert für „Gerät aus“"
+              "entity_charge_mode": "Lademodus-Entität (Wallbox)"
             },
             "data_description": {
               "entity_control": "Beliebige schreibbare HA-Entität: Switch, Number, Select, Input-Helfer, Climate, Light, Fan.",
-              "value_on": "Beispiele: „Power Mode“ (Select), 16 (Number/Ampere), „on“ (Switch), „heat“ (Climate).",
-              "value_off": "Beispiele: „Lock Mode“, 0, „off“."
+              "entity_charge_mode": "Select-Entität, die die App-Lademodi (z. B. „Power Mode“ / „Lock Mode“ / „Solar Pure Mode“) als Optionen anbietet."
             }
           }
         }
