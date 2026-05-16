@@ -43,10 +43,14 @@
         "title": "{device_name} ({device_type}) — Entitäten verknüpfen",
         "description": "Verknüpfe die für diesen Gerätetyp relevanten Home-Assistant-Entitäten. Alle Felder sind optional, fehlende Werte werden ignoriert.",
         "data": {
-          "entity_current_power_kw": "Entität für aktuelle Leistung des Geräts"
+          "entity_current_power_kw": "Entität für aktuelle Leistung des Geräts",
+          "read_section": "Leistungsdaten (nur lesend)",
+          "control_section": "Steuerung (Crowdergize)"
         },
         "data_description": {
-          "entity_current_power_kw": "Sensor, der die aktuelle Leistung in W oder kW liefert."
+          "entity_current_power_kw": "Sensor, der die aktuelle Leistung in W oder kW liefert.",
+          "read_section": "Diese Entitäten werden von Crowdergy ausschließlich ausgelesen.",
+          "control_section": "Crowdergy steuert das Gerät, indem es die folgende Entität auf einen der beiden Werte schreibt — „Gerät an“ → value_on, „Gerät aus“ → value_off."
         },
         "sections": {
           "read_section": {
@@ -125,10 +129,14 @@
         "title": "{device_name} ({device_type}) — Entitäten verknüpfen",
         "description": "Verknüpfe die für diesen Gerätetyp relevanten Home-Assistant-Entitäten. Alle Felder sind optional.",
         "data": {
-          "entity_current_power_kw": "Entität für aktuelle Leistung des Geräts"
+          "entity_current_power_kw": "Entität für aktuelle Leistung des Geräts",
+          "read_section": "Leistungsdaten (nur lesend)",
+          "control_section": "Steuerung (Crowdergize)"
         },
         "data_description": {
-          "entity_current_power_kw": "Sensor, der die aktuelle Leistung in W oder kW liefert."
+          "entity_current_power_kw": "Sensor, der die aktuelle Leistung in W oder kW liefert.",
+          "read_section": "Diese Entitäten werden von Crowdergy ausschließlich ausgelesen.",
+          "control_section": "Crowdergy steuert das Gerät, indem es die folgende Entität auf einen der beiden Werte schreibt — „Gerät an“ → value_on, „Gerät aus“ → value_off."
         },
         "sections": {
           "read_section": {
@@ -184,10 +192,14 @@
         "title": "{device_name} ({device_type}) — Entitäten verknüpfen",
         "description": "Passe die verknüpften Home-Assistant-Entitäten an. Alle Felder sind optional.",
         "data": {
-          "entity_current_power_kw": "Entität für aktuelle Leistung des Geräts"
+          "entity_current_power_kw": "Entität für aktuelle Leistung des Geräts",
+          "read_section": "Leistungsdaten (nur lesend)",
+          "control_section": "Steuerung (Crowdergize)"
         },
         "data_description": {
-          "entity_current_power_kw": "Sensor, der die aktuelle Leistung in W oder kW liefert."
+          "entity_current_power_kw": "Sensor, der die aktuelle Leistung in W oder kW liefert.",
+          "read_section": "Diese Entitäten werden von Crowdergy ausschließlich ausgelesen.",
+          "control_section": "Crowdergy steuert das Gerät, indem es die folgende Entität auf einen der beiden Werte schreibt — „Gerät an“ → value_on, „Gerät aus“ → value_off."
         },
         "sections": {
           "read_section": {
