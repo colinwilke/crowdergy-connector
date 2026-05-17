@@ -87,13 +87,20 @@ class CrowdergyCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
         self._build_entity_map()
 
     def _build_entity_map(self) -> None:
-        """Map entity_ids to their device_ids for fast lookup on state changes."""
+        """Map entity_ids to their device_ids for fast lookup on state changes.
+
+        We include entity_control so that user-driven HA-side toggles
+        (e.g. someone flips the coffee-machine switch in HA) trigger
+        an immediate refresh and propagate `is_on` to the backend.
+        Without this, the HA → app direction was silent.
+        """
         for dev in self.devices:
             device_id = dev[CONF_DEVICE_ID]
             for key in (
                 CONF_ENTITY_POWER,
                 CONF_ENTITY_SOC,
                 CONF_ENTITY_VEHICLE_STATUS,
+                CONF_ENTITY_CONTROL,
             ):
                 entity_id = dev.get(key, "")
                 if entity_id:
@@ -218,6 +225,52 @@ class CrowdergyCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
         text = str(state.state)
         return text if text else None
 
+    def _read_is_on_state(self, dev: dict[str, Any]) -> bool | None:
+        """Translate the device's entity_control current state into a
+        Boolean `is_on`. Returns None when we can't decide cleanly so the
+        backend keeps its existing value rather than guessing.
+
+        - switch / input_boolean / light / fan: HA's native "on" / "off".
+        - number / select / climate: compare against value_on / value_off.
+          Equal to value_on → True, equal to value_off → False, anything
+          else (a user setting a different value manually) → None.
+        """
+        entity_id = dev.get(CONF_ENTITY_CONTROL, "") or ""
+        if not entity_id:
+            return None
+        state = self.hass.states.get(entity_id)
+        if state is None or state.state in ("unknown", "unavailable"):
+            return None
+
+        domain = entity_id.split(".", 1)[0]
+        raw_state = str(state.state)
+
+        if domain in ("switch", "input_boolean", "light", "fan"):
+            if raw_state.lower() == "on":
+                return True
+            if raw_state.lower() == "off":
+                return False
+            return None
+
+        value_on = dev.get(CONF_VALUE_ON, "")
+        value_off = dev.get(CONF_VALUE_OFF, "")
+
+        def _matches(target: Any) -> bool:
+            if target in ("", None):
+                return False
+            if domain in ("number", "input_number"):
+                try:
+                    return float(raw_state) == float(target)
+                except (TypeError, ValueError):
+                    return False
+            return raw_state == str(target)
+
+        if _matches(value_on):
+            return True
+        if _matches(value_off):
+            return False
+        return None
+
     async def _bootstrap_active_state(self) -> None:
         """One-shot GET /devices to seed the Crowdergize + on/off caches.
 
@@ -253,6 +306,12 @@ class CrowdergyCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
             current_power = self._read_power_kw(entity_power)
             soc_percent = self._read_entity_state(entity_soc)
             vehicle_status = self._read_string(entity_vehicle_status)
+            # Derive is_on from the live HA state of entity_control so a
+            # user-driven HA-side toggle propagates up to the backend
+            # (and from there to iOS via SSE). Returns None when we
+            # can't decide (no mapping, unknown state, ambiguous values);
+            # the backend then leaves device.is_on untouched.
+            is_on = self._read_is_on_state(dev)
 
             # is_active is the "Crowdergize" consent flag — owned by the
             # backend, NOT derived from any HA entity. We deliberately do
@@ -267,6 +326,8 @@ class CrowdergyCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
                 payload["soc_percent"] = soc_percent
             if vehicle_status is not None:
                 payload["vehicle_status"] = vehicle_status
+            if is_on is not None:
+                payload["is_on"] = is_on
 
             if device_id:
                 try:
