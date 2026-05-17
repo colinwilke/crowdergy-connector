@@ -1,4 +1,4 @@
-"""Switch platform for TheOtherGas."""
+"""Switch platform for Crowdergy."""
 from __future__ import annotations
 
 import logging
@@ -12,7 +12,7 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from homeassistant.util import slugify
 
 from .const import CONF_DEVICE_ID, CONF_DEVICE_NAME, CONF_DEVICE_TYPE, CONF_DEVICES, DOMAIN
-from .coordinator import TheOtherGasCoordinator
+from .coordinator import CrowdergyCoordinator
 from .device_registry import get_device_info
 
 _LOGGER = logging.getLogger(__name__)
@@ -27,18 +27,18 @@ async def async_setup_entry(
     entry: ConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
-    coordinator: TheOtherGasCoordinator = hass.data[DOMAIN][entry.entry_id]
+    coordinator: CrowdergyCoordinator = hass.data[DOMAIN][entry.entry_id]
     devices = entry.data.get(CONF_DEVICES, [])
 
     async_add_entities(
-        TheOtherGasActiveSwitch(coordinator, dev)
+        CrowdergyActiveSwitch(coordinator, dev)
         for dev in devices
         if dev.get(CONF_DEVICE_TYPE, "") in _CROWDERGIZE_TYPES
     )
 
 
-class TheOtherGasActiveSwitch(
-    CoordinatorEntity[TheOtherGasCoordinator], SwitchEntity
+class CrowdergyActiveSwitch(
+    CoordinatorEntity[CrowdergyCoordinator], SwitchEntity
 ):
     """HA-side mirror of the per-device Crowdergize consent flag.
 
@@ -55,7 +55,7 @@ class TheOtherGasActiveSwitch(
 
     def __init__(
         self,
-        coordinator: TheOtherGasCoordinator,
+        coordinator: CrowdergyCoordinator,
         device: dict[str, Any],
     ) -> None:
         super().__init__(coordinator)

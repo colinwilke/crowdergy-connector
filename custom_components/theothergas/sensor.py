@@ -1,4 +1,4 @@
-"""Sensor platform for TheOtherGas."""
+"""Sensor platform for Crowdergy."""
 from __future__ import annotations
 
 from collections.abc import Callable
@@ -19,18 +19,18 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from homeassistant.util import slugify
 
 from .const import CONF_DEVICE_ID, CONF_DEVICE_NAME, CONF_DEVICE_TYPE, CONF_DEVICES, DOMAIN
-from .coordinator import TheOtherGasCoordinator
+from .coordinator import CrowdergyCoordinator
 from .device_registry import get_device_info
 
 
 @dataclass(frozen=True, kw_only=True)
-class TheOtherGasSensorEntityDescription(SensorEntityDescription):
+class CrowdergySensorEntityDescription(SensorEntityDescription):
     value_fn: Callable[[dict[str, Any]], Any]
     available_fn: Callable[[dict[str, Any]], bool] = lambda _: True
 
 
-SENSOR_DESCRIPTIONS: list[TheOtherGasSensorEntityDescription] = [
-    TheOtherGasSensorEntityDescription(
+SENSOR_DESCRIPTIONS: list[CrowdergySensorEntityDescription] = [
+    CrowdergySensorEntityDescription(
         key="current_power_kw",
         translation_key="current_power_kw",
         name="Current Power",
@@ -40,7 +40,7 @@ SENSOR_DESCRIPTIONS: list[TheOtherGasSensorEntityDescription] = [
         suggested_display_precision=2,
         value_fn=lambda data: data.get("current_power_kw"),
     ),
-    TheOtherGasSensorEntityDescription(
+    CrowdergySensorEntityDescription(
         key="soc_percent",
         translation_key="soc_percent",
         name="State of Charge",
@@ -59,32 +59,32 @@ async def async_setup_entry(
     entry: ConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
-    coordinator: TheOtherGasCoordinator = hass.data[DOMAIN][entry.entry_id]
+    coordinator: CrowdergyCoordinator = hass.data[DOMAIN][entry.entry_id]
     devices = entry.data.get(CONF_DEVICES, [])
 
-    entities: list[TheOtherGasSensor] = []
+    entities: list[CrowdergySensor] = []
     for dev in devices:
         for description in SENSOR_DESCRIPTIONS:
             if description.available_fn(dev):
                 entities.append(
-                    TheOtherGasSensor(coordinator, entry, dev, description)
+                    CrowdergySensor(coordinator, entry, dev, description)
                 )
 
     async_add_entities(entities)
 
 
-class TheOtherGasSensor(
-    CoordinatorEntity[TheOtherGasCoordinator], SensorEntity
+class CrowdergySensor(
+    CoordinatorEntity[CrowdergyCoordinator], SensorEntity
 ):
-    entity_description: TheOtherGasSensorEntityDescription
+    entity_description: CrowdergySensorEntityDescription
     _attr_has_entity_name = True
 
     def __init__(
         self,
-        coordinator: TheOtherGasCoordinator,
+        coordinator: CrowdergyCoordinator,
         entry: ConfigEntry,
         device: dict[str, Any],
-        description: TheOtherGasSensorEntityDescription,
+        description: CrowdergySensorEntityDescription,
     ) -> None:
         super().__init__(coordinator)
         self.entity_description = description

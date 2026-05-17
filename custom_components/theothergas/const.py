@@ -1,5 +1,18 @@
 """Constants for the Crowdergy Connector integration."""
 
+import json
+from pathlib import Path
+
+# Pull the version from manifest.json so we have a single source of
+# truth. Used in HTTP User-Agent strings (Nominatim's TOS asks for a
+# descriptive UA; bumping it along with each release keeps drift out).
+_MANIFEST = json.loads((Path(__file__).parent / "manifest.json").read_text())
+VERSION: str = _MANIFEST["version"]
+USER_AGENT: str = (
+    f"crowdergy-connector/{VERSION} "
+    "(+https://github.com/colinwilke/crowdergy-connector)"
+)
+
 DOMAIN = "theothergas"
 DEFAULT_API_URL = "https://api.theothergas.de"
 CONF_API_URL = "api_url"

@@ -1,4 +1,4 @@
-"""The TheOtherGas integration."""
+"""The Crowdergy integration."""
 from __future__ import annotations
 
 import logging
@@ -16,16 +16,16 @@ from .const import (
     DOMAIN,
     PLATFORMS,
 )
-from .coordinator import TheOtherGasCoordinator
+from .coordinator import CrowdergyCoordinator
 
 _LOGGER = logging.getLogger(__name__)
 
-type TheOtherGasConfigEntry = ConfigEntry
+type CrowdergyConfigEntry = ConfigEntry
 
 
-async def async_setup_entry(hass: HomeAssistant, entry: TheOtherGasConfigEntry) -> bool:
-    """Set up TheOtherGas from a config entry."""
-    coordinator = TheOtherGasCoordinator(hass, entry)
+async def async_setup_entry(hass: HomeAssistant, entry: CrowdergyConfigEntry) -> bool:
+    """Set up Crowdergy from a config entry."""
+    coordinator = CrowdergyCoordinator(hass, entry)
 
     await coordinator.async_config_entry_first_refresh()
     coordinator.setup_listeners()
@@ -39,12 +39,12 @@ async def async_setup_entry(hass: HomeAssistant, entry: TheOtherGasConfigEntry) 
     return True
 
 
-async def async_unload_entry(hass: HomeAssistant, entry: TheOtherGasConfigEntry) -> bool:
+async def async_unload_entry(hass: HomeAssistant, entry: CrowdergyConfigEntry) -> bool:
     """Unload a config entry."""
     unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
 
     if unload_ok:
-        coordinator: TheOtherGasCoordinator = hass.data[DOMAIN].pop(entry.entry_id)
+        coordinator: CrowdergyCoordinator = hass.data[DOMAIN].pop(entry.entry_id)
         await coordinator.async_shutdown()
 
     return unload_ok
@@ -52,7 +52,7 @@ async def async_unload_entry(hass: HomeAssistant, entry: TheOtherGasConfigEntry)
 
 async def async_remove_config_entry_device(
     hass: HomeAssistant,
-    config_entry: TheOtherGasConfigEntry,
+    config_entry: CrowdergyConfigEntry,
     device_entry: dr.DeviceEntry,
 ) -> bool:
     """Allow the user to delete a device card directly in the HA UI.

@@ -39,7 +39,7 @@ WS_RECONNECT_INITIAL = 1
 WS_RECONNECT_MAX = 60
 
 
-class TheOtherGasCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
+class CrowdergyCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
     """Pushes telemetry on entity state changes + periodic heartbeat,
     and listens on a WS channel for commands from the Crowdergy app."""
 
@@ -189,11 +189,6 @@ class TheOtherGasCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
         if unit == "w":
             return value / 1000.0
         return value
-
-    def _read_number(self, entity_id: str) -> float | None:
-        """Read a number-entity state as float, ignoring unknown/unavailable."""
-        value = self._read_entity_state(entity_id)
-        return value if isinstance(value, (int, float)) else None
 
     def _read_string(self, entity_id: str) -> str | None:
         """Read an entity state as a plain string (incl. friendly_name fallback)."""

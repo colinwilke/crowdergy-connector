@@ -35,6 +35,7 @@ from .const import (
     DEFAULT_API_URL,
     DEVICE_TYPES,
     DOMAIN,
+    USER_AGENT,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -408,8 +409,10 @@ async def _resolve_location_defaults(hass) -> dict[str, str]:
         "accept-language": "de",
     }
     headers = {
-        # Nominatim's usage policy requires a descriptive UA on every request.
-        "User-Agent": "crowdergy-connector/1.6.0 (+https://github.com/colinwilke/crowdergy-connector)"
+        # Nominatim's usage policy requires a descriptive UA on every
+        # request. USER_AGENT is built from manifest.json so the version
+        # tag and the User-Agent never drift apart.
+        "User-Agent": USER_AGENT,
     }
     try:
         async with httpx.AsyncClient(timeout=5.0) as client:
@@ -468,7 +471,7 @@ def _remove_ha_device(hass, device_id: str) -> None:
 # ── Initial Config Flow ─────────────────────────────────────────────────────
 
 
-class TheOtherGasConfigFlow(ConfigFlow, domain=DOMAIN):
+class CrowdergyConfigFlow(ConfigFlow, domain=DOMAIN):
     """Handle a config flow for Crowdergy Connector."""
 
     VERSION = 2
@@ -484,8 +487,8 @@ class TheOtherGasConfigFlow(ConfigFlow, domain=DOMAIN):
 
     @staticmethod
     @callback
-    def async_get_options_flow(config_entry: ConfigEntry) -> TheOtherGasOptionsFlow:
-        return TheOtherGasOptionsFlow(config_entry)
+    def async_get_options_flow(config_entry: ConfigEntry) -> CrowdergyOptionsFlow:
+        return CrowdergyOptionsFlow(config_entry)
 
     async def async_step_user(
         self, user_input: dict[str, Any] | None = None
@@ -676,7 +679,7 @@ class TheOtherGasConfigFlow(ConfigFlow, domain=DOMAIN):
 # ── Options Flow (add / edit / remove devices after setup) ──────────────────
 
 
-class TheOtherGasOptionsFlow(OptionsFlow):
+class CrowdergyOptionsFlow(OptionsFlow):
     """Handle options for Crowdergy Connector."""
 
     def __init__(self, config_entry: ConfigEntry) -> None:

@@ -1,4 +1,4 @@
-"""Device registry helpers for TheOtherGas."""
+"""Device registry helpers for Crowdergy."""
 from __future__ import annotations
 
 from typing import Any
@@ -19,7 +19,7 @@ DEVICE_TYPE_MODELS = {
 
 
 def get_device_info(device: dict[str, Any]) -> DeviceInfo:
-    """Build HA DeviceInfo for a TheOtherGas device."""
+    """Build HA DeviceInfo for a Crowdergy device."""
     device_type = device.get(CONF_DEVICE_TYPE, "generic")
     device_name = device.get(CONF_DEVICE_NAME, "Crowdergy Device")
     device_id = device.get(CONF_DEVICE_ID, "unknown")

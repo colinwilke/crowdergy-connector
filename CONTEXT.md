@@ -10,7 +10,7 @@
   - `_apply_charge_mode(mode)` — Wallbox-Lademodus → `entity_charge_mode` als select-option
   - Telemetrie-Mirror konsumiert `is_active` (Crowdergize-Cache + HA-Switch-Spiegel) und `is_on` (triggert `_apply_device_state`)
 - **Sensor-Plattform** (`current_power_kw`, `soc_percent`, `vehicle_status`, `charge_mode`): `custom_components/theothergas/sensor.py`
-- **Switch-Plattform** (`TheOtherGasActiveSwitch` benannt "Crowdergize", nur für controllable Typen erzeugt): `custom_components/theothergas/switch.py`
+- **Switch-Plattform** (`CrowdergyActiveSwitch` benannt "Crowdergize", nur für controllable Typen erzeugt): `custom_components/theothergas/switch.py`
 - **Config-Flow** (Login → Location → drei Schritte pro Gerät): `custom_components/theothergas/config_flow.py`
   - Schritt 1: Typ + Name
   - Schritt 2: typ-spezifische Entities (Read-Section "Leistungsdaten (nur lesend)" + Control-Section "Steuerung (Crowdergize)"). Wallbox bekommt `entity_charge_mode` + `entity_control` parallel; andere controllable nur `entity_control`.
