@@ -53,4 +53,35 @@ CONF_VALUE_OFF = "value_off"
 # wants three-way manual control rather than a binary on/off mapping.
 CONF_ENTITY_CHARGE_MODE = "entity_charge_mode"
 
+# Hold-mode for entity_control: how the connector handles devices whose
+# Modbus registers / OCPP transaction state revert to a default after a
+# few seconds (Kostal, SMA, some OCPP wallboxes …).
+#
+# "auto" (default)  — write once, check after 10 s. If the value
+#                     reverted, write again and start re-writing every
+#                     30 s. Three stable checks in a row → assume the
+#                     device holds and stop polling. Crowdergize OFF
+#                     stops it unconditionally.
+# "always"          — write once, then re-write every 30 s for as long
+#                     as Crowdergize is active. No check, no early stop.
+# "never"           — write once, leave it alone. For devices that
+#                     reliably hold and where Modbus traffic should be
+#                     minimised.
+CONF_ENTITY_CONTROL_HOLD = "entity_control_hold"
+ENTITY_CONTROL_HOLD_AUTO = "auto"
+ENTITY_CONTROL_HOLD_ALWAYS = "always"
+ENTITY_CONTROL_HOLD_NEVER = "never"
+ENTITY_CONTROL_HOLD_MODES = (
+    ENTITY_CONTROL_HOLD_AUTO,
+    ENTITY_CONTROL_HOLD_ALWAYS,
+    ENTITY_CONTROL_HOLD_NEVER,
+)
+
+# Hold loop timing. Initial 10 s gives the device time to apply the
+# first write before we start checking. 30 s is fast enough to react
+# to most auto-revert cycles (Kostal's is 60 s).
+HOLD_INITIAL_DELAY = 10
+HOLD_POLL_INTERVAL = 30
+HOLD_AUTO_STABLE_HITS = 3
+
 PLATFORMS = ["sensor", "switch"]

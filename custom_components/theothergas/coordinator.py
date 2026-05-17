@@ -22,6 +22,7 @@ from .const import (
     CONF_DEVICES,
     CONF_ENTITY_CHARGE_MODE,
     CONF_ENTITY_CONTROL,
+    CONF_ENTITY_CONTROL_HOLD,
     CONF_ENTITY_POWER,
     CONF_ENTITY_SOC,
     CONF_ENTITY_VEHICLE_STATUS,
@@ -30,6 +31,12 @@ from .const import (
     CONF_VALUE_OFF,
     CONF_VALUE_ON,
     DOMAIN,
+    ENTITY_CONTROL_HOLD_ALWAYS,
+    ENTITY_CONTROL_HOLD_AUTO,
+    ENTITY_CONTROL_HOLD_NEVER,
+    HOLD_AUTO_STABLE_HITS,
+    HOLD_INITIAL_DELAY,
+    HOLD_POLL_INTERVAL,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -71,6 +78,12 @@ class CrowdergyCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
         # Per-device on/off state — what the backend says the device
         # should currently be set to. Updated via SSE telemetry mirror.
         self._on_state: dict[str, bool] = {}
+        # Hold-loops: one asyncio.Task per device, keyed by device_id.
+        # Started after each `_apply_device_state` if the device's
+        # configured hold mode is anything but 'never'. Cancelled on
+        # Crowdergize OFF, on shutdown, or when a fresh apply happens
+        # (the old loop is replaced).
+        self._hold_tasks: dict[str, asyncio.Task] = {}
         self._build_entity_map()
 
     def _build_entity_map(self) -> None:
@@ -162,6 +175,9 @@ class CrowdergyCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
                 await self._ws_task
             except (asyncio.CancelledError, Exception):  # noqa: BLE001
                 pass
+        for task in list(self._hold_tasks.values()):
+            task.cancel()
+        self._hold_tasks.clear()
         await self._client.aclose()
 
     def _read_entity_state(self, entity_id: str) -> Any:
@@ -375,6 +391,10 @@ class CrowdergyCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
                 if self._active_state.get(device_id) != new_value:
                     self._active_state[device_id] = new_value
                     self._sync_field_into_data(device_id, "is_active", new_value)
+                    # Crowdergize off → stop holding the entity_control
+                    # value. The device is the user's again.
+                    if not new_value:
+                        self._cancel_hold(device_id)
             if "is_on" in payload:
                 new_on = bool(payload["is_on"])
                 if self._on_state.get(device_id) != new_on:
@@ -534,3 +554,182 @@ class CrowdergyCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
             )
         except Exception as err:  # noqa: BLE001
             _LOGGER.exception("entity_control write failed: %s", err)
+
+        # After the initial write, kick off (or replace) the hold loop
+        # that handles devices reverting their entity_control value
+        # back to a default — Kostal-style auto-reset Modbus registers,
+        # some OCPP-wallbox transaction timeouts, etc.
+        self._start_hold(device_id, entity_id, raw_value, domain, on)
+
+    # ── entity_control hold loop ────────────────────────────────────────
+
+    def _start_hold(
+        self,
+        device_id: str,
+        entity_id: str,
+        raw_value: Any,
+        domain: str,
+        on: bool,
+    ) -> None:
+        """Start (or replace) a hold-loop for this device.
+
+        Cancels any existing loop for the device first — the latest
+        `_apply_device_state` is the source of truth.
+        """
+        existing = self._hold_tasks.pop(device_id, None)
+        if existing is not None and not existing.done():
+            existing.cancel()
+
+        dev = next(
+            (d for d in self.devices if d.get(CONF_DEVICE_ID) == device_id),
+            None,
+        )
+        if dev is None:
+            return
+        mode = (
+            dev.get(CONF_ENTITY_CONTROL_HOLD, ENTITY_CONTROL_HOLD_AUTO)
+            or ENTITY_CONTROL_HOLD_AUTO
+        )
+        if mode == ENTITY_CONTROL_HOLD_NEVER:
+            return
+
+        self._hold_tasks[device_id] = asyncio.create_task(
+            self._hold_loop(device_id, entity_id, raw_value, domain, on, mode)
+        )
+
+    def _cancel_hold(self, device_id: str) -> None:
+        task = self._hold_tasks.pop(device_id, None)
+        if task is not None and not task.done():
+            task.cancel()
+
+    async def _hold_loop(
+        self,
+        device_id: str,
+        entity_id: str,
+        raw_value: Any,
+        domain: str,
+        on: bool,
+        mode: str,
+    ) -> None:
+        """Keep entity_control sticking to its commanded value.
+
+        - `always`: re-write every HOLD_POLL_INTERVAL seconds.
+        - `auto`:   wait HOLD_INITIAL_DELAY, then re-read the entity. If
+          it has reverted, write again. After HOLD_AUTO_STABLE_HITS
+          consecutive non-reverted checks, stop — the device is
+          holding fine on its own.
+
+        Both modes bail out if Crowdergize gets switched off (the
+        `_cancel_hold` path covers that) or on coordinator shutdown.
+        """
+        try:
+            # The initial delay matters most in `auto` (gives the
+            # device time to apply the first write before we measure).
+            # In `always` we wait the same so the first re-write isn't
+            # a duplicate of the apply we just did.
+            await asyncio.sleep(HOLD_INITIAL_DELAY)
+            stable_hits = 0
+            while True:
+                if not self._active_state.get(device_id, False):
+                    return
+                expected = self._expected_state_value(raw_value, on, domain)
+                actual = self._read_current_state(entity_id)
+                reverted = (
+                    actual is not None
+                    and expected is not None
+                    and actual != expected
+                )
+
+                if mode == ENTITY_CONTROL_HOLD_ALWAYS or reverted:
+                    if reverted:
+                        _LOGGER.info(
+                            "hold: %s reverted (%r → %r), re-writing",
+                            entity_id, expected, actual,
+                        )
+                    await self._reapply_entity_control(
+                        entity_id, domain, raw_value, on
+                    )
+                    stable_hits = 0
+                else:
+                    stable_hits += 1
+                    if (
+                        mode == ENTITY_CONTROL_HOLD_AUTO
+                        and stable_hits >= HOLD_AUTO_STABLE_HITS
+                    ):
+                        _LOGGER.debug(
+                            "hold: %s stable for %d checks — releasing",
+                            entity_id, stable_hits,
+                        )
+                        return
+
+                await asyncio.sleep(HOLD_POLL_INTERVAL)
+        except asyncio.CancelledError:
+            raise
+        except Exception:  # noqa: BLE001
+            _LOGGER.exception("hold loop for %s crashed", device_id)
+
+    def _expected_state_value(
+        self, raw_value: Any, on: bool, domain: str
+    ) -> str | None:
+        """Normalise the value we'd compare an entity's current state
+        against. Returns a string (HA states are strings) or None if
+        we can't decide — in that case the loop just re-writes blindly
+        in `always` mode and stays passive in `auto`.
+        """
+        if domain in ("switch", "input_boolean", "light", "fan"):
+            return "on" if on else "off"
+        if raw_value in ("", None):
+            return None
+        return str(raw_value)
+
+    def _read_current_state(self, entity_id: str) -> str | None:
+        """Read the entity's current state as a string, or None if HA
+        has no state or it's unknown / unavailable.
+        """
+        state = self.hass.states.get(entity_id)
+        if state is None:
+            return None
+        if state.state in ("unknown", "unavailable"):
+            return None
+        return state.state
+
+    async def _reapply_entity_control(
+        self, entity_id: str, domain: str, raw_value: Any, on: bool
+    ) -> None:
+        """Mini-version of `_apply_device_state` for the hold loop — same
+        domain dispatch, no logging noise for the success path."""
+        try:
+            if domain in ("switch", "input_boolean", "light", "fan"):
+                if raw_value in ("", None):
+                    service = "turn_on" if on else "turn_off"
+                else:
+                    want_on = str(raw_value).lower() in (
+                        "on", "true", "1", "yes", "an",
+                    )
+                    service = "turn_on" if want_on else "turn_off"
+                await self.hass.services.async_call(
+                    domain, service, {"entity_id": entity_id}, blocking=True,
+                )
+                return
+            if raw_value in ("", None):
+                return
+            if domain in ("number", "input_number"):
+                await self.hass.services.async_call(
+                    domain, "set_value",
+                    {"entity_id": entity_id, "value": float(raw_value)},
+                    blocking=True,
+                )
+            elif domain in ("select", "input_select"):
+                await self.hass.services.async_call(
+                    domain, "select_option",
+                    {"entity_id": entity_id, "option": str(raw_value)},
+                    blocking=True,
+                )
+            elif domain == "climate":
+                await self.hass.services.async_call(
+                    domain, "set_hvac_mode",
+                    {"entity_id": entity_id, "hvac_mode": str(raw_value)},
+                    blocking=True,
+                )
+        except Exception as err:  # noqa: BLE001
+            _LOGGER.warning("hold re-apply failed for %s: %s", entity_id, err)

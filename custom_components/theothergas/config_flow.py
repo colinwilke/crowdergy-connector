@@ -30,8 +30,11 @@ from .const import (
     CONF_REFRESH_TOKEN,
     CONF_REGION,
     CONF_USER_ID,
+    CONF_ENTITY_CONTROL_HOLD,
     CONF_VALUE_OFF,
     CONF_VALUE_ON,
+    ENTITY_CONTROL_HOLD_AUTO,
+    ENTITY_CONTROL_HOLD_MODES,
     DEFAULT_API_URL,
     DEVICE_TYPES,
     DOMAIN,
@@ -301,9 +304,25 @@ def _values_schema(
         return vol.Optional(key, default=str(default))
 
     field_type: Any = value_sel if value_sel is not None else str
+
+    hold_default = defaults.get(CONF_ENTITY_CONTROL_HOLD, ENTITY_CONTROL_HOLD_AUTO)
+    hold_selector = selector.SelectSelector(
+        selector.SelectSelectorConfig(
+            options=[
+                selector.SelectOptionDict(value=m, label=m)
+                for m in ENTITY_CONTROL_HOLD_MODES
+            ],
+            mode=selector.SelectSelectorMode.DROPDOWN,
+            translation_key="entity_control_hold",
+        )
+    )
+
     return vol.Schema({
         _field(CONF_VALUE_ON): field_type,
         _field(CONF_VALUE_OFF): field_type,
+        vol.Optional(
+            CONF_ENTITY_CONTROL_HOLD, default=hold_default
+        ): hold_selector,
     })
 
 
@@ -331,6 +350,9 @@ def _build_device_record(
         CONF_ENTITY_CONTROL: entity_input.get(CONF_ENTITY_CONTROL, ""),
         CONF_VALUE_ON: entity_input.get(CONF_VALUE_ON, ""),
         CONF_VALUE_OFF: entity_input.get(CONF_VALUE_OFF, ""),
+        CONF_ENTITY_CONTROL_HOLD: entity_input.get(
+            CONF_ENTITY_CONTROL_HOLD, ENTITY_CONTROL_HOLD_AUTO
+        ),
         CONF_ENTITY_CHARGE_MODE: entity_input.get(CONF_ENTITY_CHARGE_MODE, ""),
     }
 
@@ -619,6 +641,9 @@ class CrowdergyConfigFlow(ConfigFlow, domain=DOMAIN):
         if user_input is not None:
             entity_input[CONF_VALUE_ON] = user_input.get(CONF_VALUE_ON, "")
             entity_input[CONF_VALUE_OFF] = user_input.get(CONF_VALUE_OFF, "")
+            entity_input[CONF_ENTITY_CONTROL_HOLD] = user_input.get(
+                CONF_ENTITY_CONTROL_HOLD, ENTITY_CONTROL_HOLD_AUTO
+            )
             return await self._register_with_entities(entity_input)
 
         return self.async_show_form(
@@ -762,6 +787,9 @@ class CrowdergyOptionsFlow(OptionsFlow):
         if user_input is not None:
             entity_input[CONF_VALUE_ON] = user_input.get(CONF_VALUE_ON, "")
             entity_input[CONF_VALUE_OFF] = user_input.get(CONF_VALUE_OFF, "")
+            entity_input[CONF_ENTITY_CONTROL_HOLD] = user_input.get(
+                CONF_ENTITY_CONTROL_HOLD, ENTITY_CONTROL_HOLD_AUTO
+            )
             return await self._options_register(entity_input)
 
         return self.async_show_form(
@@ -901,6 +929,11 @@ class CrowdergyOptionsFlow(OptionsFlow):
                     # Same entity — carry stored values into step 3 defaults.
                     entity_input[CONF_VALUE_ON] = target.get(CONF_VALUE_ON, "")
                     entity_input[CONF_VALUE_OFF] = target.get(CONF_VALUE_OFF, "")
+                # Hold-mode survives a remap (it's about the device, not
+                # the specific entity), so always carry it forward.
+                entity_input[CONF_ENTITY_CONTROL_HOLD] = target.get(
+                    CONF_ENTITY_CONTROL_HOLD, ENTITY_CONTROL_HOLD_AUTO
+                )
                 self._edit_pending_entity_input = entity_input
                 return await self.async_step_edit_device_values()
             return await self._edit_save(target, entity_input)
@@ -933,6 +966,9 @@ class CrowdergyOptionsFlow(OptionsFlow):
         if user_input is not None:
             entity_input[CONF_VALUE_ON] = user_input.get(CONF_VALUE_ON, "")
             entity_input[CONF_VALUE_OFF] = user_input.get(CONF_VALUE_OFF, "")
+            entity_input[CONF_ENTITY_CONTROL_HOLD] = user_input.get(
+                CONF_ENTITY_CONTROL_HOLD, ENTITY_CONTROL_HOLD_AUTO
+            )
             return await self._edit_save(target, entity_input)
 
         return self.async_show_form(
