@@ -26,6 +26,8 @@ from .const import (
     CONF_ENTITY_POWER,
     CONF_ENTITY_SOC,
     CONF_ENTITY_VEHICLE_STATUS,
+    CONF_ENTITY_CURRENT_TEMP,
+    CONF_ENTITY_TARGET_TEMP,
     CONF_REFRESH_TOKEN,
     CONF_USER_ID,
     CONF_VALUE_OFF,
@@ -100,6 +102,8 @@ class CrowdergyCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
                 CONF_ENTITY_POWER,
                 CONF_ENTITY_SOC,
                 CONF_ENTITY_VEHICLE_STATUS,
+                CONF_ENTITY_CURRENT_TEMP,
+                CONF_ENTITY_TARGET_TEMP,
                 CONF_ENTITY_CONTROL,
             ):
                 entity_id = dev.get(key, "")
@@ -302,10 +306,14 @@ class CrowdergyCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
             entity_power = dev.get(CONF_ENTITY_POWER, "")
             entity_soc = dev.get(CONF_ENTITY_SOC, "")
             entity_vehicle_status = dev.get(CONF_ENTITY_VEHICLE_STATUS, "")
+            entity_current_temp = dev.get(CONF_ENTITY_CURRENT_TEMP, "")
+            entity_target_temp = dev.get(CONF_ENTITY_TARGET_TEMP, "")
 
             current_power = self._read_power_kw(entity_power)
             soc_percent = self._read_entity_state(entity_soc)
             vehicle_status = self._read_string(entity_vehicle_status)
+            current_temp_c = self._read_entity_state(entity_current_temp)
+            target_temp_c = self._read_entity_state(entity_target_temp)
             # Derive is_on from the live HA state of entity_control so a
             # user-driven HA-side toggle propagates up to the backend
             # (and from there to iOS via SSE). Returns None when we
@@ -326,6 +334,10 @@ class CrowdergyCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
                 payload["soc_percent"] = soc_percent
             if vehicle_status is not None:
                 payload["vehicle_status"] = vehicle_status
+            if current_temp_c is not None:
+                payload["current_temp_c"] = current_temp_c
+            if target_temp_c is not None:
+                payload["target_temp_c"] = target_temp_c
             if is_on is not None:
                 payload["is_on"] = is_on
 

@@ -35,6 +35,10 @@ CONF_ENTITY_POWER = "entity_current_power_kw"
 CONF_ENTITY_SOC = "entity_soc_percent"
 # Wallbox-only read-only field.
 CONF_ENTITY_VEHICLE_STATUS = "entity_vehicle_status"
+# Heatpump (and hot-water tank) read-only temperature entities. Both
+# optional — devices without a target-temp sensor leave it null.
+CONF_ENTITY_CURRENT_TEMP = "entity_current_temp_c"
+CONF_ENTITY_TARGET_TEMP = "entity_target_temp_c"
 
 # As of v1.8.0 Crowdergy controls each device via a single user-mapped
 # entity. When the Crowdergy app flips the device on/off (or, later, the

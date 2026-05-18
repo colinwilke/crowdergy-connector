@@ -26,6 +26,8 @@ from .const import (
     CONF_ENTITY_POWER,
     CONF_ENTITY_SOC,
     CONF_ENTITY_VEHICLE_STATUS,
+    CONF_ENTITY_CURRENT_TEMP,
+    CONF_ENTITY_TARGET_TEMP,
     CONF_PASSWORD,
     CONF_REFRESH_TOKEN,
     CONF_REGION,
@@ -74,7 +76,7 @@ def _is_binary_entity(entity_id: str) -> bool:
 _READ_FIELDS: dict[str, list[str]] = {
     "solar":     [CONF_ENTITY_POWER],
     "grid":      [CONF_ENTITY_POWER],
-    "heatpump":  [CONF_ENTITY_POWER],
+    "heatpump":  [CONF_ENTITY_POWER, CONF_ENTITY_CURRENT_TEMP, CONF_ENTITY_TARGET_TEMP],
     "haushalt":  [CONF_ENTITY_POWER],
     "battery":   [CONF_ENTITY_POWER, CONF_ENTITY_SOC],
     "wallbox":   [CONF_ENTITY_POWER, CONF_ENTITY_SOC, CONF_ENTITY_VEHICLE_STATUS],
@@ -91,6 +93,12 @@ _ENTITY_SELECTORS: dict[str, selector.EntitySelector] = {
     ),
     CONF_ENTITY_VEHICLE_STATUS: selector.EntitySelector(
         selector.EntitySelectorConfig(domain=["sensor", "binary_sensor"])
+    ),
+    CONF_ENTITY_CURRENT_TEMP: selector.EntitySelector(
+        selector.EntitySelectorConfig(domain="sensor")
+    ),
+    CONF_ENTITY_TARGET_TEMP: selector.EntitySelector(
+        selector.EntitySelectorConfig(domain=["sensor", "number", "input_number"])
     ),
     # Any settable HA entity — connector adapts the service call to the
     # entity's domain at runtime (switch.turn_on/off, number.set_value,
@@ -347,6 +355,8 @@ def _build_device_record(
         CONF_ENTITY_POWER: entity_input.get(CONF_ENTITY_POWER, ""),
         CONF_ENTITY_SOC: entity_input.get(CONF_ENTITY_SOC, ""),
         CONF_ENTITY_VEHICLE_STATUS: entity_input.get(CONF_ENTITY_VEHICLE_STATUS, ""),
+        CONF_ENTITY_CURRENT_TEMP: entity_input.get(CONF_ENTITY_CURRENT_TEMP, ""),
+        CONF_ENTITY_TARGET_TEMP: entity_input.get(CONF_ENTITY_TARGET_TEMP, ""),
         CONF_ENTITY_CONTROL: entity_input.get(CONF_ENTITY_CONTROL, ""),
         CONF_VALUE_ON: entity_input.get(CONF_VALUE_ON, ""),
         CONF_VALUE_OFF: entity_input.get(CONF_VALUE_OFF, ""),
