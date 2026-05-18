@@ -20,6 +20,7 @@ from .const import (
     CONF_DEVICE_TYPE,
     CONF_DEVICES,
     CONF_DISTRICT,
+    CONF_ENTITY_OUTDOOR_TEMP,
     CONF_EMAIL,
     CONF_ENTITY_CHARGE_MODE,
     CONF_ENTITY_CONTROL,
@@ -573,6 +574,9 @@ class CrowdergyConfigFlow(ConfigFlow, domain=DOMAIN):
             self._data[CONF_DISTRICT] = user_input.get(CONF_DISTRICT, "")
             self._data[CONF_CITY] = user_input.get(CONF_CITY, "")
             self._data[CONF_REGION] = user_input.get(CONF_REGION, "")
+            self._data[CONF_ENTITY_OUTDOOR_TEMP] = user_input.get(
+                CONF_ENTITY_OUTDOOR_TEMP, ""
+            )
             return await self.async_step_device_type()
 
         # Pre-fill from HA's configured coordinates so the user usually
@@ -586,6 +590,9 @@ class CrowdergyConfigFlow(ConfigFlow, domain=DOMAIN):
                     vol.Optional(CONF_DISTRICT, default=defaults[CONF_DISTRICT]): str,
                     vol.Optional(CONF_CITY, default=defaults[CONF_CITY]): str,
                     vol.Optional(CONF_REGION, default=defaults[CONF_REGION]): str,
+                    vol.Optional(CONF_ENTITY_OUTDOOR_TEMP): selector.EntitySelector(
+                        selector.EntitySelectorConfig(domain="sensor")
+                    ),
                 }
             ),
         )
@@ -737,7 +744,44 @@ class CrowdergyOptionsFlow(OptionsFlow):
     ) -> ConfigFlowResult:
         return self.async_show_menu(
             step_id="init",
-            menu_options=["add_device", "edit_device", "remove_device", "done"],
+            menu_options=[
+                "add_device",
+                "edit_device",
+                "remove_device",
+                "edit_outdoor_temp",
+                "done",
+            ],
+        )
+
+    async def async_step_edit_outdoor_temp(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Add or change the integration-wide outdoor-temperature sensor.
+        Stored at the top of entry.data, persisted by async_step_done.
+        Leaving the field empty clears the mapping → backend falls
+        back to Open-Meteo for this user.
+        """
+        if user_input is not None:
+            new_value = user_input.get(CONF_ENTITY_OUTDOOR_TEMP, "")
+            new_data = {**self._entry.data, CONF_ENTITY_OUTDOOR_TEMP: new_value}
+            self.hass.config_entries.async_update_entry(self._entry, data=new_data)
+            return await self.async_step_init()
+
+        current = self._entry.data.get(CONF_ENTITY_OUTDOOR_TEMP, "")
+        field: Any = (
+            vol.Optional(CONF_ENTITY_OUTDOOR_TEMP, default=current)
+            if current
+            else vol.Optional(CONF_ENTITY_OUTDOOR_TEMP)
+        )
+        return self.async_show_form(
+            step_id="edit_outdoor_temp",
+            data_schema=vol.Schema(
+                {
+                    field: selector.EntitySelector(
+                        selector.EntitySelectorConfig(domain="sensor")
+                    ),
+                }
+            ),
         )
 
     # ── Add-Device (two-step) ───────────────────────────────────────────────

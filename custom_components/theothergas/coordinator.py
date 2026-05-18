@@ -28,6 +28,7 @@ from .const import (
     CONF_ENTITY_VEHICLE_STATUS,
     CONF_ENTITY_CURRENT_TEMP,
     CONF_ENTITY_TARGET_TEMP,
+    CONF_ENTITY_OUTDOOR_TEMP,
     CONF_REFRESH_TOKEN,
     CONF_USER_ID,
     CONF_VALUE_OFF,
@@ -295,9 +296,43 @@ class CrowdergyCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
                 "Bootstrap of device state failed (%s) — will retry next refresh", err,
             )
 
+    async def _push_outdoor_temp(self) -> None:
+        """Read the optional integration-wide outdoor-temp entity and
+        POST it to /users/me/outdoor. Silently skipped when the user
+        didn't configure one — the backend then falls back to its own
+        Open-Meteo poll for this user.
+        """
+        entity_id = self.entry.data.get(CONF_ENTITY_OUTDOOR_TEMP, "")
+        if not entity_id:
+            return
+        temp = self._read_entity_state(entity_id)
+        if temp is None:
+            return
+        try:
+            response = await self._authenticated_request(
+                "POST",
+                "/api/v1/users/me/outdoor",
+                json={"outdoor_temp_c": temp},
+            )
+            response.raise_for_status()
+        except httpx.HTTPStatusError as err:
+            _LOGGER.warning(
+                "Outdoor-temp push rejected (%s): %s",
+                err.response.status_code,
+                err.response.text,
+            )
+        except httpx.RequestError as err:
+            _LOGGER.warning("Outdoor-temp push failed: %s", err)
+
     async def _async_update_data(self) -> dict[str, dict[str, Any]]:
         if not self._active_state_bootstrapped:
             await self._bootstrap_active_state()
+
+        # Integration-wide push: if the user wired an outdoor-temp
+        # sensor at setup, send its current reading to the backend
+        # once per tick. The backend keeps it on the user row and
+        # iOS reads it for the PowerView header.
+        await self._push_outdoor_temp()
 
         result: dict[str, dict[str, Any]] = {}
 

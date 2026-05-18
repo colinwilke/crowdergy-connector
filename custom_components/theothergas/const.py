@@ -31,6 +31,10 @@ CONF_DEVICE_TYPE = "device_type"
 CONF_DISTRICT = "district"
 CONF_CITY = "city"
 CONF_REGION = "region"
+# Integration-wide (not per-device): an HA sensor with the current
+# outdoor temperature in °C. Optional — when missing, the backend
+# falls back to Open-Meteo for the user's location every 15 min.
+CONF_ENTITY_OUTDOOR_TEMP = "entity_outdoor_temp_c"
 CONF_ENTITY_POWER = "entity_current_power_kw"
 CONF_ENTITY_SOC = "entity_soc_percent"
 # Wallbox-only read-only field.

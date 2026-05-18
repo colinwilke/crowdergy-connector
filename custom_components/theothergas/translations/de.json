@@ -19,12 +19,14 @@
         "data": {
           "district": "Stadtteil",
           "city": "Stadt",
-          "region": "Region"
+          "region": "Region",
+          "entity_outdoor_temp_c": "Entität für Außentemperatur (optional)"
         },
         "data_description": {
           "district": "Stadtteil oder Viertel (z. B. Schwabing).",
           "city": "Stadt (z. B. München).",
-          "region": "Region (z. B. Bayern)."
+          "region": "Region (z. B. Bayern).",
+          "entity_outdoor_temp_c": "Sensor mit der aktuellen Außentemperatur in °C. Optional — wenn nicht angegeben, holt Crowdergy die Wetterdaten anhand deines Standorts automatisch nach."
         }
       },
       "device_type": {
@@ -59,12 +61,16 @@
             "data": {
               "entity_current_power_kw": "Entität für aktuelle Leistung des Geräts",
               "entity_soc_percent": "Entität für aktuellen Ladezustand",
-              "entity_vehicle_status": "Entität für Fahrzeugstatus"
+              "entity_vehicle_status": "Entität für Fahrzeugstatus",
+              "entity_current_temp_c": "Entität für Ist-Temperatur",
+              "entity_target_temp_c": "Entität für Soll-Temperatur"
             },
             "data_description": {
               "entity_current_power_kw": "Sensor, der die aktuelle Leistung in W oder kW liefert.",
               "entity_soc_percent": "Sensor, der den aktuellen Ladezustand in Prozent liefert.",
-              "entity_vehicle_status": "Sensor- oder Binary-Sensor-Entität für den Fahrzeugstatus (z. B. „connected“, „charging“)."
+              "entity_vehicle_status": "Sensor- oder Binary-Sensor-Entität für den Fahrzeugstatus (z. B. „connected“, „charging“).",
+              "entity_current_temp_c": "Sensor, der die aktuelle Temperatur in °C liefert (z. B. Vorlauftemperatur Wärmepumpe oder Boiler-Innentemperatur).",
+              "entity_target_temp_c": "Sensor, der die aktuelle Soll-/Zieltemperatur in °C liefert. Optional — falls nicht gesetzt, zeigt die App nur die Ist-Temperatur."
             }
           },
           "control_section": {
@@ -122,7 +128,18 @@
           "add_device": "Gerät hinzufügen",
           "edit_device": "Gerät bearbeiten",
           "remove_device": "Gerät entfernen",
+          "edit_outdoor_temp": "Außentemperatur-Sensor",
           "done": "Fertig"
+        }
+      },
+      "edit_outdoor_temp": {
+        "title": "Außentemperatur-Sensor",
+        "description": "Optionaler Sensor mit der aktuellen Außentemperatur in °C. Wird in der Crowdergy App im Kopfbereich angezeigt. Leer lassen, um stattdessen die Wetterdaten von Open-Meteo zu verwenden.",
+        "data": {
+          "entity_outdoor_temp_c": "Entität für Außentemperatur (optional)"
+        },
+        "data_description": {
+          "entity_outdoor_temp_c": "Sensor mit der aktuellen Außentemperatur in °C."
         }
       },
       "add_device": {
@@ -157,12 +174,16 @@
             "data": {
               "entity_current_power_kw": "Entität für aktuelle Leistung des Geräts",
               "entity_soc_percent": "Entität für aktuellen Ladezustand",
-              "entity_vehicle_status": "Entität für Fahrzeugstatus"
+              "entity_vehicle_status": "Entität für Fahrzeugstatus",
+              "entity_current_temp_c": "Entität für Ist-Temperatur",
+              "entity_target_temp_c": "Entität für Soll-Temperatur"
             },
             "data_description": {
               "entity_current_power_kw": "Sensor, der die aktuelle Leistung in W oder kW liefert.",
               "entity_soc_percent": "Sensor, der den aktuellen Ladezustand in Prozent liefert.",
-              "entity_vehicle_status": "Sensor- oder Binary-Sensor-Entität für den Fahrzeugstatus (z. B. „connected“, „charging“)."
+              "entity_vehicle_status": "Sensor- oder Binary-Sensor-Entität für den Fahrzeugstatus (z. B. „connected“, „charging“).",
+              "entity_current_temp_c": "Sensor, der die aktuelle Temperatur in °C liefert (z. B. Vorlauftemperatur Wärmepumpe oder Boiler-Innentemperatur).",
+              "entity_target_temp_c": "Sensor, der die aktuelle Soll-/Zieltemperatur in °C liefert. Optional — falls nicht gesetzt, zeigt die App nur die Ist-Temperatur."
             }
           },
           "control_section": {
@@ -232,12 +253,16 @@
             "data": {
               "entity_current_power_kw": "Entität für aktuelle Leistung des Geräts",
               "entity_soc_percent": "Entität für aktuellen Ladezustand",
-              "entity_vehicle_status": "Entität für Fahrzeugstatus"
+              "entity_vehicle_status": "Entität für Fahrzeugstatus",
+              "entity_current_temp_c": "Entität für Ist-Temperatur",
+              "entity_target_temp_c": "Entität für Soll-Temperatur"
             },
             "data_description": {
               "entity_current_power_kw": "Sensor, der die aktuelle Leistung in W oder kW liefert.",
               "entity_soc_percent": "Sensor, der den aktuellen Ladezustand in Prozent liefert.",
-              "entity_vehicle_status": "Sensor- oder Binary-Sensor-Entität für den Fahrzeugstatus (z. B. „connected“, „charging“)."
+              "entity_vehicle_status": "Sensor- oder Binary-Sensor-Entität für den Fahrzeugstatus (z. B. „connected“, „charging“).",
+              "entity_current_temp_c": "Sensor, der die aktuelle Temperatur in °C liefert (z. B. Vorlauftemperatur Wärmepumpe oder Boiler-Innentemperatur).",
+              "entity_target_temp_c": "Sensor, der die aktuelle Soll-/Zieltemperatur in °C liefert. Optional — falls nicht gesetzt, zeigt die App nur die Ist-Temperatur."
             }
           },
           "control_section": {
