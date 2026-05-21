@@ -50,7 +50,10 @@ class CrowdergyActiveSwitch(
     """
 
     _attr_has_entity_name = True
-    _attr_name = "Crowdergize"
+    # "Crowdergy_" prefix matches the rest of the connector-injected
+    # entities, so HA dashboards don't blur the Crowdergize switch
+    # with whatever the user's underlying integration calls things.
+    _attr_name = "Crowdergy_Crowdergize"
     _attr_icon = "mdi:transmission-tower"
 
     def __init__(

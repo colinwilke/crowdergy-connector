@@ -33,7 +33,12 @@ SENSOR_DESCRIPTIONS: list[CrowdergySensorEntityDescription] = [
     CrowdergySensorEntityDescription(
         key="current_power_kw",
         translation_key="current_power_kw",
-        name="Current Power",
+        # "Crowdergy_" prefix on every entity name so HA's UI clearly
+        # separates the platform-injected sensors from the user's
+        # original integration entities they're mapped to (otherwise
+        # both show up as plain "Current Power" and become impossible
+        # to tell apart in dashboards / automations).
+        name="Crowdergy_Current Power",
         native_unit_of_measurement=UnitOfPower.KILO_WATT,
         device_class=SensorDeviceClass.POWER,
         state_class=SensorStateClass.MEASUREMENT,
@@ -43,7 +48,7 @@ SENSOR_DESCRIPTIONS: list[CrowdergySensorEntityDescription] = [
     CrowdergySensorEntityDescription(
         key="soc_percent",
         translation_key="soc_percent",
-        name="State of Charge",
+        name="Crowdergy_State of Charge",
         native_unit_of_measurement=PERCENTAGE,
         device_class=SensorDeviceClass.BATTERY,
         state_class=SensorStateClass.MEASUREMENT,

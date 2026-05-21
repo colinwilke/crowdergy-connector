@@ -26,7 +26,12 @@ def get_device_info(device: dict[str, Any]) -> DeviceInfo:
 
     return DeviceInfo(
         identifiers={(DOMAIN, device_id)},
-        name=device_name,
+        # "Crowdergy_" prefix on the HA device name so the platform-
+        # injected device is visually distinct from the user's
+        # original integration device (they'd otherwise both appear
+        # as e.g. "Wallbox Garage" in HA's device list, with no easy
+        # way to tell which one a given automation/entity belongs to).
+        name=f"Crowdergy_{device_name}",
         manufacturer="Crowdergy",
         model=DEVICE_TYPE_MODELS.get(device_type, "Generic Energy Device"),
         sw_version="1.0.0",
