@@ -50,6 +50,21 @@ WS_RECONNECT_INITIAL = 1
 WS_RECONNECT_MAX = 60
 
 
+def _load_manifest_version() -> str:
+    """Read the integration's version from manifest.json. Used to
+    populate the X-Crowdergy-Connector-Version header so the backend
+    (and iOS in turn) can see which connector is in play. Falls back
+    to '0.0.0' if the file is missing/garbled — the worst case is the
+    iOS banner never lights up, which is harmless."""
+    try:
+        import os
+        path = os.path.join(os.path.dirname(__file__), "manifest.json")
+        with open(path, "r", encoding="utf-8") as f:
+            return json.load(f).get("version", "0.0.0")
+    except Exception:  # noqa: BLE001
+        return "0.0.0"
+
+
 class CrowdergyCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
     """Pushes telemetry on entity state changes + periodic heartbeat,
     and listens on a WS channel for commands from the Crowdergy app."""
@@ -88,6 +103,9 @@ class CrowdergyCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
         # Crowdergize OFF, on shutdown, or when a fresh apply happens
         # (the old loop is replaced).
         self._hold_tasks: dict[str, asyncio.Task] = {}
+        # Read once at coordinator init — never changes during a HA
+        # session (a manifest bump means HACS reloads the integration).
+        self._connector_version: str = _load_manifest_version()
         self._build_entity_map()
 
     def _build_entity_map(self) -> None:
@@ -144,7 +162,14 @@ class CrowdergyCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
         )
 
     def _auth_headers(self) -> dict[str, str]:
-        return {"Authorization": f"Bearer {self._access_token}"}
+        return {
+            "Authorization": f"Bearer {self._access_token}",
+            # Lets the backend stamp users.connector_version so the iOS
+            # app can compare against min_connector_version and surface
+            # an "Update verfügbar" banner. Read from manifest.json at
+            # config-flow time and threaded through `entry.data`.
+            "X-Crowdergy-Connector-Version": self._connector_version,
+        }
 
     async def _refresh_access_token(self) -> bool:
         try:
