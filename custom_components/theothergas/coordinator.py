@@ -106,6 +106,12 @@ class CrowdergyCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
         # Read once at coordinator init — never changes during a HA
         # session (a manifest bump means HACS reloads the integration).
         self._connector_version: str = _load_manifest_version()
+        # Last seen lifetime-kWh per device — used to compute Δ-per-
+        # tick on the next read. Starts empty after a coordinator
+        # restart so the very first sample doesn't emit a phantom
+        # delta against zero (which would have credited the device's
+        # entire lifetime kWh to "today" on every HA restart).
+        self._prev_energy_kwh: dict[str, float] = {}
         self._build_entity_map()
 
     def _build_entity_map(self) -> None:
@@ -229,6 +235,34 @@ class CrowdergyCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
             return float(state.state)
         except (ValueError, TypeError):
             return state.state
+
+    def _read_energy_kwh(self, entity_id: str) -> float | None:
+        """Read a `total_increasing` HA energy sensor as kWh.
+
+        Most integrations report in kWh directly, but a few (Shelly
+        EM in default mode, some Modbus bridges) expose the lifetime
+        counter in Wh — the raw value would be 1000× too high and
+        the iOS-side display would scream "MWh consumed today" on a
+        sub-1-kWh tick. Read `unit_of_measurement` from the state's
+        attributes and normalise.
+        """
+        if not entity_id:
+            return None
+        state = self.hass.states.get(entity_id)
+        if state is None or state.state in ("unknown", "unavailable"):
+            return None
+        try:
+            value = float(state.state)
+        except (ValueError, TypeError):
+            return None
+        unit = (state.attributes.get("unit_of_measurement") or "").strip().lower()
+        if unit in ("wh", "w·h", "watt-hours", "watthours"):
+            return value / 1000.0
+        if unit in ("mwh", "megawatt-hours"):
+            return value * 1000.0
+        # Default assume kWh — matches HA's recommended state_class
+        # for energy sensors and the user-confirmed setup here.
+        return value
 
     def _read_power_kw(self, entity_id: str) -> float | None:
         if not entity_id:
@@ -377,11 +411,23 @@ class CrowdergyCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
             vehicle_status = self._read_string(entity_vehicle_status)
             current_temp_c = self._read_entity_state(entity_current_temp)
             target_temp_c = self._read_entity_state(entity_target_temp)
-            # HA `total_increasing` energy sensor — read straight as
-            # the cumulative kWh value. Backend stores the raw float
-            # and computes deltas on the read side, so we never need
-            # to track previous values here.
-            energy_kwh_total = self._read_entity_state(entity_energy_total)
+            # Lifetime cumulative energy in kWh (unit-normalised from
+            # the HA `unit_of_measurement` attribute). We still send
+            # the raw cumulative for debugging, but the iOS chart
+            # reads from the Δ-per-tick computed below.
+            energy_kwh_total = self._read_energy_kwh(entity_energy_total)
+            # Δ-per-tick in kWh. None for the first read after a
+            # coordinator restart (no prev to subtract from), or for
+            # backward jumps (sensor reset / replacement) so the
+            # backend never lands a negative contribution. After this
+            # tick the new value becomes the next iteration's prev.
+            energy_kwh_delta: float | None = None
+            if energy_kwh_total is not None:
+                prev = self._prev_energy_kwh.get(device_id)
+                if prev is not None:
+                    delta = energy_kwh_total - prev
+                    energy_kwh_delta = delta if delta > 0 else 0.0
+                self._prev_energy_kwh[device_id] = energy_kwh_total
             # Derive is_on from the live HA state of entity_control so a
             # user-driven HA-side toggle propagates up to the backend
             # (and from there to iOS via SSE). Returns None when we
@@ -408,6 +454,8 @@ class CrowdergyCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
                 payload["target_temp_c"] = target_temp_c
             if energy_kwh_total is not None:
                 payload["energy_kwh_total"] = energy_kwh_total
+            if energy_kwh_delta is not None:
+                payload["energy_kwh_delta"] = energy_kwh_delta
             if is_on is not None:
                 payload["is_on"] = is_on
 
