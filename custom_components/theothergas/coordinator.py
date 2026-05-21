@@ -28,6 +28,7 @@ from .const import (
     CONF_ENTITY_VEHICLE_STATUS,
     CONF_ENTITY_CURRENT_TEMP,
     CONF_ENTITY_TARGET_TEMP,
+    CONF_ENTITY_ENERGY_TOTAL,
     CONF_ENTITY_OUTDOOR_TEMP,
     CONF_REFRESH_TOKEN,
     CONF_USER_ID,
@@ -105,6 +106,7 @@ class CrowdergyCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
                 CONF_ENTITY_VEHICLE_STATUS,
                 CONF_ENTITY_CURRENT_TEMP,
                 CONF_ENTITY_TARGET_TEMP,
+                CONF_ENTITY_ENERGY_TOTAL,
                 CONF_ENTITY_CONTROL,
             ):
                 entity_id = dev.get(key, "")
@@ -343,12 +345,18 @@ class CrowdergyCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
             entity_vehicle_status = dev.get(CONF_ENTITY_VEHICLE_STATUS, "")
             entity_current_temp = dev.get(CONF_ENTITY_CURRENT_TEMP, "")
             entity_target_temp = dev.get(CONF_ENTITY_TARGET_TEMP, "")
+            entity_energy_total = dev.get(CONF_ENTITY_ENERGY_TOTAL, "")
 
             current_power = self._read_power_kw(entity_power)
             soc_percent = self._read_entity_state(entity_soc)
             vehicle_status = self._read_string(entity_vehicle_status)
             current_temp_c = self._read_entity_state(entity_current_temp)
             target_temp_c = self._read_entity_state(entity_target_temp)
+            # HA `total_increasing` energy sensor — read straight as
+            # the cumulative kWh value. Backend stores the raw float
+            # and computes deltas on the read side, so we never need
+            # to track previous values here.
+            energy_kwh_total = self._read_entity_state(entity_energy_total)
             # Derive is_on from the live HA state of entity_control so a
             # user-driven HA-side toggle propagates up to the backend
             # (and from there to iOS via SSE). Returns None when we
@@ -373,6 +381,8 @@ class CrowdergyCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
                 payload["current_temp_c"] = current_temp_c
             if target_temp_c is not None:
                 payload["target_temp_c"] = target_temp_c
+            if energy_kwh_total is not None:
+                payload["energy_kwh_total"] = energy_kwh_total
             if is_on is not None:
                 payload["is_on"] = is_on
 

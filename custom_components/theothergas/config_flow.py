@@ -29,6 +29,7 @@ from .const import (
     CONF_ENTITY_VEHICLE_STATUS,
     CONF_ENTITY_CURRENT_TEMP,
     CONF_ENTITY_TARGET_TEMP,
+    CONF_ENTITY_ENERGY_TOTAL,
     CONF_PASSWORD,
     CONF_REFRESH_TOKEN,
     CONF_REGION,
@@ -75,13 +76,19 @@ def _is_binary_entity(entity_id: str) -> bool:
 # capable types additionally get the control trio (entity_control +
 # value_on + value_off) rendered as a separate section.
 _READ_FIELDS: dict[str, list[str]] = {
-    "solar":     [CONF_ENTITY_POWER],
-    "grid":      [CONF_ENTITY_POWER],
-    "heatpump":  [CONF_ENTITY_POWER, CONF_ENTITY_CURRENT_TEMP, CONF_ENTITY_TARGET_TEMP],
-    "haushalt":  [CONF_ENTITY_POWER],
-    "battery":   [CONF_ENTITY_POWER, CONF_ENTITY_SOC],
-    "wallbox":   [CONF_ENTITY_POWER, CONF_ENTITY_SOC, CONF_ENTITY_VEHICLE_STATUS],
-    "generic":   [CONF_ENTITY_POWER],
+    "solar":     [CONF_ENTITY_POWER, CONF_ENTITY_ENERGY_TOTAL],
+    "grid":      [CONF_ENTITY_POWER, CONF_ENTITY_ENERGY_TOTAL],
+    "heatpump":  [
+        CONF_ENTITY_POWER, CONF_ENTITY_CURRENT_TEMP, CONF_ENTITY_TARGET_TEMP,
+        CONF_ENTITY_ENERGY_TOTAL,
+    ],
+    "haushalt":  [CONF_ENTITY_POWER, CONF_ENTITY_ENERGY_TOTAL],
+    "battery":   [CONF_ENTITY_POWER, CONF_ENTITY_SOC, CONF_ENTITY_ENERGY_TOTAL],
+    "wallbox":   [
+        CONF_ENTITY_POWER, CONF_ENTITY_SOC, CONF_ENTITY_VEHICLE_STATUS,
+        CONF_ENTITY_ENERGY_TOTAL,
+    ],
+    "generic":   [CONF_ENTITY_POWER, CONF_ENTITY_ENERGY_TOTAL],
 }
 
 # Entity-selector configs keyed by the CONF_ENTITY_* name.
@@ -115,6 +122,12 @@ _ENTITY_SELECTORS: dict[str, selector.EntitySelector] = {
     # integration's own charge-mode select).
     CONF_ENTITY_CHARGE_MODE: selector.EntitySelector(
         selector.EntitySelectorConfig(domain=["select", "input_select"])
+    ),
+    # Energy meter — HA `total_increasing` kWh sensor (lifetime
+    # cumulative). Restricted to plain sensor entities; the backend
+    # rejects non-monotonic data via a delta clamp.
+    CONF_ENTITY_ENERGY_TOTAL: selector.EntitySelector(
+        selector.EntitySelectorConfig(domain="sensor")
     ),
 }
 
@@ -358,6 +371,7 @@ def _build_device_record(
         CONF_ENTITY_VEHICLE_STATUS: entity_input.get(CONF_ENTITY_VEHICLE_STATUS, ""),
         CONF_ENTITY_CURRENT_TEMP: entity_input.get(CONF_ENTITY_CURRENT_TEMP, ""),
         CONF_ENTITY_TARGET_TEMP: entity_input.get(CONF_ENTITY_TARGET_TEMP, ""),
+        CONF_ENTITY_ENERGY_TOTAL: entity_input.get(CONF_ENTITY_ENERGY_TOTAL, ""),
         CONF_ENTITY_CONTROL: entity_input.get(CONF_ENTITY_CONTROL, ""),
         CONF_VALUE_ON: entity_input.get(CONF_VALUE_ON, ""),
         CONF_VALUE_OFF: entity_input.get(CONF_VALUE_OFF, ""),

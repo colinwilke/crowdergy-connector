@@ -63,14 +63,16 @@
               "entity_soc_percent": "Ladezustand-Sensor",
               "entity_vehicle_status": "Fahrzeugstatus-Sensor",
               "entity_current_temp_c": "Ist-Temperatur-Sensor",
-              "entity_target_temp_c": "Soll-Temperatur-Sensor"
+              "entity_target_temp_c": "Soll-Temperatur-Sensor",
+              "entity_energy_total": "Gesamtenergie-Zähler (kWh, kumulativ)"
             },
             "data_description": {
               "entity_current_power_kw": "Aktuelle Leistung in W oder kW (Sensor-Entität). Pflichtfeld — daraus berechnen wir die Live-Anzeige und beim Kalibrieren deinen Flex-Beitrag (kW). Bei Batterie/Netz: positive Werte = Bezug, negative = Abgabe.",
               "entity_soc_percent": "Aktueller Ladezustand in % (0–100). Pflichtfeld für Batterie und Wallbox — daraus errechnet die App den Ladestand und die spätere Smart-Steuerung respektiert deinen erlaubten Bereich (Min/Max in der App).",
               "entity_vehicle_status": "Sensor- oder Binary-Sensor-Entität, die meldet, ob ein Auto an der Wallbox steckt (typische Werte: connected, charging, idle). Wallbox-Pflichtfeld — Crowdergy startet eine Crowdergize-Session erst wenn ein Auto da ist und beendet sie automatisch beim Abstöpseln.",
               "entity_current_temp_c": "Aktuelle Temperatur in °C — z. B. die Vorlauftemperatur einer Wärmepumpe oder die Innentemperatur eines Brauchwasser-Boilers. Wird in der App neben dem Wärmepumpen-Tile angezeigt.",
-              "entity_target_temp_c": "Aktuelle Soll-/Zieltemperatur in °C. Optional — wenn leer, zeigt die App nur die Ist-Temperatur. Wichtig: Crowdergy schreibt diese Entität nicht; die Soll-Temperatur regelst du wie gewohnt über deine HA-Heizungsintegration. Crowdergy nutzt den Wert später nur, um Heizphasen besser einzuplanen."
+              "entity_target_temp_c": "Aktuelle Soll-/Zieltemperatur in °C. Optional — wenn leer, zeigt die App nur die Ist-Temperatur. Wichtig: Crowdergy schreibt diese Entität nicht; die Soll-Temperatur regelst du wie gewohnt über deine HA-Heizungsintegration. Crowdergy nutzt den Wert später nur, um Heizphasen besser einzuplanen.",
+              "entity_energy_total": "Lebensdauer-Energiezähler in kWh (HA-Attribut state_class: total_increasing). Crowdergy speichert den Rohwert und berechnet daraus Tages-/Monats-/Jahresverbrauch via Delta. Optional — Geräte ohne diesen Sensor zeigen weiterhin nur kW. Niemals aus power_kw integrieren, der Drift summiert sich monatlich auf zweistellige Prozent."
             }
           },
           "control_section": {
@@ -176,7 +178,8 @@
               "entity_soc_percent": "Ladezustand-Sensor",
               "entity_vehicle_status": "Fahrzeugstatus-Sensor",
               "entity_current_temp_c": "Ist-Temperatur-Sensor",
-              "entity_target_temp_c": "Soll-Temperatur-Sensor"
+              "entity_target_temp_c": "Soll-Temperatur-Sensor",
+              "entity_energy_total": "Gesamtenergie-Zähler (kWh, kumulativ)"
             },
             "data_description": {
               "entity_current_power_kw": "Aktuelle Leistung in W oder kW. Pflichtfeld — daraus berechnen wir Live-Anzeige + Flex-Beitrag bei Kalibrierung. Bei Batterie/Netz: positive Werte = Bezug, negative = Abgabe.",
@@ -255,7 +258,8 @@
               "entity_soc_percent": "Ladezustand-Sensor",
               "entity_vehicle_status": "Fahrzeugstatus-Sensor",
               "entity_current_temp_c": "Ist-Temperatur-Sensor",
-              "entity_target_temp_c": "Soll-Temperatur-Sensor"
+              "entity_target_temp_c": "Soll-Temperatur-Sensor",
+              "entity_energy_total": "Gesamtenergie-Zähler (kWh, kumulativ)"
             },
             "data_description": {
               "entity_current_power_kw": "Aktuelle Leistung in W oder kW. Pflichtfeld. Bei Batterie/Netz: positiv = Bezug, negativ = Abgabe.",

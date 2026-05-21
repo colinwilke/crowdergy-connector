@@ -43,6 +43,13 @@ CONF_ENTITY_VEHICLE_STATUS = "entity_vehicle_status"
 # optional — devices without a target-temp sensor leave it null.
 CONF_ENTITY_CURRENT_TEMP = "entity_current_temp_c"
 CONF_ENTITY_TARGET_TEMP = "entity_target_temp_c"
+# Optional per-device kWh meter. Must be an HA sensor with
+# `state_class: total_increasing` (lifetime cumulative). The
+# Crowdergy backend stores the raw value and derives day / month /
+# year totals via SQL `date_trunc` deltas — never integrate this
+# from `power_kw` (5–10 % drift compounds badly). Devices without
+# such a sensor mapped just keep the kW-only display in the app.
+CONF_ENTITY_ENERGY_TOTAL = "entity_energy_total"
 
 # As of v1.8.0 Crowdergy controls each device via a single user-mapped
 # entity. When the Crowdergy app flips the device on/off (or, later, the

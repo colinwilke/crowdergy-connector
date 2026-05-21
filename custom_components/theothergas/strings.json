@@ -59,12 +59,14 @@
             "data": {
               "entity_current_power_kw": "Entität für aktuelle Leistung des Geräts",
               "entity_soc_percent": "Entität für aktuellen Ladezustand",
-              "entity_vehicle_status": "Entität für Fahrzeugstatus"
+              "entity_vehicle_status": "Entität für Fahrzeugstatus",
+              "entity_energy_total": "Entität für Gesamtenergie (kWh, fortlaufend)"
             },
             "data_description": {
               "entity_current_power_kw": "Sensor, der die aktuelle Leistung in W oder kW liefert.",
               "entity_soc_percent": "Sensor, der den aktuellen Ladezustand in Prozent liefert.",
-              "entity_vehicle_status": "Sensor- oder Binary-Sensor-Entität für den Fahrzeugstatus (z. B. „connected“, „charging“)."
+              "entity_vehicle_status": "Sensor- oder Binary-Sensor-Entität für den Fahrzeugstatus (z. B. „connected“, „charging“).",
+              "entity_energy_total": "Sensor mit state_class total_increasing in kWh (Lebensdauer-Zähler). Crowdergy bildet Tages-, Monats- und Jahresverbrauch via Delta-Berechnung. Optional — ohne diesen Sensor zeigt die App weiterhin nur kW."
             }
           },
           "control_section": {
@@ -157,12 +159,14 @@
             "data": {
               "entity_current_power_kw": "Entität für aktuelle Leistung des Geräts",
               "entity_soc_percent": "Entität für aktuellen Ladezustand",
-              "entity_vehicle_status": "Entität für Fahrzeugstatus"
+              "entity_vehicle_status": "Entität für Fahrzeugstatus",
+              "entity_energy_total": "Entität für Gesamtenergie (kWh, fortlaufend)"
             },
             "data_description": {
               "entity_current_power_kw": "Sensor, der die aktuelle Leistung in W oder kW liefert.",
               "entity_soc_percent": "Sensor, der den aktuellen Ladezustand in Prozent liefert.",
-              "entity_vehicle_status": "Sensor- oder Binary-Sensor-Entität für den Fahrzeugstatus (z. B. „connected“, „charging“)."
+              "entity_vehicle_status": "Sensor- oder Binary-Sensor-Entität für den Fahrzeugstatus (z. B. „connected“, „charging“).",
+              "entity_energy_total": "Sensor mit state_class total_increasing in kWh (Lebensdauer-Zähler). Crowdergy bildet Tages-, Monats- und Jahresverbrauch via Delta-Berechnung. Optional — ohne diesen Sensor zeigt die App weiterhin nur kW."
             }
           },
           "control_section": {
@@ -232,12 +236,14 @@
             "data": {
               "entity_current_power_kw": "Entität für aktuelle Leistung des Geräts",
               "entity_soc_percent": "Entität für aktuellen Ladezustand",
-              "entity_vehicle_status": "Entität für Fahrzeugstatus"
+              "entity_vehicle_status": "Entität für Fahrzeugstatus",
+              "entity_energy_total": "Entität für Gesamtenergie (kWh, fortlaufend)"
             },
             "data_description": {
               "entity_current_power_kw": "Sensor, der die aktuelle Leistung in W oder kW liefert.",
               "entity_soc_percent": "Sensor, der den aktuellen Ladezustand in Prozent liefert.",
-              "entity_vehicle_status": "Sensor- oder Binary-Sensor-Entität für den Fahrzeugstatus (z. B. „connected“, „charging“)."
+              "entity_vehicle_status": "Sensor- oder Binary-Sensor-Entität für den Fahrzeugstatus (z. B. „connected“, „charging“).",
+              "entity_energy_total": "Sensor mit state_class total_increasing in kWh (Lebensdauer-Zähler). Crowdergy bildet Tages-, Monats- und Jahresverbrauch via Delta-Berechnung. Optional — ohne diesen Sensor zeigt die App weiterhin nur kW."
             }
           },
           "control_section": {
