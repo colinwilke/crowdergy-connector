@@ -962,12 +962,28 @@ class CrowdergyCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
         )
         if dev is None:
             return
+        # Hold mode interpretation (v1.20.0+):
+        # * `never`  → no hold loop (single write, hope the device sticks).
+        # * `auto`   → treated as `always`. Field-test on 2026-05-22
+        #              showed hysteresis-laden devices need the periodic
+        #              rewrite (warmwasser hysteresis 7.5 °C → MPC writes
+        #              "60", actual temp 53 ⇒ doesn't trigger; without
+        #              the rewrite the next 15-min MPC tick is the only
+        #              chance to re-hit). 30 s rewrite cadence is harmless
+        #              on devices that hold fine and rescues those that
+        #              don't. Backwards-compatible: old configs that
+        #              picked `auto` get the new behaviour for free.
+        # * `always` → keeps doing what it always did.
         mode = (
-            dev.get(CONF_ENTITY_CONTROL_HOLD, ENTITY_CONTROL_HOLD_AUTO)
-            or ENTITY_CONTROL_HOLD_AUTO
+            dev.get(CONF_ENTITY_CONTROL_HOLD, ENTITY_CONTROL_HOLD_ALWAYS)
+            or ENTITY_CONTROL_HOLD_ALWAYS
         )
         if mode == ENTITY_CONTROL_HOLD_NEVER:
             return
+        # Collapse `auto` into `always` — no more "release after N
+        # stable checks" path. See block comment above.
+        if mode == ENTITY_CONTROL_HOLD_AUTO:
+            mode = ENTITY_CONTROL_HOLD_ALWAYS
 
         self._hold_tasks[device_id] = asyncio.create_task(
             self._hold_loop(device_id, entity_id, raw_value, domain, on, mode)
