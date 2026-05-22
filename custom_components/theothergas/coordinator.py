@@ -139,6 +139,14 @@ class CrowdergyCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
         # Crowdergize OFF, on shutdown, or when a fresh apply happens
         # (the old loop is replaced).
         self._hold_tasks: dict[str, asyncio.Task] = {}
+        # Wallbox charge_mode snapshot per device — captures whatever
+        # the user had set on entity_charge_mode BEFORE Crowdergize
+        # was switched ON, so we can restore it on OFF. In-memory only;
+        # an HA-restart mid-session loses the snapshot (V1 tradeoff —
+        # rare case, the worst outcome is the entity stays at the
+        # MPC-override value after Crowdergize OFF, easy to fix
+        # manually). Keyed by device_id.
+        self._pre_crowdergize_charge_mode: dict[str, str] = {}
         # Read once at coordinator init — never changes during a HA
         # session (a manifest bump means HACS reloads the integration).
         self._connector_version: str = _load_manifest_version()
@@ -694,6 +702,18 @@ class CrowdergyCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
                 if self._active_state.get(device_id) != new_value:
                     self._active_state[device_id] = new_value
                     self._sync_field_into_data(device_id, "is_active", new_value)
+                    # Wallbox charge_mode snapshot/restore. Only fires
+                    # for wallbox devices that have BOTH an entity_
+                    # charge_mode configured AND a backend-side
+                    # charge_mode_value_crowdergy set (= user has
+                    # explicitly opted into the override behaviour).
+                    crowdergy_value = payload.get("charge_mode_value_crowdergy")
+                    if new_value and crowdergy_value:
+                        await self._snapshot_and_override_charge_mode(
+                            device_id, str(crowdergy_value)
+                        )
+                    elif not new_value:
+                        await self._restore_charge_mode(device_id)
                     # Crowdergize off → stop holding the entity_control
                     # value. The device is the user's again.
                     if not new_value:
@@ -721,6 +741,59 @@ class CrowdergyCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
             )
             if action == "set_charge_mode" and device_id and value is not None:
                 await self._apply_charge_mode(device_id, str(value))
+
+    async def _snapshot_and_override_charge_mode(
+        self, device_id: str, override_value: str
+    ) -> None:
+        """Crowdergize ON for a wallbox: snapshot the current
+        entity_charge_mode state (so we can restore on OFF) and
+        write the user-configured "MPC controls this" value (e.g.
+        "Power Mode") so the wallbox firmware doesn't self-optimise
+        against the MPC plan.
+
+        Idempotent: if a snapshot for this device already exists
+        (Crowdergize toggled OFF→ON→OFF→ON without going through
+        the restore branch — shouldn't happen, but defensive), we
+        keep the existing snapshot so a future restore still hits
+        the user's original value."""
+        dev = next(
+            (d for d in self.devices if d.get(CONF_DEVICE_ID) == device_id),
+            None,
+        )
+        if dev is None:
+            return
+        entity_id = dev.get(CONF_ENTITY_CHARGE_MODE, "") or ""
+        if not entity_id:
+            # No charge_mode entity configured; nothing to override.
+            return
+        # Snapshot current value if we don't already have one.
+        if device_id not in self._pre_crowdergize_charge_mode:
+            state = self.hass.states.get(entity_id)
+            if state is not None and state.state not in ("unknown", "unavailable"):
+                self._pre_crowdergize_charge_mode[device_id] = state.state
+                _LOGGER.info(
+                    "Snapshotted charge_mode for %s: %r",
+                    device_id, state.state,
+                )
+        # Override.
+        await self._apply_charge_mode(device_id, override_value)
+
+    async def _restore_charge_mode(self, device_id: str) -> None:
+        """Crowdergize OFF for a wallbox: write the snapshotted
+        pre-Crowdergize value back to entity_charge_mode so the
+        user's original Solar-Pure / Eco / whatever logic resumes
+        owning the wallbox."""
+        snapshot = self._pre_crowdergize_charge_mode.pop(device_id, None)
+        if snapshot is None:
+            # No snapshot — either no override was applied (no
+            # entity / no crowdergy_value), or the snapshot was lost
+            # to an HA restart mid-session. Either way nothing to do.
+            return
+        _LOGGER.info(
+            "Restoring charge_mode for %s: %r",
+            device_id, snapshot,
+        )
+        await self._apply_charge_mode(device_id, snapshot)
 
     async def _apply_charge_mode(self, device_id: str, mode: str) -> None:
         """Write the wallbox's configured entity_charge_mode select entity."""
