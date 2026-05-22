@@ -402,6 +402,7 @@ class CrowdergyCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
             entity_power = dev.get(CONF_ENTITY_POWER, "")
             entity_soc = dev.get(CONF_ENTITY_SOC, "")
             entity_vehicle_status = dev.get(CONF_ENTITY_VEHICLE_STATUS, "")
+            entity_charge_mode = dev.get(CONF_ENTITY_CHARGE_MODE, "")
             entity_current_temp = dev.get(CONF_ENTITY_CURRENT_TEMP, "")
             entity_target_temp = dev.get(CONF_ENTITY_TARGET_TEMP, "")
             entity_energy_total = dev.get(CONF_ENTITY_ENERGY_TOTAL, "")
@@ -409,6 +410,13 @@ class CrowdergyCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
             current_power = self._read_power_kw(entity_power)
             soc_percent = self._read_entity_state(entity_soc)
             vehicle_status = self._read_string(entity_vehicle_status)
+            # Read charge_mode back from HA so an external change (user
+            # flipping the wallbox select in HA directly, or the
+            # device's own logic) propagates up to iOS. Was previously
+            # write-only via the set_charge_mode command, which left
+            # iOS showing a stale value whenever the wallbox or HA
+            # changed it on its own.
+            charge_mode = self._read_string(entity_charge_mode)
             current_temp_c = self._read_entity_state(entity_current_temp)
             target_temp_c = self._read_entity_state(entity_target_temp)
             # Lifetime cumulative energy in kWh (unit-normalised from
@@ -448,6 +456,8 @@ class CrowdergyCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
                 payload["soc_percent"] = soc_percent
             if vehicle_status is not None:
                 payload["vehicle_status"] = vehicle_status
+            if charge_mode is not None:
+                payload["charge_mode"] = charge_mode
             if current_temp_c is not None:
                 payload["current_temp_c"] = current_temp_c
             if target_temp_c is not None:
