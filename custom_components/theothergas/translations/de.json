@@ -4,6 +4,7 @@
       "user": {
         "title": "Mit Crowdergy verbinden",
         "description": "Crowdergy bündelt die Flexibilität deiner Geräte mit der deiner Nachbarschaft und stellt sie auf Anfrage dem Stromnetz bereit. Im Gegenzug verdienst du Crowdergy Coins (CCs). Bitte zuerst in der Crowdergy iOS-App ein Konto anlegen und hier dieselben Zugangsdaten eintragen.",
+        "submit": "Weiter",
         "data": {
           "email": "E-Mail",
           "password": "Passwort"
@@ -16,6 +17,7 @@
       "location": {
         "title": "Standort",
         "description": "Crowdergy zeigt die aggregierte Flexibilität deiner Nachbarschaft anonym auf einer Karte — dafür brauchen wir grob deinen Stadtteil. Die Felder sind aus deinen Home-Assistant-Koordinaten vorausgefüllt. Es wird kein präziser Standort gespeichert, nur die Texte unten und der Mittelpunkt deines Stadtteils.",
+        "submit": "Weiter",
         "data": {
           "district": "Stadtteil",
           "city": "Stadt",
@@ -32,6 +34,7 @@
       "device_type": {
         "title": "Gerät #{device_number} — Typ & Name",
         "description": "Wähle den Gerätetyp und einen Anzeigenamen. Der Typ steuert, welche Felder im nächsten Schritt erscheinen, und ordnet das Gerät in der App + in der Stadtteil-Aggregation richtig ein.\n\nÜbersicht der Typen:\n• Solar — PV-Anlage (nur lesend)\n• Batterie — Heimspeicher\n• Wallbox — Lademöglichkeit fürs E-Auto\n• Wärmepumpe — Heiz- oder Warmwasser-Wärmepumpe (auch Brauchwasser-Boiler)\n• Netz — Hauptzähler / Netzbezug (nur lesend)\n• Haushalt — sonstige Grundlast (nur lesend)\n• Gerät — beliebiges schaltbares Gerät (Klima, Pool, IR-Heizung …)",
+        "submit": "Weiter",
         "data": {
           "device_type": "Gerätetyp",
           "device_name": "Name"
@@ -44,6 +47,7 @@
       "device_entities": {
         "title": "{device_name} ({device_type}) — Entitäten verknüpfen",
         "description": "Sage Crowdergy, welche Home-Assistant-Entitäten zu diesem Gerät gehören. Lesende Entitäten ziehen Status-Daten in die App (Leistung, Ladezustand, Temperatur …), die Steuer-Entität ist diejenige, die Crowdergy beim Crowdergize-Schalten an- bzw. ausschaltet. Felder, die für deinen Gerätetyp nicht relevant sind, einfach leer lassen.",
+        "submit": "Weiter",
         "data": {
           "entity_current_power_kw": "Leistungs-Sensor",
           "read_section": "Lesende Werte (Status)",
@@ -92,6 +96,7 @@
       "device_values": {
         "title": "{device_name} ({device_type}) — An/Aus-Werte für die Steuer-Entität",
         "description": "Was soll Crowdergy auf die Steuer-Entität schreiben, wenn das Gerät über Crowdergize an- bzw. ausgeschaltet werden soll? Bei Switch / Input-Boolean füllt sich das automatisch (on/off). Bei Select-, Number- und Climate-Entitäten wählst du den passenden Wert manuell aus deinen vorhandenen Optionen.",
+        "submit": "Weiter",
         "data": {
           "value_on": "Wert für: Gerät an",
           "value_off": "Wert für: Gerät aus",
@@ -137,6 +142,7 @@
       "edit_outdoor_temp": {
         "title": "Außentemperatur-Sensor",
         "description": "Optional: ein HA-Sensor mit der aktuellen Außentemperatur in °C. Wird im Kopfbereich der Crowdergy-App angezeigt. Leer lassen, damit Crowdergy stattdessen die Außentemperatur automatisch über Open-Meteo (Wetterdaten anhand deines Stadtteils) holt.",
+        "submit": "OK",
         "data": {
           "entity_outdoor_temp_c": "Außentemperatur-Sensor (optional)"
         },
@@ -147,6 +153,7 @@
       "add_device": {
         "title": "Gerät hinzufügen — Typ & Name",
         "description": "Wähle Typ und Name. Der Typ entscheidet, welche Felder im nächsten Schritt erscheinen und wie das Gerät in der App und in der Stadtteil-Aggregation eingeordnet wird.",
+        "submit": "Weiter",
         "data": {
           "device_type": "Gerätetyp",
           "device_name": "Name"
@@ -159,6 +166,7 @@
       "add_device_entities": {
         "title": "{device_name} ({device_type}) — Entitäten verknüpfen",
         "description": "Lesende Entitäten (Sensor-Werte) füllen den App-Status. Die Steuer-Entität ist die eine HA-Entität, die Crowdergy beim Crowdergize-Toggle ändern darf. Felder für deinen Typ nicht relevant → leer lassen.",
+        "submit": "Weiter",
         "data": {
           "entity_current_power_kw": "Leistungs-Sensor",
           "read_section": "Lesende Werte (Status)",
@@ -206,6 +214,7 @@
       "add_device_values": {
         "title": "{device_name} ({device_type}) — An/Aus-Werte für die Steuer-Entität",
         "description": "Was soll Crowdergy auf die Steuer-Entität schreiben, wenn das Gerät an- bzw. ausgeschaltet werden soll? Bei Switch / Input-Boolean füllt sich das automatisch. Bei Select / Number / Climate wählst du die passenden Werte aus deinen vorhandenen Optionen.",
+        "submit": "OK",
         "data": {
           "value_on": "Wert für: Gerät an",
           "value_off": "Wert für: Gerät aus",
@@ -220,6 +229,7 @@
       "edit_device": {
         "title": "Gerät bearbeiten",
         "description": "Wähle das Gerät, das du anpassen möchtest.",
+        "submit": "Weiter",
         "data": {
           "device_to_edit": "Gerät"
         }
@@ -227,6 +237,7 @@
       "edit_device_type": {
         "title": "{device_name} bearbeiten — Typ & Name",
         "description": "Typ und Name anpassen. Im nächsten Schritt prüfst und korrigierst du die verknüpften Entitäten.",
+        "submit": "Weiter",
         "data": {
           "device_type": "Gerätetyp",
           "device_name": "Name"
@@ -239,6 +250,7 @@
       "edit_device_entities": {
         "title": "{device_name} ({device_type}) — Entitäten verknüpfen",
         "description": "Lesende Entitäten = Status, schreibende Entität = Crowdergize-Steuerung. Felder für diesen Typ nicht relevant → leer lassen.",
+        "submit": "Weiter",
         "data": {
           "entity_current_power_kw": "Leistungs-Sensor",
           "read_section": "Lesende Werte (Status)",
@@ -286,6 +298,7 @@
       "edit_device_values": {
         "title": "{device_name} ({device_type}) — An/Aus-Werte für die Steuer-Entität",
         "description": "Was soll Crowdergy auf die Steuer-Entität schreiben? Switch / Input-Boolean füllen sich automatisch; bei Select / Number / Climate wählst du manuell.",
+        "submit": "OK",
         "data": {
           "value_on": "Wert für: Gerät an",
           "value_off": "Wert für: Gerät aus",
@@ -300,6 +313,7 @@
       "remove_device": {
         "title": "Gerät entfernen",
         "description": "Das Gerät wird sowohl bei Crowdergy als auch in Home Assistant gelöscht. Bereits verdiente Crowdergy Coins (CCs) bleiben deinem Konto natürlich erhalten.",
+        "submit": "OK",
         "data": {
           "device_to_remove": "Gerät"
         }
