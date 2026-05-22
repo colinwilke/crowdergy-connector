@@ -30,6 +30,7 @@ from .const import (
     CONF_ENTITY_CURRENT_TEMP,
     CONF_ENTITY_TARGET_TEMP,
     CONF_ENTITY_ENERGY_TOTAL,
+    CONF_ENTITY_ENERGY_DISCHARGED_TOTAL,
     CONF_ENTITY_OUTDOOR_TEMP,
     CONF_REFRESH_TOKEN,
     CONF_USER_ID,
@@ -159,6 +160,10 @@ class CrowdergyCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
         # send. Starts empty after a coordinator restart so the very
         # first sample doesn't emit a phantom delta against zero.
         self._prev_energy_kwh: dict[str, float] = {}
+        # Battery-only twin of `_prev_energy_kwh` for the discharge
+        # counter (CONF_ENTITY_ENERGY_DISCHARGED_TOTAL). Same reset
+        # / Δ rules apply.
+        self._prev_energy_kwh_discharged: dict[str, float] = {}
         # Per-device send bookkeeping driving SEND_THRESHOLDS — the
         # most-recent payload we actually pushed to the backend, plus
         # a wall-clock timestamp of that push. `_should_send()` uses
@@ -321,6 +326,8 @@ class CrowdergyCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
         if time.time() - last >= PER_DEVICE_HEARTBEAT_INTERVAL:
             return True
         if (payload.get("energy_kwh_delta") or 0.0) > 0:
+            return True
+        if (payload.get("energy_kwh_discharged_delta") or 0.0) > 0:
             return True
         for key, threshold in SEND_THRESHOLDS.items():
             cur, old = payload.get(key), prev.get(key)
@@ -505,6 +512,9 @@ class CrowdergyCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
             entity_current_temp = dev.get(CONF_ENTITY_CURRENT_TEMP, "")
             entity_target_temp = dev.get(CONF_ENTITY_TARGET_TEMP, "")
             entity_energy_total = dev.get(CONF_ENTITY_ENERGY_TOTAL, "")
+            entity_energy_discharged_total = dev.get(
+                CONF_ENTITY_ENERGY_DISCHARGED_TOTAL, ""
+            )
 
             current_power = self._read_power_kw(entity_power)
             soc_percent = self._read_entity_state(entity_soc)
@@ -536,6 +546,18 @@ class CrowdergyCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
                 if prev is not None:
                     delta = energy_kwh_total - prev
                     energy_kwh_delta = delta if delta > 0 else 0.0
+            # Battery-only second stream: same Δ rules against its
+            # own _prev_ bookkeeping. None when the user hasn't
+            # mapped this entity (typical for non-battery devices).
+            energy_kwh_discharged_total = self._read_energy_kwh(
+                entity_energy_discharged_total
+            )
+            energy_kwh_discharged_delta: float | None = None
+            if energy_kwh_discharged_total is not None:
+                prev_d = self._prev_energy_kwh_discharged.get(device_id)
+                if prev_d is not None:
+                    delta_d = energy_kwh_discharged_total - prev_d
+                    energy_kwh_discharged_delta = delta_d if delta_d > 0 else 0.0
             # Derive is_on from the live HA state of entity_control so a
             # user-driven HA-side toggle propagates up to the backend
             # (and from there to iOS via SSE). Returns None when we
@@ -566,6 +588,8 @@ class CrowdergyCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
                 payload["energy_kwh_total"] = energy_kwh_total
             if energy_kwh_delta is not None:
                 payload["energy_kwh_delta"] = energy_kwh_delta
+            if energy_kwh_discharged_delta is not None:
+                payload["energy_kwh_discharged_delta"] = energy_kwh_discharged_delta
             if is_on is not None:
                 payload["is_on"] = is_on
 
@@ -587,6 +611,10 @@ class CrowdergyCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
                     self._last_send_at[device_id] = time.time()
                     if energy_kwh_total is not None:
                         self._prev_energy_kwh[device_id] = energy_kwh_total
+                    if energy_kwh_discharged_total is not None:
+                        self._prev_energy_kwh_discharged[device_id] = (
+                            energy_kwh_discharged_total
+                        )
                 except httpx.HTTPStatusError as err:
                     _LOGGER.error(
                         "Backend returned %s for device %s: %s",
@@ -605,6 +633,40 @@ class CrowdergyCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
                 "is_on": self._on_state.get(device_id, False),
                 "is_online": True,
             }
+
+        # Hold-loop self-heal. `_apply_device_state` only fires on
+        # is_on *transitions* coming through the SSE WS — but the MPC
+        # tick re-decides the same state every 5 minutes, and HA
+        # restarts wipe live hold tasks. Without this guard, a device
+        # that should be ON loses its periodic re-write the moment a
+        # transition is missed (warmwasser case 2026-05-22: hysteresis
+        # 53→60, MPC writes "60" once, register reverts, next MPC tick
+        # is also "60" → no transition → no rewrite → device stays
+        # off). Walks each Crowdergize-active device once per tick and
+        # restarts the hold task if it's gone.
+        for device_id in list(result.keys()):
+            if not self._active_state.get(device_id, False):
+                continue
+            if device_id not in self._on_state:
+                continue  # never commanded — don't synthesise a write
+            task = self._hold_tasks.get(device_id)
+            if task is not None and not task.done():
+                continue
+            dev = next(
+                (d for d in self.devices if d.get(CONF_DEVICE_ID) == device_id),
+                None,
+            )
+            if dev is None:
+                continue
+            mode = (
+                dev.get(CONF_ENTITY_CONTROL_HOLD, ENTITY_CONTROL_HOLD_ALWAYS)
+                or ENTITY_CONTROL_HOLD_ALWAYS
+            )
+            if mode == ENTITY_CONTROL_HOLD_NEVER:
+                continue  # user opted out of periodic rewriting
+            await self._apply_device_state(
+                device_id, self._on_state[device_id]
+            )
 
         return result
 

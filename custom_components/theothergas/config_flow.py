@@ -30,6 +30,7 @@ from .const import (
     CONF_ENTITY_CURRENT_TEMP,
     CONF_ENTITY_TARGET_TEMP,
     CONF_ENTITY_ENERGY_TOTAL,
+    CONF_ENTITY_ENERGY_DISCHARGED_TOTAL,
     CONF_PASSWORD,
     CONF_REFRESH_TOKEN,
     CONF_REGION,
@@ -83,7 +84,10 @@ _READ_FIELDS: dict[str, list[str]] = {
         CONF_ENTITY_ENERGY_TOTAL,
     ],
     "haushalt":  [CONF_ENTITY_POWER, CONF_ENTITY_ENERGY_TOTAL],
-    "battery":   [CONF_ENTITY_POWER, CONF_ENTITY_SOC, CONF_ENTITY_ENERGY_TOTAL],
+    "battery":   [
+        CONF_ENTITY_POWER, CONF_ENTITY_SOC,
+        CONF_ENTITY_ENERGY_TOTAL, CONF_ENTITY_ENERGY_DISCHARGED_TOTAL,
+    ],
     "wallbox":   [
         CONF_ENTITY_POWER, CONF_ENTITY_SOC, CONF_ENTITY_VEHICLE_STATUS,
         CONF_ENTITY_ENERGY_TOTAL,
@@ -127,6 +131,12 @@ _ENTITY_SELECTORS: dict[str, selector.EntitySelector] = {
     # cumulative). Restricted to plain sensor entities; the backend
     # rejects non-monotonic data via a delta clamp.
     CONF_ENTITY_ENERGY_TOTAL: selector.EntitySelector(
+        selector.EntitySelectorConfig(domain="sensor")
+    ),
+    # Battery-only: second `total_increasing` kWh sensor for the
+    # discharge counter — splits charge / discharge into separate
+    # streams server-side.
+    CONF_ENTITY_ENERGY_DISCHARGED_TOTAL: selector.EntitySelector(
         selector.EntitySelectorConfig(domain="sensor")
     ),
 }
@@ -365,6 +375,9 @@ def _build_device_record(
         CONF_ENTITY_CURRENT_TEMP: entity_input.get(CONF_ENTITY_CURRENT_TEMP, ""),
         CONF_ENTITY_TARGET_TEMP: entity_input.get(CONF_ENTITY_TARGET_TEMP, ""),
         CONF_ENTITY_ENERGY_TOTAL: entity_input.get(CONF_ENTITY_ENERGY_TOTAL, ""),
+        CONF_ENTITY_ENERGY_DISCHARGED_TOTAL: entity_input.get(
+            CONF_ENTITY_ENERGY_DISCHARGED_TOTAL, ""
+        ),
         CONF_ENTITY_CONTROL: entity_input.get(CONF_ENTITY_CONTROL, ""),
         CONF_VALUE_ON: entity_input.get(CONF_VALUE_ON, ""),
         CONF_VALUE_OFF: entity_input.get(CONF_VALUE_OFF, ""),

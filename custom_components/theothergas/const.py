@@ -50,6 +50,15 @@ CONF_ENTITY_TARGET_TEMP = "entity_target_temp_c"
 # from `power_kw` (5–10 % drift compounds badly). Devices without
 # such a sensor mapped just keep the kW-only display in the app.
 CONF_ENTITY_ENERGY_TOTAL = "entity_energy_total"
+# Battery-only optional second energy meter for the discharge side.
+# Batteries are bidirectional and HA typically exposes the two flows
+# as two distinct `total_increasing` sensors — the existing
+# `entity_energy_total` carries one (the user picks which: charged
+# vs. discharged depending on their integration), and this new
+# field carries the OTHER so the backend can split the streams and
+# the iOS chart can render charge / discharge separately. NOT
+# offered for non-battery types.
+CONF_ENTITY_ENERGY_DISCHARGED_TOTAL = "entity_energy_discharged_total"
 
 # As of v1.8.0 Crowdergy controls each device via a single user-mapped
 # entity. When the Crowdergy app flips the device on/off (or, later, the
