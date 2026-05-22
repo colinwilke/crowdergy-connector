@@ -4,6 +4,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import time
 from datetime import timedelta
 from typing import Any
 
@@ -46,6 +47,36 @@ from .const import (
 _LOGGER = logging.getLogger(__name__)
 
 HEARTBEAT_INTERVAL = 30
+"""Coordinator's regular scheduled tick — every 30 s the coordinator
+recomputes state for all devices regardless of HA events. Combined
+with event-driven refreshes (state-change listener) and the per-
+device send threshold below, this gives an upper bound on staleness
+without flooding the backend with rows."""
+
+EVENT_REFRESH_MIN_INTERVAL = 5.0
+"""Throttle for event-driven `async_refresh` calls — if an HA state
+change fires within EVENT_REFRESH_MIN_INTERVAL seconds of the
+previous one, skip it. The scheduled 30 s heartbeat will catch
+anything missed. Prevents storms when a power sensor updates every
+sub-second."""
+
+PER_DEVICE_HEARTBEAT_INTERVAL = 300.0
+"""Even when nothing crossed a value threshold, send at least one
+PATCH per device every 5 min so the backend can tell the device is
+still alive and so a Home Assistant restart-induced gap doesn't
+look like the device disappeared."""
+
+# Per-field "changed enough to be worth a row" thresholds. When NO
+# field crosses these AND the per-device heartbeat hasn't expired,
+# the entire PATCH is skipped. Categorical fields (vehicle_status,
+# charge_mode, is_on) trigger on ANY change.
+SEND_THRESHOLDS: dict[str, float] = {
+    "power_kw": 0.05,         # 50 W
+    "soc_percent": 1.0,       # 1 percentage point
+    "current_temp_c": 0.3,    # 0.3 °C
+    "target_temp_c": 0.3,
+}
+
 WS_RECONNECT_INITIAL = 1
 WS_RECONNECT_MAX = 60
 
@@ -106,12 +137,25 @@ class CrowdergyCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
         # Read once at coordinator init — never changes during a HA
         # session (a manifest bump means HACS reloads the integration).
         self._connector_version: str = _load_manifest_version()
-        # Last seen lifetime-kWh per device — used to compute Δ-per-
-        # tick on the next read. Starts empty after a coordinator
-        # restart so the very first sample doesn't emit a phantom
-        # delta against zero (which would have credited the device's
-        # entire lifetime kWh to "today" on every HA restart).
+        # Last SENT (not just last read) lifetime-kWh per device.
+        # Used to compute Δ-since-last-PATCH on the next send. We
+        # track "last sent" rather than "last read" so the per-tick
+        # threshold-skip doesn't drop kWh — if we skip 3 ticks in a
+        # row because power didn't move enough, the eventual PATCH
+        # still carries the accumulated kWh since the last actual
+        # send. Starts empty after a coordinator restart so the very
+        # first sample doesn't emit a phantom delta against zero.
         self._prev_energy_kwh: dict[str, float] = {}
+        # Per-device send bookkeeping driving SEND_THRESHOLDS — the
+        # most-recent payload we actually pushed to the backend, plus
+        # a wall-clock timestamp of that push. `_should_send()` uses
+        # both to decide whether the current tick's payload differs
+        # enough to be worth a row.
+        self._last_sent_payload: dict[str, dict[str, Any]] = {}
+        self._last_send_at: dict[str, float] = {}
+        # Throttle bookkeeping for the event-driven `async_refresh`
+        # path. The scheduled 30 s tick is unaffected.
+        self._last_event_refresh_at: float = 0.0
         self._build_entity_map()
 
     def _build_entity_map(self) -> None:
@@ -145,10 +189,16 @@ class CrowdergyCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
 
         @callback
         def _on_state_change(event: Event) -> None:
-            # async_refresh bypasses DataUpdateCoordinator's built-in
-            # debouncer so a user-driven HA change propagates immediately
-            # (sub-second) to the backend / iOS, instead of waiting up to
-            # the next 30 s heartbeat.
+            # Event-driven refresh with a 5 s min-interval throttle.
+            # Fast-changing sensors (power can fire sub-second) would
+            # otherwise trigger a refresh per event and storm the
+            # backend with rows. The scheduled 30 s heartbeat picks up
+            # anything missed; threshold check inside the PATCH loop
+            # ensures unchanged-enough payloads are skipped regardless.
+            now = self.hass.loop.time()
+            if now - self._last_event_refresh_at < EVENT_REFRESH_MIN_INTERVAL:
+                return
+            self._last_event_refresh_at = now
             self.hass.async_create_task(self.async_refresh())
 
         self._unsub_listeners.append(
@@ -235,6 +285,42 @@ class CrowdergyCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
             return float(state.state)
         except (ValueError, TypeError):
             return state.state
+
+    def _should_send(self, device_id: str, payload: dict[str, Any]) -> bool:
+        """Decide whether the just-computed payload differs enough
+        from the last sent one to be worth a new telemetry row.
+
+        Returns True if any of:
+          * No previous payload exists yet for this device (first send).
+          * `PER_DEVICE_HEARTBEAT_INTERVAL` has elapsed since the last
+            send (keeps the backend's freshness signal alive even when
+            nothing's changing).
+          * A numeric field crossed its SEND_THRESHOLDS magnitude.
+          * A categorical field (vehicle_status / charge_mode / is_on)
+            differs at all from the last sent value.
+          * `energy_kwh_delta` carries a positive value (any energy
+            since last send is worth recording).
+        """
+        prev = self._last_sent_payload.get(device_id)
+        if prev is None:
+            return True
+        last = self._last_send_at.get(device_id, 0.0)
+        if time.time() - last >= PER_DEVICE_HEARTBEAT_INTERVAL:
+            return True
+        if (payload.get("energy_kwh_delta") or 0.0) > 0:
+            return True
+        for key, threshold in SEND_THRESHOLDS.items():
+            cur, old = payload.get(key), prev.get(key)
+            if cur is None and old is None:
+                continue
+            if cur is None or old is None:
+                return True   # presence flipped
+            if abs(cur - old) >= threshold:
+                return True
+        for key in ("vehicle_status", "charge_mode", "is_on"):
+            if payload.get(key) != prev.get(key):
+                return True
+        return False
 
     def _read_energy_kwh(self, entity_id: str) -> float | None:
         """Read a `total_increasing` HA energy sensor as kWh.
@@ -424,18 +510,19 @@ class CrowdergyCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
             # the raw cumulative for debugging, but the iOS chart
             # reads from the Δ-per-tick computed below.
             energy_kwh_total = self._read_energy_kwh(entity_energy_total)
-            # Δ-per-tick in kWh. None for the first read after a
-            # coordinator restart (no prev to subtract from), or for
-            # backward jumps (sensor reset / replacement) so the
-            # backend never lands a negative contribution. After this
-            # tick the new value becomes the next iteration's prev.
+            # Δ since last actually-SENT tick (not last read). Skipped
+            # ticks (no field crossed its threshold) accumulate into
+            # the next send so kWh is never lost. None for the first
+            # read after a coordinator restart, or for backward jumps
+            # (sensor reset / replacement) so the backend never lands
+            # a negative contribution. `_prev_energy_kwh` is updated
+            # ONLY after a successful PATCH below.
             energy_kwh_delta: float | None = None
             if energy_kwh_total is not None:
                 prev = self._prev_energy_kwh.get(device_id)
                 if prev is not None:
                     delta = energy_kwh_total - prev
                     energy_kwh_delta = delta if delta > 0 else 0.0
-                self._prev_energy_kwh[device_id] = energy_kwh_total
             # Derive is_on from the live HA state of entity_control so a
             # user-driven HA-side toggle propagates up to the backend
             # (and from there to iOS via SSE). Returns None when we
@@ -469,7 +556,7 @@ class CrowdergyCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
             if is_on is not None:
                 payload["is_on"] = is_on
 
-            if device_id:
+            if device_id and self._should_send(device_id, payload):
                 try:
                     response = await self._authenticated_request(
                         "PATCH",
@@ -477,6 +564,16 @@ class CrowdergyCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
                         json=payload,
                     )
                     response.raise_for_status()
+                    # Bookkeeping only on successful send so the next
+                    # tick's threshold check + kWh-Δ both reflect the
+                    # state the backend actually has. If the PATCH
+                    # raised, we'll retry on the next tick with a
+                    # threshold computed against the previous good
+                    # send, not against this (lost) attempt.
+                    self._last_sent_payload[device_id] = payload
+                    self._last_send_at[device_id] = time.time()
+                    if energy_kwh_total is not None:
+                        self._prev_energy_kwh[device_id] = energy_kwh_total
                 except httpx.HTTPStatusError as err:
                     _LOGGER.error(
                         "Backend returned %s for device %s: %s",
