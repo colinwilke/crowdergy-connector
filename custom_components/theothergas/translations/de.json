@@ -101,13 +101,11 @@
         "submit": "Weiter",
         "data": {
           "value_on": "Wert für: Gerät an",
-          "value_off": "Wert für: Gerät aus",
-          "entity_control_hold": "Hold-Modus (Wert nachschreiben?)"
+          "value_off": "Wert für: Gerät aus"
         },
         "data_description": {
           "value_on": "Was schreiben wir wenn Crowdergy Gerät an sagt? Beispiele:\n• Wallbox-Strom-Limit (Number): 16 (= 16 A laden)\n• Wallbox-Lock-Switch: off (= Lock aufheben)\n• SG-Ready-Select: Erhöht oder dein Hersteller-Äquivalent\n• Wärmepumpen-Boost-Switch: on\n• Allgemeiner Switch: on",
-          "value_off": "Was schreiben wir wenn Crowdergy Gerät aus sagt? Wichtig: meist NICHT der Standard-/Normal-Modus, sondern aktiv nicht laufen. Beispiele:\n• Wallbox-Strom-Limit (Number): 0 (= Pause)\n• Wallbox-Lock-Switch: on (= Lock setzen)\n• SG-Ready-Select: Sperre oder dein Hersteller-Äquivalent\n• Allgemeiner Switch: off",
-          "entity_control_hold": "Manche Geräte (Kostal-Wechselrichter, einige OCPP-Wallboxen) setzen geschriebene Werte nach ein paar Sekunden auf Werks-Default zurück. Damit Crowdergize trotzdem hält:\n• Auto (empfohlen) — schreibt einmal, prüft nach 10 s ob es noch passt; falls nicht, schreibt im 30-s-Takt nach bis es stabil ist.\n• Immer — schreibt durchgehend alle 30 s neu, auch wenn der Wert stabil ist. Robust, mehr HA-Verkehr.\n• Nie — schreibt nur einmal. Für Geräte die sicher halten und wo Modbus-Polling minimiert werden soll."
+          "value_off": "Was schreiben wir wenn Crowdergy Gerät aus sagt? Wichtig: meist NICHT der Standard-/Normal-Modus, sondern aktiv nicht laufen. Beispiele:\n• Wallbox-Strom-Limit (Number): 0 (= Pause)\n• Wallbox-Lock-Switch: on (= Lock setzen)\n• SG-Ready-Select: Sperre oder dein Hersteller-Äquivalent\n• Allgemeiner Switch: off"
         }
       },
       "add_more": {
@@ -220,13 +218,11 @@
         "submit": "OK",
         "data": {
           "value_on": "Wert für: Gerät an",
-          "value_off": "Wert für: Gerät aus",
-          "entity_control_hold": "Hold-Modus"
+          "value_off": "Wert für: Gerät aus"
         },
         "data_description": {
           "value_on": "Beispiele: Wallbox-Strom-Limit (Number) 16 (= 16 A laden); SG-Ready-Select Erhöht; Allgemein on.",
-          "value_off": "Aktiv nicht laufen — meist nicht Normal, sondern z. B.: Wallbox-Strom-Limit 0 (= Pause); SG-Ready-Select Sperre; Lock-Switch on (= sperren); Allgemein off.",
-          "entity_control_hold": "Auto (empfohlen): einmal schreiben, nach 10 s prüfen, bei Bedarf alle 30 s nachschreiben bis stabil. Immer: alle 30 s neu schreiben (Kostal, manche OCPP-Wallboxen). Nie: nur einmal schreiben."
+          "value_off": "Aktiv nicht laufen — meist nicht Normal, sondern z. B.: Wallbox-Strom-Limit 0 (= Pause); SG-Ready-Select Sperre; Lock-Switch on (= sperren); Allgemein off."
         }
       },
       "edit_device": {
@@ -305,13 +301,11 @@
         "submit": "OK",
         "data": {
           "value_on": "Wert für: Gerät an",
-          "value_off": "Wert für: Gerät aus",
-          "entity_control_hold": "Hold-Modus"
+          "value_off": "Wert für: Gerät aus"
         },
         "data_description": {
           "value_on": "Beispiele: Number 16, Select Erhöht, Switch on.",
-          "value_off": "Aktiv nicht laufen — Number 0, Select Sperre, Lock-Switch on, Switch off.",
-          "entity_control_hold": "Auto: einmal schreiben, prüfen, bei Bedarf nachschreiben (empfohlen). Immer: alle 30 s neu schreiben (Kostal/OCPP). Nie: nur einmal."
+          "value_off": "Aktiv nicht laufen — Number 0, Select Sperre, Lock-Switch on, Switch off."
         }
       },
       "remove_device": {
@@ -325,15 +319,6 @@
     },
     "error": {
       "cannot_connect": "Verbindung zum Crowdergy-Server fehlgeschlagen."
-    }
-  },
-  "selector": {
-    "entity_control_hold": {
-      "options": {
-        "auto": "Auto — empfohlen",
-        "always": "Immer (alle 30 s)",
-        "never": "Nie"
-      }
     }
   }
 }

@@ -38,9 +38,7 @@ from .const import (
     CONF_VALUE_ON,
     DOMAIN,
     ENTITY_CONTROL_HOLD_ALWAYS,
-    ENTITY_CONTROL_HOLD_AUTO,
     ENTITY_CONTROL_HOLD_NEVER,
-    HOLD_AUTO_STABLE_HITS,
     HOLD_INITIAL_DELAY,
     HOLD_POLL_INTERVAL,
 )
@@ -1024,37 +1022,43 @@ class CrowdergyCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
         )
         if dev is None:
             return
-        # Hold mode interpretation (v1.20.0+):
-        # * `never`  → no hold loop (single write, hope the device sticks).
-        # * `auto`   → treated as `always`. Field-test on 2026-05-22
-        #              showed hysteresis-laden devices need the periodic
-        #              rewrite (warmwasser hysteresis 7.5 °C → MPC writes
-        #              "60", actual temp 53 ⇒ doesn't trigger; without
-        #              the rewrite the next 15-min MPC tick is the only
-        #              chance to re-hit). 30 s rewrite cadence is harmless
-        #              on devices that hold fine and rescues those that
-        #              don't. Backwards-compatible: old configs that
-        #              picked `auto` get the new behaviour for free.
-        # * `always` → keeps doing what it always did.
-        mode = (
-            dev.get(CONF_ENTITY_CONTROL_HOLD, ENTITY_CONTROL_HOLD_ALWAYS)
-            or ENTITY_CONTROL_HOLD_ALWAYS
-        )
+        # Hold mode: only `never` (no loop) vs everything-else (= the
+        # periodic rewrite). The legacy `auto` value left over in old
+        # config entries collapses to the rewrite path too — field-
+        # testing on 2026-05-22 showed hysteresis-laden devices
+        # (warmwasser, Kostal Modbus regs) need the periodic write to
+        # ever take effect, and the rewrite is harmless on devices
+        # that hold fine on their own.
+        mode = dev.get(CONF_ENTITY_CONTROL_HOLD) or ENTITY_CONTROL_HOLD_ALWAYS
         if mode == ENTITY_CONTROL_HOLD_NEVER:
             return
-        # Collapse `auto` into `always` — no more "release after N
-        # stable checks" path. See block comment above.
-        if mode == ENTITY_CONTROL_HOLD_AUTO:
-            mode = ENTITY_CONTROL_HOLD_ALWAYS
 
         self._hold_tasks[device_id] = asyncio.create_task(
-            self._hold_loop(device_id, entity_id, raw_value, domain, on, mode)
+            self._hold_loop(device_id, entity_id, raw_value, domain, on)
         )
 
     def _cancel_hold(self, device_id: str) -> None:
         task = self._hold_tasks.pop(device_id, None)
         if task is not None and not task.done():
             task.cancel()
+
+    def forget_device(self, device_id: str) -> None:
+        """Prune every per-device bookkeeping dict for a removed
+        device. Called from `async_remove_config_entry_device` so
+        stale keys don't accumulate across the lifetime of one
+        coordinator instance (HA doesn't force a reload on device
+        removal). Idempotent — missing keys are silently ignored."""
+        self._cancel_hold(device_id)
+        for d in (
+            self._active_state,
+            self._on_state,
+            self._prev_energy_kwh,
+            self._prev_energy_kwh_discharged,
+            self._last_sent_payload,
+            self._last_send_at,
+            self._pre_crowdergize_charge_mode,
+        ):
+            d.pop(device_id, None)
 
     async def _hold_loop(
         self,
@@ -1063,59 +1067,39 @@ class CrowdergyCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
         raw_value: Any,
         domain: str,
         on: bool,
-        mode: str,
     ) -> None:
-        """Keep entity_control sticking to its commanded value.
+        """Keep entity_control sticking to its commanded value: re-
+        write every HOLD_POLL_INTERVAL seconds for as long as
+        Crowdergize is active for this device. The loop also reads
+        the current HA state and surfaces an INFO log whenever the
+        entity drifted from the commanded value between rewrites —
+        useful for debugging hysteresis-prone devices.
 
-        - `always`: re-write every HOLD_POLL_INTERVAL seconds.
-        - `auto`:   wait HOLD_INITIAL_DELAY, then re-read the entity. If
-          it has reverted, write again. After HOLD_AUTO_STABLE_HITS
-          consecutive non-reverted checks, stop — the device is
-          holding fine on its own.
-
-        Both modes bail out if Crowdergize gets switched off (the
-        `_cancel_hold` path covers that) or on coordinator shutdown.
+        Bails out if Crowdergize gets switched off (the `_cancel_hold`
+        path covers that) or on coordinator shutdown.
         """
         try:
-            # The initial delay matters most in `auto` (gives the
-            # device time to apply the first write before we measure).
-            # In `always` we wait the same so the first re-write isn't
-            # a duplicate of the apply we just did.
+            # Initial delay gives the apply call's effect time to
+            # propagate before the first rewrite (avoids a duplicate
+            # service call back-to-back).
             await asyncio.sleep(HOLD_INITIAL_DELAY)
-            stable_hits = 0
             while True:
                 if not self._active_state.get(device_id, False):
                     return
                 expected = self._expected_state_value(raw_value, on, domain)
                 actual = self._read_current_state(entity_id)
-                reverted = (
+                if (
                     actual is not None
                     and expected is not None
                     and actual != expected
-                )
-
-                if mode == ENTITY_CONTROL_HOLD_ALWAYS or reverted:
-                    if reverted:
-                        _LOGGER.info(
-                            "hold: %s reverted (%r → %r), re-writing",
-                            entity_id, expected, actual,
-                        )
-                    await self._reapply_entity_control(
-                        entity_id, domain, raw_value, on
+                ):
+                    _LOGGER.info(
+                        "hold: %s reverted (%r → %r), re-writing",
+                        entity_id, expected, actual,
                     )
-                    stable_hits = 0
-                else:
-                    stable_hits += 1
-                    if (
-                        mode == ENTITY_CONTROL_HOLD_AUTO
-                        and stable_hits >= HOLD_AUTO_STABLE_HITS
-                    ):
-                        _LOGGER.debug(
-                            "hold: %s stable for %d checks — releasing",
-                            entity_id, stable_hits,
-                        )
-                        return
-
+                await self._reapply_entity_control(
+                    entity_id, domain, raw_value, on
+                )
                 await asyncio.sleep(HOLD_POLL_INTERVAL)
         except asyncio.CancelledError:
             raise

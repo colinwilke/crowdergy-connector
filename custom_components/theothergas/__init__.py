@@ -99,4 +99,14 @@ async def async_remove_config_entry_device(
     new_data = {**config_entry.data, CONF_DEVICES: devices}
     hass.config_entries.async_update_entry(config_entry, data=new_data)
 
+    # Prune the coordinator's per-device bookkeeping dicts so a
+    # long-lived session doesn't accumulate stale keys after each
+    # device deletion. Coordinator stays running; reload would also
+    # reset them but HA doesn't force one here.
+    coordinator: CrowdergyCoordinator | None = (
+        hass.data.get(DOMAIN, {}).get(config_entry.entry_id)
+    )
+    if coordinator is not None:
+        coordinator.forget_device(crowdergy_device_id)
+
     return True
