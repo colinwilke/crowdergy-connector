@@ -11,7 +11,8 @@
         "data_description": {
           "email": "E-Mail-Adresse deines Crowdergy-Kontos.",
           "password": "Passwort deines Crowdergy-Kontos."
-        }
+        },
+        "submit": "Weiter"
       },
       "location": {
         "title": "Standort",
@@ -25,7 +26,8 @@
           "district": "Stadtteil oder Viertel (z. B. Schwabing).",
           "city": "Stadt (z. B. München).",
           "region": "Region (z. B. Bayern)."
-        }
+        },
+        "submit": "Weiter"
       },
       "device_type": {
         "title": "Gerät #{device_number} — Typ & Name",
@@ -37,7 +39,8 @@
         "data_description": {
           "device_type": "Bestimmt, welche Entitäten im nächsten Schritt abgefragt werden.",
           "device_name": "Anzeigename in der Crowdergy App und in Home Assistant."
-        }
+        },
+        "submit": "Weiter"
       },
       "device_entities": {
         "title": "{device_name} ({device_type}) — Entitäten verknüpfen",
@@ -81,7 +84,8 @@
               "entity_charge_mode": "Select-Entität, die die App-Lademodi (z. B. „Power Mode“ / „Lock Mode“ / „Solar Pure Mode“) als Optionen anbietet."
             }
           }
-        }
+        },
+        "submit": "Weiter"
       },
       "device_values": {
         "title": "{device_name} ({device_type}) — Steuer-Werte",
@@ -95,7 +99,8 @@
           "value_on": "z. B. „Power Mode“, 16, „on“, „heat“.",
           "value_off": "z. B. „Lock Mode“, 0, „off“.",
           "entity_control_hold": "auto = empfohlen; prüft nach 10 s ob der Wert noch steht und schreibt bei Bedarf nach. always = immer alle 30 s neu schreiben (für Kostal-Wechselrichter oder OCPP-Wallboxen, die Werte zurücksetzen). never = einmal schreiben, fertig."
-        }
+        },
+        "submit": "Weiter"
       },
       "add_more": {
         "title": "Weiteres Gerät hinzufügen?",
@@ -137,7 +142,8 @@
         "data_description": {
           "device_type": "Bestimmt, welche Entitäten im nächsten Schritt abgefragt werden.",
           "device_name": "Anzeigename in der Crowdergy App und in Home Assistant."
-        }
+        },
+        "submit": "Weiter"
       },
       "add_device_entities": {
         "title": "{device_name} ({device_type}) — Entitäten verknüpfen",
@@ -181,7 +187,8 @@
               "entity_charge_mode": "Select-Entität, die die App-Lademodi (z. B. „Power Mode“ / „Lock Mode“ / „Solar Pure Mode“) als Optionen anbietet."
             }
           }
-        }
+        },
+        "submit": "Weiter"
       },
       "add_device_values": {
         "title": "{device_name} ({device_type}) — Steuer-Werte",
@@ -195,14 +202,16 @@
           "value_on": "z. B. „Power Mode“, 16, „on“, „heat“.",
           "value_off": "z. B. „Lock Mode“, 0, „off“.",
           "entity_control_hold": "auto = empfohlen; prüft nach 10 s ob der Wert noch steht und schreibt bei Bedarf nach. always = immer alle 30 s neu schreiben (für Kostal-Wechselrichter oder OCPP-Wallboxen, die Werte zurücksetzen). never = einmal schreiben, fertig."
-        }
+        },
+        "submit": "OK"
       },
       "edit_device": {
         "title": "Gerät bearbeiten",
         "description": "Wähle das Gerät, das geändert werden soll.",
         "data": {
           "device_to_edit": "Gerät"
-        }
+        },
+        "submit": "Weiter"
       },
       "edit_device_type": {
         "title": "{device_name} bearbeiten — Typ & Name",
@@ -214,7 +223,8 @@
         "data_description": {
           "device_type": "Bestimmt, welche Entitäten im nächsten Schritt abgefragt werden.",
           "device_name": "Anzeigename in der Crowdergy App und in Home Assistant."
-        }
+        },
+        "submit": "Weiter"
       },
       "edit_device_entities": {
         "title": "{device_name} ({device_type}) — Entitäten verknüpfen",
@@ -258,7 +268,8 @@
               "entity_charge_mode": "Select-Entität, die die App-Lademodi (z. B. „Power Mode“ / „Lock Mode“ / „Solar Pure Mode“) als Optionen anbietet."
             }
           }
-        }
+        },
+        "submit": "Weiter"
       },
       "edit_device_values": {
         "title": "{device_name} ({device_type}) — Steuer-Werte",
@@ -272,13 +283,26 @@
           "value_on": "z. B. „Power Mode“, 16, „on“, „heat“.",
           "value_off": "z. B. „Lock Mode“, 0, „off“.",
           "entity_control_hold": "auto = empfohlen; prüft nach 10 s ob der Wert noch steht und schreibt bei Bedarf nach. always = immer alle 30 s neu schreiben (für Kostal-Wechselrichter oder OCPP-Wallboxen, die Werte zurücksetzen). never = einmal schreiben, fertig."
-        }
+        },
+        "submit": "OK"
       },
       "remove_device": {
         "title": "Gerät entfernen",
         "description": "Wähle das Gerät, das entfernt werden soll. Das Gerät wird sowohl in Crowdergy als auch in Home Assistant gelöscht.",
         "data": {
           "device_to_remove": "Gerät"
+        },
+        "submit": "OK"
+      },
+      "edit_outdoor_temp": {
+        "title": "Außentemperatur-Sensor",
+        "description": "Optional: ein HA-Sensor mit der aktuellen Außentemperatur in °C. Wird im Kopfbereich der Crowdergy-App angezeigt. Leer lassen, damit Crowdergy stattdessen die Außentemperatur automatisch über Open-Meteo (Wetterdaten anhand deines Stadtteils) holt.",
+        "submit": "OK",
+        "data": {
+          "entity_outdoor_temp_c": "Außentemperatur-Sensor (optional)"
+        },
+        "data_description": {
+          "entity_outdoor_temp_c": "Sensor-Entität mit der aktuellen Außentemperatur in °C."
         }
       }
     },

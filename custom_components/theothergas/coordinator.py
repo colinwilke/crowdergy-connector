@@ -60,14 +60,16 @@ previous one, skip it. The scheduled 30 s heartbeat will catch
 anything missed. Prevents storms when a power sensor updates every
 sub-second."""
 
-PER_DEVICE_HEARTBEAT_INTERVAL = 60.0
+PER_DEVICE_HEARTBEAT_INTERVAL = 30.0
 """Even when nothing crossed a value threshold, send at least one
-PATCH per device every 60 s so the backend / iOS can tell the
-device is still alive. iOS marks the connector "connecting" after
-35 s and "offline" after 70 s of silence; anything more than ~60 s
-would flicker the indicator. Quiet devices therefore cost 1 row /
-60 s = 1440 rows/device/day, still ≥ 15× reduction vs the old
-event-storm before v1.18."""
+PATCH per device every 30 s — matches the coordinator's scheduled
+tick so EVERY tick a quiet device sends one row. Why so frequent:
+iOS marks "connecting" after 35 s and "offline" after 70 s of
+global silence. A 60 s heartbeat looked fine on average but flickered
+to offline when devices synced into the same tick window (no PATCH
+between them for > 70 s). 30 s leaves no room for that race.
+Quiet devices therefore cost 1 row / 30 s = 2880 rows/device/day,
+still ≥ 10× reduction vs the pre-v1.18 event-storm."""
 
 # Per-field "changed enough to be worth a row" thresholds. When NO
 # field crosses these AND the per-device heartbeat hasn't expired,
