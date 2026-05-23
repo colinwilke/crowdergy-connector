@@ -918,9 +918,11 @@ class CrowdergyCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
         """Write the user-configured entity_control to value_on / value_off.
 
         Looks up the device's `entity_control` + `value_on` / `value_off`
-        from the config entry and dispatches the right HA service based
-        on the entity's domain. No-ops cleanly if anything's missing so
-        a partial / new-style config can't crash the coordinator.
+        from the config entry, dispatches the right HA service via
+        `_write_entity_control`, and kicks off the hold loop that
+        guards against auto-revert. No-ops cleanly if anything's
+        missing so a partial / new-style config can't crash the
+        coordinator.
         """
         dev = next(
             (d for d in self.devices if d.get(CONF_DEVICE_ID) == device_id),
@@ -938,6 +940,35 @@ class CrowdergyCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
         domain = entity_id.split(".", 1)[0]
         raw_value = dev.get(CONF_VALUE_ON if on else CONF_VALUE_OFF, "")
 
+        await self._write_entity_control(
+            entity_id, domain, raw_value, on, verbose=True,
+        )
+
+        # After the initial write, kick off (or replace) the hold loop
+        # that handles devices reverting their entity_control value
+        # back to a default — Kostal-style auto-reset Modbus registers,
+        # some OCPP-wallbox transaction timeouts, etc.
+        self._start_hold(device_id, entity_id, raw_value, domain, on)
+
+    async def _write_entity_control(
+        self,
+        entity_id: str,
+        domain: str,
+        raw_value: Any,
+        on: bool,
+        *,
+        verbose: bool,
+    ) -> None:
+        """Single domain-dispatched write to a HA entity_control entity.
+        Shared by the apply-on-transition path (`_apply_device_state`,
+        `verbose=True`) and the hold-loop rewrite (`_hold_loop`,
+        `verbose=False`).
+
+        `verbose=True` surfaces WARNING-level breadcrumbs for missing
+        config / unsupported domains so the user notices a misconfig
+        on first toggle. The hold path stays quiet — the same issue
+        would otherwise log every HOLD_POLL_INTERVAL.
+        """
         try:
             if domain in ("switch", "input_boolean", "light", "fan"):
                 # Bool-style entities: on/off is implicit (turn_on /
@@ -947,7 +978,9 @@ class CrowdergyCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
                 if raw_value in ("", None):
                     service = "turn_on" if on else "turn_off"
                 else:
-                    want_on = str(raw_value).lower() in ("on", "true", "1", "yes", "an")
+                    want_on = str(raw_value).lower() in (
+                        "on", "true", "1", "yes", "an",
+                    )
                     service = "turn_on" if want_on else "turn_off"
                 await self.hass.services.async_call(
                     domain, service, {"entity_id": entity_id}, blocking=True,
@@ -955,10 +988,11 @@ class CrowdergyCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
                 return
             # All non-binary domains below need an explicit value.
             if raw_value in ("", None):
-                _LOGGER.warning(
-                    "Device %s has no value_%s configured — skipping HA write",
-                    device_id, "on" if on else "off",
-                )
+                if verbose:
+                    _LOGGER.warning(
+                        "%s has no value_%s configured — skipping HA write",
+                        entity_id, "on" if on else "off",
+                    )
                 return
             if domain in ("number", "input_number"):
                 await self.hass.services.async_call(
@@ -978,24 +1012,22 @@ class CrowdergyCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
                     {"entity_id": entity_id, "hvac_mode": str(raw_value)},
                     blocking=True,
                 )
-            else:
+            elif verbose:
                 _LOGGER.warning(
-                    "Unsupported entity_control domain %s for device %s",
-                    domain, device_id,
+                    "Unsupported entity_control domain %s for %s",
+                    domain, entity_id,
                 )
         except (ValueError, TypeError) as err:
-            _LOGGER.warning(
-                "Bad value_%s=%r for %s (%s) — %s",
-                "on" if on else "off", raw_value, entity_id, domain, err,
-            )
+            if verbose:
+                _LOGGER.warning(
+                    "Bad value_%s=%r for %s (%s) — %s",
+                    "on" if on else "off", raw_value, entity_id, domain, err,
+                )
         except Exception as err:  # noqa: BLE001
-            _LOGGER.exception("entity_control write failed: %s", err)
-
-        # After the initial write, kick off (or replace) the hold loop
-        # that handles devices reverting their entity_control value
-        # back to a default — Kostal-style auto-reset Modbus registers,
-        # some OCPP-wallbox transaction timeouts, etc.
-        self._start_hold(device_id, entity_id, raw_value, domain, on)
+            if verbose:
+                _LOGGER.exception("entity_control write failed: %s", err)
+            else:
+                _LOGGER.warning("hold re-apply failed for %s: %s", entity_id, err)
 
     # ── entity_control hold loop ────────────────────────────────────────
 
@@ -1097,8 +1129,8 @@ class CrowdergyCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
                         "hold: %s reverted (%r → %r), re-writing",
                         entity_id, expected, actual,
                     )
-                await self._reapply_entity_control(
-                    entity_id, domain, raw_value, on
+                await self._write_entity_control(
+                    entity_id, domain, raw_value, on, verbose=False,
                 )
                 await asyncio.sleep(HOLD_POLL_INTERVAL)
         except asyncio.CancelledError:
@@ -1131,43 +1163,3 @@ class CrowdergyCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
             return None
         return state.state
 
-    async def _reapply_entity_control(
-        self, entity_id: str, domain: str, raw_value: Any, on: bool
-    ) -> None:
-        """Mini-version of `_apply_device_state` for the hold loop — same
-        domain dispatch, no logging noise for the success path."""
-        try:
-            if domain in ("switch", "input_boolean", "light", "fan"):
-                if raw_value in ("", None):
-                    service = "turn_on" if on else "turn_off"
-                else:
-                    want_on = str(raw_value).lower() in (
-                        "on", "true", "1", "yes", "an",
-                    )
-                    service = "turn_on" if want_on else "turn_off"
-                await self.hass.services.async_call(
-                    domain, service, {"entity_id": entity_id}, blocking=True,
-                )
-                return
-            if raw_value in ("", None):
-                return
-            if domain in ("number", "input_number"):
-                await self.hass.services.async_call(
-                    domain, "set_value",
-                    {"entity_id": entity_id, "value": float(raw_value)},
-                    blocking=True,
-                )
-            elif domain in ("select", "input_select"):
-                await self.hass.services.async_call(
-                    domain, "select_option",
-                    {"entity_id": entity_id, "option": str(raw_value)},
-                    blocking=True,
-                )
-            elif domain == "climate":
-                await self.hass.services.async_call(
-                    domain, "set_hvac_mode",
-                    {"entity_id": entity_id, "hvac_mode": str(raw_value)},
-                    blocking=True,
-                )
-        except Exception as err:  # noqa: BLE001
-            _LOGGER.warning("hold re-apply failed for %s: %s", entity_id, err)
