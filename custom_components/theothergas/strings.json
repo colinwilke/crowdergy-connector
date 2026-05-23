@@ -2,312 +2,326 @@
   "config": {
     "step": {
       "user": {
-        "title": "Mit Crowdergy verbinden",
-        "description": "Melde dich mit deinem Crowdergy-Konto an. Erstelle zuerst ein Konto in der Crowdergy App.",
+        "title": "Connect to Crowdergy",
+        "description": "Sign in with your Crowdergy account. Create one in the Crowdergy app first.",
         "data": {
-          "email": "E-Mail",
-          "password": "Passwort"
+          "email": "Email",
+          "password": "Password"
         },
         "data_description": {
-          "email": "E-Mail-Adresse deines Crowdergy-Kontos.",
-          "password": "Passwort deines Crowdergy-Kontos."
+          "email": "Email address of your Crowdergy account.",
+          "password": "Password of your Crowdergy account."
         },
-        "submit": "Weiter"
+        "submit": "Next"
       },
       "location": {
-        "title": "Standort",
-        "description": "Gib den Standort deiner Geräte an. Wird für die Aggregation verwendet — vorausgefüllt aus deinen HA-Koordinaten.",
+        "title": "Location",
+        "description": "Tell us where your devices live. Used for aggregation — pre-filled from your HA coordinates.",
         "data": {
-          "district": "Stadtteil",
-          "city": "Stadt",
-          "region": "Region"
+          "district": "District",
+          "city": "City",
+          "region": "Region",
+          "entity_outdoor_temp_c": "Outdoor temperature sensor (optional)"
         },
         "data_description": {
-          "district": "Stadtteil oder Viertel (z. B. Schwabing).",
-          "city": "Stadt (z. B. München).",
-          "region": "Region (z. B. Bayern)."
+          "district": "District or neighbourhood (e.g. Schwabing).",
+          "city": "City (e.g. Munich).",
+          "region": "Region (e.g. Bavaria).",
+          "entity_outdoor_temp_c": "Sensor with the current outdoor temperature in °C — shown in the app header. Leave empty and Crowdergy fetches the value automatically from Open-Meteo (weather data for your district)."
         },
-        "submit": "Weiter"
+        "submit": "Next"
       },
       "device_type": {
-        "title": "Gerät #{device_number} — Typ & Name",
-        "description": "Wähle Gerätetyp und Namen. Im nächsten Schritt verknüpfst du die zugehörigen Home-Assistant-Entitäten.",
+        "title": "Device #{device_number} — type & name",
+        "description": "Pick the device type and a name. In the next step you'll link the related Home Assistant entities.",
         "data": {
-          "device_type": "Gerätetyp",
+          "device_type": "Device type",
           "device_name": "Name"
         },
         "data_description": {
-          "device_type": "Bestimmt, welche Entitäten im nächsten Schritt abgefragt werden.",
-          "device_name": "Anzeigename in der Crowdergy App und in Home Assistant."
+          "device_type": "Determines which entities are requested in the next step.",
+          "device_name": "Display name in the Crowdergy app and in Home Assistant."
         },
-        "submit": "Weiter"
+        "submit": "Next"
       },
       "device_entities": {
-        "title": "{device_name} ({device_type}) — Entitäten verknüpfen",
-        "description": "Verknüpfe die für diesen Gerätetyp relevanten Home-Assistant-Entitäten. Alle Felder sind optional, fehlende Werte werden ignoriert.",
+        "title": "{device_name} ({device_type}) — link entities",
+        "description": "Link the Home Assistant entities relevant for this device type. All fields are optional; missing values are ignored.",
         "data": {
-          "entity_current_power_kw": "Entität für aktuelle Leistung des Geräts",
-          "read_section": "Leistungsdaten (nur lesend)",
-          "control_section": "Steuerung (Crowdergize)"
+          "entity_current_power_kw": "Current power entity",
+          "read_section": "Power data (read-only)",
+          "control_section": "Control (Crowdergize)"
         },
         "data_description": {
-          "entity_current_power_kw": "Sensor, der die aktuelle Leistung in W oder kW liefert.",
-          "read_section": "Diese Entitäten werden von Crowdergy ausschließlich ausgelesen.",
-          "control_section": "Crowdergy steuert das Gerät, indem es die folgende Entität auf einen der beiden Werte schreibt — „Gerät an“ → value_on, „Gerät aus“ → value_off."
+          "entity_current_power_kw": "Sensor providing current power in W or kW.",
+          "read_section": "These entities are only read by Crowdergy.",
+          "control_section": "Crowdergy controls the device by writing one of two values to the entity below — \"device on\" → value_on, \"device off\" → value_off."
         },
         "sections": {
           "read_section": {
-            "name": "Leistungsdaten (nur lesend)",
-            "description": "Diese Entitäten werden von Crowdergy ausschließlich ausgelesen.",
+            "name": "Power data (read-only)",
+            "description": "These entities are only read by Crowdergy.",
             "data": {
-              "entity_current_power_kw": "Entität für aktuelle Leistung des Geräts",
-              "entity_soc_percent": "Entität für aktuellen Ladezustand",
-              "entity_vehicle_status": "Entität für Fahrzeugstatus",
-              "entity_energy_total": "Entität für Gesamtenergie (kWh, fortlaufend)",
-              "entity_energy_discharged_total": "Entität für entladene Gesamtenergie (kWh, fortlaufend) — nur Batterie"
+              "entity_current_power_kw": "Current power entity",
+              "entity_soc_percent": "State-of-charge entity",
+              "entity_vehicle_status": "Vehicle status entity",
+              "entity_current_temp_c": "Current-temperature entity",
+              "entity_target_temp_c": "Target-temperature entity",
+              "entity_energy_total": "Total energy entity (kWh, cumulative)",
+              "entity_energy_discharged_total": "Discharged energy entity (kWh, cumulative) — battery only"
             },
             "data_description": {
-              "entity_current_power_kw": "Sensor, der die aktuelle Leistung in W oder kW liefert.",
-              "entity_soc_percent": "Sensor, der den aktuellen Ladezustand in Prozent liefert.",
-              "entity_vehicle_status": "Sensor- oder Binary-Sensor-Entität für den Fahrzeugstatus (z. B. „connected“, „charging“).",
-              "entity_energy_total": "Sensor mit state_class total_increasing in kWh (Lebensdauer-Zähler). Crowdergy bildet Tages-, Monats- und Jahresverbrauch via Delta-Berechnung. Optional — ohne diesen Sensor zeigt die App weiterhin nur kW.",
-              "entity_energy_discharged_total": "Nur Batterie: zweiter total_increasing-Zähler in kWh für die Entladeseite. Wenn Deine Batterie zwei getrennte Sensoren für geladene und entladene Energie liefert, trägst Du hier den Entlade-Zähler ein — dann zeigt die App Laden und Entladen separat im kWh-Chart. Optional."
+              "entity_current_power_kw": "Sensor providing current power in W or kW.",
+              "entity_soc_percent": "Sensor providing current state of charge in percent.",
+              "entity_vehicle_status": "Sensor or binary-sensor entity for vehicle status (e.g. \"connected\", \"charging\").",
+              "entity_current_temp_c": "Current temperature in °C — e.g. flow temperature of a heat pump or the inside temperature of a DHW tank. Shown next to the heat-pump tile in the app.",
+              "entity_target_temp_c": "Current target / setpoint temperature in °C. Optional — when empty the app only shows the current temperature. Crowdergy does NOT write this entity; you keep controlling the setpoint via your HA heating integration. Crowdergy reads the value to plan heating windows.",
+              "entity_energy_total": "Sensor with state_class total_increasing in kWh (lifetime counter). Crowdergy computes daily/monthly/yearly consumption via delta math. Optional — without this sensor the app keeps showing kW only.",
+              "entity_energy_discharged_total": "Battery only: a second total_increasing counter in kWh for the discharge side. If your battery exposes separate sensors for charged and discharged energy, enter the discharge counter here — the app will then show charging and discharging separately in the kWh chart. Optional."
             }
           },
           "control_section": {
-            "name": "Steuerung (Crowdergize)",
-            "description": "Welche HA-Entitäten darf Crowdergy steuern? Wallbox: Lademodus-Select für den App-Picker UND optional eine Steuer-Entität für die spätere Smart-An/Aus-Logik. Andere Typen: nur die Steuer-Entität + „an“/„aus“-Werte im nächsten Schritt.",
+            "name": "Control (Crowdergize)",
+            "description": "Which HA entities may Crowdergy control? Wallbox: a charge-mode select for the app picker AND optionally a control entity for later smart on/off logic. Other types: just the control entity + \"on\"/\"off\" values in the next step.",
             "data": {
-              "entity_control": "Steuer-Entität (Smart-An/Aus)",
-              "entity_charge_mode": "Lademodus-Entität (Wallbox)"
+              "entity_control": "Control entity (smart on/off)",
+              "entity_charge_mode": "Charge-mode entity (Wallbox)"
             },
             "data_description": {
-              "entity_control": "Beliebige schreibbare HA-Entität: Switch, Number, Select, Input-Helfer, Climate, Light, Fan. Wird von Crowdergy automatisch geschaltet, sobald Crowdergize an ist (Smart-Logik kommt später).",
-              "entity_charge_mode": "Select-Entität, die die App-Lademodi (z. B. „Power Mode“ / „Lock Mode“ / „Solar Pure Mode“) als Optionen anbietet."
+              "entity_control": "Any writable HA entity: switch, number, select, input helper, climate, light, fan. Toggled automatically by Crowdergy whenever Crowdergize is on (smart logic comes later).",
+              "entity_charge_mode": "Select entity offering the app's charge modes (e.g. \"Power Mode\" / \"Lock Mode\" / \"Solar Pure Mode\") as options."
             }
           }
         },
-        "submit": "Weiter"
+        "submit": "Next"
       },
       "device_values": {
-        "title": "{device_name} ({device_type}) — Steuer-Werte",
-        "description": "Welche Werte soll Crowdergy auf „{entity_control}“ schreiben, wenn das Gerät an oder aus geht? Bei Select-/Number-/Climate-Entities wird der Picker automatisch passend befüllt.",
+        "title": "{device_name} ({device_type}) — control values",
+        "description": "Which values should Crowdergy write to \"{entity_control}\" when the device turns on or off? For select/number/climate entities the picker is filled automatically.",
         "data": {
-          "value_on": "Wert für „Gerät an“",
-          "value_off": "Wert für „Gerät aus“"
+          "value_on": "Value for \"device on\"",
+          "value_off": "Value for \"device off\""
         },
         "data_description": {
-          "value_on": "z. B. „Power Mode“, 16, „on“, „heat“.",
-          "value_off": "z. B. „Lock Mode“, 0, „off“."
+          "value_on": "e.g. \"Power Mode\", 16, \"on\", \"heat\".",
+          "value_off": "e.g. \"Lock Mode\", 0, \"off\"."
         },
-        "submit": "Weiter"
+        "submit": "Next"
       },
       "add_more": {
-        "title": "Weiteres Gerät hinzufügen?",
-        "description": "Du kannst weitere Geräte hinzufügen oder die Einrichtung abschließen.",
+        "title": "Add another device?",
+        "description": "You can add more devices or finish setup.",
         "menu_options": {
-          "device_type": "Weiteres Gerät hinzufügen",
-          "finish": "Fertig — Einrichtung abschließen"
+          "device_type": "Add another device",
+          "finish": "Done — finish setup"
         }
       }
     },
     "error": {
-      "cannot_connect": "Verbindung zum Server fehlgeschlagen.",
-      "invalid_auth": "Login fehlgeschlagen. Bitte E-Mail und Passwort prüfen.",
-      "unknown": "Ein unerwarteter Fehler ist aufgetreten."
+      "cannot_connect": "Failed to connect to the server.",
+      "invalid_auth": "Login failed. Please check email and password.",
+      "unknown": "An unexpected error occurred."
     },
     "abort": {
-      "already_configured": "Dieses Konto ist bereits konfiguriert."
+      "already_configured": "This account is already configured."
     }
   },
   "options": {
     "step": {
       "init": {
-        "title": "Geräte verwalten",
-        "description": "Geräte hinzufügen, bearbeiten, entfernen oder die Einrichtung abschließen.",
+        "title": "Manage devices",
+        "description": "Add, edit or remove devices, or finish setup.",
         "menu_options": {
-          "add_device": "Gerät hinzufügen",
-          "edit_device": "Gerät bearbeiten",
-          "remove_device": "Gerät entfernen",
-          "done": "Fertig"
+          "add_device": "Add device",
+          "edit_device": "Edit device",
+          "remove_device": "Remove device",
+          "done": "Done"
         }
       },
       "add_device": {
-        "title": "Gerät hinzufügen — Typ & Name",
-        "description": "Wähle Gerätetyp und Namen. Im nächsten Schritt verknüpfst du die zugehörigen Home-Assistant-Entitäten.",
+        "title": "Add device — type & name",
+        "description": "Pick the device type and a name. In the next step you'll link the related Home Assistant entities.",
         "data": {
-          "device_type": "Gerätetyp",
+          "device_type": "Device type",
           "device_name": "Name"
         },
         "data_description": {
-          "device_type": "Bestimmt, welche Entitäten im nächsten Schritt abgefragt werden.",
-          "device_name": "Anzeigename in der Crowdergy App und in Home Assistant."
+          "device_type": "Determines which entities are requested in the next step.",
+          "device_name": "Display name in the Crowdergy app and in Home Assistant."
         },
-        "submit": "Weiter"
+        "submit": "Next"
       },
       "add_device_entities": {
-        "title": "{device_name} ({device_type}) — Entitäten verknüpfen",
-        "description": "Verknüpfe die für diesen Gerätetyp relevanten Home-Assistant-Entitäten. Alle Felder sind optional.",
+        "title": "{device_name} ({device_type}) — link entities",
+        "description": "Link the Home Assistant entities relevant for this device type. All fields are optional.",
         "data": {
-          "entity_current_power_kw": "Entität für aktuelle Leistung des Geräts",
-          "read_section": "Leistungsdaten (nur lesend)",
-          "control_section": "Steuerung (Crowdergize)"
+          "entity_current_power_kw": "Current power entity",
+          "read_section": "Power data (read-only)",
+          "control_section": "Control (Crowdergize)"
         },
         "data_description": {
-          "entity_current_power_kw": "Sensor, der die aktuelle Leistung in W oder kW liefert.",
-          "read_section": "Diese Entitäten werden von Crowdergy ausschließlich ausgelesen.",
-          "control_section": "Crowdergy steuert das Gerät, indem es die folgende Entität auf einen der beiden Werte schreibt — „Gerät an“ → value_on, „Gerät aus“ → value_off."
+          "entity_current_power_kw": "Sensor providing current power in W or kW.",
+          "read_section": "These entities are only read by Crowdergy.",
+          "control_section": "Crowdergy controls the device by writing one of two values to the entity below — \"device on\" → value_on, \"device off\" → value_off."
         },
         "sections": {
           "read_section": {
-            "name": "Leistungsdaten (nur lesend)",
-            "description": "Diese Entitäten werden von Crowdergy ausschließlich ausgelesen.",
+            "name": "Power data (read-only)",
+            "description": "These entities are only read by Crowdergy.",
             "data": {
-              "entity_current_power_kw": "Entität für aktuelle Leistung des Geräts",
-              "entity_soc_percent": "Entität für aktuellen Ladezustand",
-              "entity_vehicle_status": "Entität für Fahrzeugstatus",
-              "entity_energy_total": "Entität für Gesamtenergie (kWh, fortlaufend)",
-              "entity_energy_discharged_total": "Entität für entladene Gesamtenergie (kWh, fortlaufend) — nur Batterie"
+              "entity_current_power_kw": "Current power entity",
+              "entity_soc_percent": "State-of-charge entity",
+              "entity_vehicle_status": "Vehicle status entity",
+              "entity_current_temp_c": "Current-temperature entity",
+              "entity_target_temp_c": "Target-temperature entity",
+              "entity_energy_total": "Total energy entity (kWh, cumulative)",
+              "entity_energy_discharged_total": "Discharged energy entity (kWh, cumulative) — battery only"
             },
             "data_description": {
-              "entity_current_power_kw": "Sensor, der die aktuelle Leistung in W oder kW liefert.",
-              "entity_soc_percent": "Sensor, der den aktuellen Ladezustand in Prozent liefert.",
-              "entity_vehicle_status": "Sensor- oder Binary-Sensor-Entität für den Fahrzeugstatus (z. B. „connected“, „charging“).",
-              "entity_energy_total": "Sensor mit state_class total_increasing in kWh (Lebensdauer-Zähler). Crowdergy bildet Tages-, Monats- und Jahresverbrauch via Delta-Berechnung. Optional — ohne diesen Sensor zeigt die App weiterhin nur kW.",
-              "entity_energy_discharged_total": "Nur Batterie: zweiter total_increasing-Zähler in kWh für die Entladeseite. Wenn Deine Batterie zwei getrennte Sensoren für geladene und entladene Energie liefert, trägst Du hier den Entlade-Zähler ein — dann zeigt die App Laden und Entladen separat im kWh-Chart. Optional."
+              "entity_current_power_kw": "Sensor providing current power in W or kW.",
+              "entity_soc_percent": "Sensor providing current state of charge in percent.",
+              "entity_vehicle_status": "Sensor or binary-sensor entity for vehicle status (e.g. \"connected\", \"charging\").",
+              "entity_current_temp_c": "Current temperature in °C — e.g. flow temperature of a heat pump or the inside temperature of a DHW tank. Shown next to the heat-pump tile in the app.",
+              "entity_target_temp_c": "Current target / setpoint temperature in °C. Optional — when empty the app only shows the current temperature. Crowdergy does NOT write this entity; you keep controlling the setpoint via your HA heating integration. Crowdergy reads the value to plan heating windows.",
+              "entity_energy_total": "Sensor with state_class total_increasing in kWh (lifetime counter). Crowdergy computes daily/monthly/yearly consumption via delta math. Optional — without this sensor the app keeps showing kW only.",
+              "entity_energy_discharged_total": "Battery only: a second total_increasing counter in kWh for the discharge side. If your battery exposes separate sensors for charged and discharged energy, enter the discharge counter here — the app will then show charging and discharging separately in the kWh chart. Optional."
             }
           },
           "control_section": {
-            "name": "Steuerung (Crowdergize)",
-            "description": "Welche HA-Entitäten darf Crowdergy steuern? Wallbox: Lademodus-Select für den App-Picker UND optional eine Steuer-Entität für die spätere Smart-An/Aus-Logik. Andere Typen: nur die Steuer-Entität + „an“/„aus“-Werte im nächsten Schritt.",
+            "name": "Control (Crowdergize)",
+            "description": "Which HA entities may Crowdergy control? Wallbox: a charge-mode select for the app picker AND optionally a control entity for later smart on/off logic. Other types: just the control entity + \"on\"/\"off\" values in the next step.",
             "data": {
-              "entity_control": "Steuer-Entität (Smart-An/Aus)",
-              "entity_charge_mode": "Lademodus-Entität (Wallbox)"
+              "entity_control": "Control entity (smart on/off)",
+              "entity_charge_mode": "Charge-mode entity (Wallbox)"
             },
             "data_description": {
-              "entity_control": "Beliebige schreibbare HA-Entität: Switch, Number, Select, Input-Helfer, Climate, Light, Fan. Wird von Crowdergy automatisch geschaltet, sobald Crowdergize an ist (Smart-Logik kommt später).",
-              "entity_charge_mode": "Select-Entität, die die App-Lademodi (z. B. „Power Mode“ / „Lock Mode“ / „Solar Pure Mode“) als Optionen anbietet."
+              "entity_control": "Any writable HA entity: switch, number, select, input helper, climate, light, fan. Toggled automatically by Crowdergy whenever Crowdergize is on (smart logic comes later).",
+              "entity_charge_mode": "Select entity offering the app's charge modes (e.g. \"Power Mode\" / \"Lock Mode\" / \"Solar Pure Mode\") as options."
             }
           }
         },
-        "submit": "Weiter"
+        "submit": "Next"
       },
       "add_device_values": {
-        "title": "{device_name} ({device_type}) — Steuer-Werte",
-        "description": "Welche Werte soll Crowdergy auf „{entity_control}“ schreiben, wenn das Gerät an oder aus geht? Bei Select-/Number-/Climate-Entities wird der Picker automatisch passend befüllt.",
+        "title": "{device_name} ({device_type}) — control values",
+        "description": "Which values should Crowdergy write to \"{entity_control}\" when the device turns on or off? For select/number/climate entities the picker is filled automatically.",
         "data": {
-          "value_on": "Wert für „Gerät an“",
-          "value_off": "Wert für „Gerät aus“"
+          "value_on": "Value for \"device on\"",
+          "value_off": "Value for \"device off\""
         },
         "data_description": {
-          "value_on": "z. B. „Power Mode“, 16, „on“, „heat“.",
-          "value_off": "z. B. „Lock Mode“, 0, „off“."
+          "value_on": "e.g. \"Power Mode\", 16, \"on\", \"heat\".",
+          "value_off": "e.g. \"Lock Mode\", 0, \"off\"."
         },
         "submit": "OK"
       },
       "edit_device": {
-        "title": "Gerät bearbeiten",
-        "description": "Wähle das Gerät, das geändert werden soll.",
+        "title": "Edit device",
+        "description": "Pick the device to change.",
         "data": {
-          "device_to_edit": "Gerät"
+          "device_to_edit": "Device"
         },
-        "submit": "Weiter"
+        "submit": "Next"
       },
       "edit_device_type": {
-        "title": "{device_name} bearbeiten — Typ & Name",
-        "description": "Passe Typ und Name an. Im nächsten Schritt verknüpfst du die zugehörigen Entitäten.",
+        "title": "Edit {device_name} — type & name",
+        "description": "Adjust type and name. In the next step you'll link the related entities.",
         "data": {
-          "device_type": "Gerätetyp",
+          "device_type": "Device type",
           "device_name": "Name"
         },
         "data_description": {
-          "device_type": "Bestimmt, welche Entitäten im nächsten Schritt abgefragt werden.",
-          "device_name": "Anzeigename in der Crowdergy App und in Home Assistant."
+          "device_type": "Determines which entities are requested in the next step.",
+          "device_name": "Display name in the Crowdergy app and in Home Assistant."
         },
-        "submit": "Weiter"
+        "submit": "Next"
       },
       "edit_device_entities": {
-        "title": "{device_name} ({device_type}) — Entitäten verknüpfen",
-        "description": "Passe die verknüpften Home-Assistant-Entitäten an. Alle Felder sind optional.",
+        "title": "{device_name} ({device_type}) — link entities",
+        "description": "Adjust the linked Home Assistant entities. All fields are optional.",
         "data": {
-          "entity_current_power_kw": "Entität für aktuelle Leistung des Geräts",
-          "read_section": "Leistungsdaten (nur lesend)",
-          "control_section": "Steuerung (Crowdergize)"
+          "entity_current_power_kw": "Current power entity",
+          "read_section": "Power data (read-only)",
+          "control_section": "Control (Crowdergize)"
         },
         "data_description": {
-          "entity_current_power_kw": "Sensor, der die aktuelle Leistung in W oder kW liefert.",
-          "read_section": "Diese Entitäten werden von Crowdergy ausschließlich ausgelesen.",
-          "control_section": "Crowdergy steuert das Gerät, indem es die folgende Entität auf einen der beiden Werte schreibt — „Gerät an“ → value_on, „Gerät aus“ → value_off."
+          "entity_current_power_kw": "Sensor providing current power in W or kW.",
+          "read_section": "These entities are only read by Crowdergy.",
+          "control_section": "Crowdergy controls the device by writing one of two values to the entity below — \"device on\" → value_on, \"device off\" → value_off."
         },
         "sections": {
           "read_section": {
-            "name": "Leistungsdaten (nur lesend)",
-            "description": "Diese Entitäten werden von Crowdergy ausschließlich ausgelesen.",
+            "name": "Power data (read-only)",
+            "description": "These entities are only read by Crowdergy.",
             "data": {
-              "entity_current_power_kw": "Entität für aktuelle Leistung des Geräts",
-              "entity_soc_percent": "Entität für aktuellen Ladezustand",
-              "entity_vehicle_status": "Entität für Fahrzeugstatus",
-              "entity_energy_total": "Entität für Gesamtenergie (kWh, fortlaufend)",
-              "entity_energy_discharged_total": "Entität für entladene Gesamtenergie (kWh, fortlaufend) — nur Batterie"
+              "entity_current_power_kw": "Current power entity",
+              "entity_soc_percent": "State-of-charge entity",
+              "entity_vehicle_status": "Vehicle status entity",
+              "entity_current_temp_c": "Current-temperature entity",
+              "entity_target_temp_c": "Target-temperature entity",
+              "entity_energy_total": "Total energy entity (kWh, cumulative)",
+              "entity_energy_discharged_total": "Discharged energy entity (kWh, cumulative) — battery only"
             },
             "data_description": {
-              "entity_current_power_kw": "Sensor, der die aktuelle Leistung in W oder kW liefert.",
-              "entity_soc_percent": "Sensor, der den aktuellen Ladezustand in Prozent liefert.",
-              "entity_vehicle_status": "Sensor- oder Binary-Sensor-Entität für den Fahrzeugstatus (z. B. „connected“, „charging“).",
-              "entity_energy_total": "Sensor mit state_class total_increasing in kWh (Lebensdauer-Zähler). Crowdergy bildet Tages-, Monats- und Jahresverbrauch via Delta-Berechnung. Optional — ohne diesen Sensor zeigt die App weiterhin nur kW.",
-              "entity_energy_discharged_total": "Nur Batterie: zweiter total_increasing-Zähler in kWh für die Entladeseite. Wenn Deine Batterie zwei getrennte Sensoren für geladene und entladene Energie liefert, trägst Du hier den Entlade-Zähler ein — dann zeigt die App Laden und Entladen separat im kWh-Chart. Optional."
+              "entity_current_power_kw": "Sensor providing current power in W or kW.",
+              "entity_soc_percent": "Sensor providing current state of charge in percent.",
+              "entity_vehicle_status": "Sensor or binary-sensor entity for vehicle status (e.g. \"connected\", \"charging\").",
+              "entity_current_temp_c": "Current temperature in °C — e.g. flow temperature of a heat pump or the inside temperature of a DHW tank. Shown next to the heat-pump tile in the app.",
+              "entity_target_temp_c": "Current target / setpoint temperature in °C. Optional — when empty the app only shows the current temperature. Crowdergy does NOT write this entity; you keep controlling the setpoint via your HA heating integration. Crowdergy reads the value to plan heating windows.",
+              "entity_energy_total": "Sensor with state_class total_increasing in kWh (lifetime counter). Crowdergy computes daily/monthly/yearly consumption via delta math. Optional — without this sensor the app keeps showing kW only.",
+              "entity_energy_discharged_total": "Battery only: a second total_increasing counter in kWh for the discharge side. If your battery exposes separate sensors for charged and discharged energy, enter the discharge counter here — the app will then show charging and discharging separately in the kWh chart. Optional."
             }
           },
           "control_section": {
-            "name": "Steuerung (Crowdergize)",
-            "description": "Welche HA-Entitäten darf Crowdergy steuern? Wallbox: Lademodus-Select für den App-Picker UND optional eine Steuer-Entität für die spätere Smart-An/Aus-Logik. Andere Typen: nur die Steuer-Entität + „an“/„aus“-Werte im nächsten Schritt.",
+            "name": "Control (Crowdergize)",
+            "description": "Which HA entities may Crowdergy control? Wallbox: a charge-mode select for the app picker AND optionally a control entity for later smart on/off logic. Other types: just the control entity + \"on\"/\"off\" values in the next step.",
             "data": {
-              "entity_control": "Steuer-Entität (Smart-An/Aus)",
-              "entity_charge_mode": "Lademodus-Entität (Wallbox)"
+              "entity_control": "Control entity (smart on/off)",
+              "entity_charge_mode": "Charge-mode entity (Wallbox)"
             },
             "data_description": {
-              "entity_control": "Beliebige schreibbare HA-Entität: Switch, Number, Select, Input-Helfer, Climate, Light, Fan. Wird von Crowdergy automatisch geschaltet, sobald Crowdergize an ist (Smart-Logik kommt später).",
-              "entity_charge_mode": "Select-Entität, die die App-Lademodi (z. B. „Power Mode“ / „Lock Mode“ / „Solar Pure Mode“) als Optionen anbietet."
+              "entity_control": "Any writable HA entity: switch, number, select, input helper, climate, light, fan. Toggled automatically by Crowdergy whenever Crowdergize is on (smart logic comes later).",
+              "entity_charge_mode": "Select entity offering the app's charge modes (e.g. \"Power Mode\" / \"Lock Mode\" / \"Solar Pure Mode\") as options."
             }
           }
         },
-        "submit": "Weiter"
+        "submit": "Next"
       },
       "edit_device_values": {
-        "title": "{device_name} ({device_type}) — Steuer-Werte",
-        "description": "Welche Werte soll Crowdergy auf „{entity_control}“ schreiben, wenn das Gerät an oder aus geht? Bei Select-/Number-/Climate-Entities wird der Picker automatisch passend befüllt.",
+        "title": "{device_name} ({device_type}) — control values",
+        "description": "Which values should Crowdergy write to \"{entity_control}\" when the device turns on or off? For select/number/climate entities the picker is filled automatically.",
         "data": {
-          "value_on": "Wert für „Gerät an“",
-          "value_off": "Wert für „Gerät aus“"
+          "value_on": "Value for \"device on\"",
+          "value_off": "Value for \"device off\""
         },
         "data_description": {
-          "value_on": "z. B. „Power Mode“, 16, „on“, „heat“.",
-          "value_off": "z. B. „Lock Mode“, 0, „off“."
+          "value_on": "e.g. \"Power Mode\", 16, \"on\", \"heat\".",
+          "value_off": "e.g. \"Lock Mode\", 0, \"off\"."
         },
         "submit": "OK"
       },
       "remove_device": {
-        "title": "Gerät entfernen",
-        "description": "Wähle das Gerät, das entfernt werden soll. Das Gerät wird sowohl in Crowdergy als auch in Home Assistant gelöscht.",
+        "title": "Remove device",
+        "description": "Pick the device to remove. It will be deleted from both Crowdergy and Home Assistant.",
         "data": {
-          "device_to_remove": "Gerät"
+          "device_to_remove": "Device"
         },
         "submit": "OK"
       },
       "edit_outdoor_temp": {
-        "title": "Außentemperatur-Sensor",
-        "description": "Optional: ein HA-Sensor mit der aktuellen Außentemperatur in °C. Wird im Kopfbereich der Crowdergy-App angezeigt. Leer lassen, damit Crowdergy stattdessen die Außentemperatur automatisch über Open-Meteo (Wetterdaten anhand deines Stadtteils) holt.",
+        "title": "Outdoor temperature sensor",
+        "description": "Optional: an HA sensor with the current outdoor temperature in °C. Shown in the Crowdergy app header. Leave empty to let Crowdergy fetch the outdoor temperature automatically via Open-Meteo (weather data based on your district).",
         "submit": "OK",
         "data": {
-          "entity_outdoor_temp_c": "Außentemperatur-Sensor (optional)"
+          "entity_outdoor_temp_c": "Outdoor temperature sensor (optional)"
         },
         "data_description": {
-          "entity_outdoor_temp_c": "Sensor-Entität mit der aktuellen Außentemperatur in °C."
+          "entity_outdoor_temp_c": "Sensor entity with the current outdoor temperature in °C."
         }
       }
     },
     "error": {
-      "cannot_connect": "Verbindung zum Server fehlgeschlagen."
+      "cannot_connect": "Failed to connect to the server."
     }
   }
 }
