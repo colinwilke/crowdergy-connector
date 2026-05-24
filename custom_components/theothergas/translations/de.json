@@ -33,7 +33,7 @@
       },
       "device_type": {
         "title": "Gerät #{device_number} — Typ & Name",
-        "description": "Wähle den Gerätetyp und einen Anzeigenamen. Der Typ steuert, welche Felder im nächsten Schritt erscheinen, und ordnet das Gerät in der App + in der Stadtteil-Aggregation richtig ein.\n\nÜbersicht der Typen:\n• Solar — PV-Anlage (nur lesend)\n• Batterie — Heimspeicher\n• Wallbox — Lademöglichkeit fürs E-Auto\n• Wärmepumpe — Heiz- oder Warmwasser-Wärmepumpe (auch Brauchwasser-Boiler)\n• Netz — Hauptzähler / Netzbezug (nur lesend)\n• Haushalt — sonstige Grundlast (nur lesend)\n• Gerät — beliebiges schaltbares Gerät (Klima, Pool, IR-Heizung …)",
+        "description": "Wähle den Gerätetyp und einen Anzeigenamen. Der Typ steuert, welche Felder im nächsten Schritt erscheinen, und ordnet das Gerät in der App + in der Stadtteil-Aggregation richtig ein.\n\nÜbersicht der Typen:\n• Solar — PV-Anlage (nur lesend)\n• Batterie — Heimspeicher\n• Wallbox — Lademöglichkeit fürs E-Auto\n• Heizung (Wärmepumpe) — Raumheizungs-WP\n• Warmwasser (Wärmepumpe) — Brauchwasser-WP oder kombinierte WW-Bereitung. Im nächsten Schritt kannst du eine Heizungs-WP angeben, mit der derselbe Verdichter geteilt wird.\n• Netz — Hauptzähler / Netzbezug (nur lesend)\n• Haushalt — sonstige Grundlast (nur lesend)\n• Gerät — beliebiges schaltbares Gerät (Klima, Pool, IR-Heizung …)",
         "submit": "Weiter",
         "data": {
           "device_type": "Gerätetyp",
@@ -106,6 +106,32 @@
         "data_description": {
           "value_on": "Was schreiben wir wenn Crowdergy Gerät an sagt? Beispiele:\n• Wallbox-Strom-Limit (Number): 16 (= 16 A laden)\n• Wallbox-Lock-Switch: off (= Lock aufheben)\n• SG-Ready-Select: Erhöht oder dein Hersteller-Äquivalent\n• Wärmepumpen-Boost-Switch: on\n• Allgemeiner Switch: on",
           "value_off": "Was schreiben wir wenn Crowdergy Gerät aus sagt? Wichtig: meist NICHT der Standard-/Normal-Modus, sondern aktiv nicht laufen. Beispiele:\n• Wallbox-Strom-Limit (Number): 0 (= Pause)\n• Wallbox-Lock-Switch: on (= Lock setzen)\n• SG-Ready-Select: Sperre oder dein Hersteller-Äquivalent\n• Allgemeiner Switch: off"
+        }
+      },
+      "device_vehicle_status": {
+        "title": "{device_name} ({device_type}) — Fahrzeugstatus zuordnen",
+        "description": "Welche Rohwerte aus \"{entity_vehicle_status}\" bedeuten was? Crowdergy normalisiert alles auf eingesteckt / nicht eingesteckt / Fehler — dann ist die App-Logik unabhängig von der konkreten Wallbox-Integration. Werte, die du unten nicht aufführst, behandelt Crowdergy als Fehler.",
+        "submit": "Weiter",
+        "data": {
+          "vehicle_status_value_plugged": "Wert für: Auto eingesteckt",
+          "vehicle_status_value_unplugged": "Wert für: kein Auto",
+          "vehicle_status_value_error": "Wert für: Fehler (optional)"
+        },
+        "data_description": {
+          "vehicle_status_value_plugged": "Wert, den dein Sensor meldet, sobald ein Auto an der Wallbox hängt — z. B. connected, charging, plugged_in.",
+          "vehicle_status_value_unplugged": "Wert für \"keine Verbindung\" — z. B. idle, disconnected, ready.",
+          "vehicle_status_value_error": "Wert für Fehler-/Stör-Zustände — z. B. error, fault. Optional; nicht-zuordbare Werte werden automatisch als Fehler interpretiert."
+        }
+      },
+      "device_shares_hardware": {
+        "title": "{device_name} ({device_type}) — gemeinsamer Verdichter",
+        "description": "Teilt sich dieses Warmwasser-Gerät einen Verdichter mit einer Heizungs-Wärmepumpe, die du schon angelegt hast? Crowdergy beachtet dann eine gemeinsame Leistungsgrenze, damit beide nie zusammen mehr verlangen, als der Verdichter liefern kann.",
+        "submit": "Weiter",
+        "data": {
+          "shares_hardware_with_device_id": "Heizung mit demselben Verdichter (optional)"
+        },
+        "data_description": {
+          "shares_hardware_with_device_id": "Wähle die Heizungs-WP, an die diese WW-Bereitung gekoppelt ist. Standalone-Brauchwasser-Wärmepumpe auf eigenem Gerät? Einfach \"keine Kopplung\" lassen."
         }
       },
       "add_more": {
@@ -223,6 +249,32 @@
         "data_description": {
           "value_on": "Beispiele: Wallbox-Strom-Limit (Number) 16 (= 16 A laden); SG-Ready-Select Erhöht; Allgemein on.",
           "value_off": "Aktiv nicht laufen — meist nicht Normal, sondern z. B.: Wallbox-Strom-Limit 0 (= Pause); SG-Ready-Select Sperre; Lock-Switch on (= sperren); Allgemein off."
+        }
+      },
+      "add_device_vehicle_status": {
+        "title": "{device_name} ({device_type}) — Fahrzeugstatus zuordnen",
+        "description": "Welche Rohwerte aus \"{entity_vehicle_status}\" bedeuten was? Crowdergy normalisiert alles auf eingesteckt / nicht eingesteckt / Fehler — dann ist die App-Logik unabhängig von der konkreten Wallbox-Integration. Werte, die du unten nicht aufführst, behandelt Crowdergy als Fehler.",
+        "submit": "Weiter",
+        "data": {
+          "vehicle_status_value_plugged": "Wert für: Auto eingesteckt",
+          "vehicle_status_value_unplugged": "Wert für: kein Auto",
+          "vehicle_status_value_error": "Wert für: Fehler (optional)"
+        },
+        "data_description": {
+          "vehicle_status_value_plugged": "Wert, den dein Sensor meldet, sobald ein Auto an der Wallbox hängt — z. B. connected, charging, plugged_in.",
+          "vehicle_status_value_unplugged": "Wert für \"keine Verbindung\" — z. B. idle, disconnected, ready.",
+          "vehicle_status_value_error": "Wert für Fehler-/Stör-Zustände — z. B. error, fault. Optional; nicht-zuordbare Werte werden automatisch als Fehler interpretiert."
+        }
+      },
+      "add_device_shares_hardware": {
+        "title": "{device_name} ({device_type}) — gemeinsamer Verdichter",
+        "description": "Teilt sich dieses Warmwasser-Gerät einen Verdichter mit einer Heizungs-Wärmepumpe, die du schon angelegt hast? Crowdergy beachtet dann eine gemeinsame Leistungsgrenze, damit beide nie zusammen mehr verlangen, als der Verdichter liefern kann.",
+        "submit": "Weiter",
+        "data": {
+          "shares_hardware_with_device_id": "Heizung mit demselben Verdichter (optional)"
+        },
+        "data_description": {
+          "shares_hardware_with_device_id": "Wähle die Heizungs-WP, an die diese WW-Bereitung gekoppelt ist. Standalone-Brauchwasser-Wärmepumpe auf eigenem Gerät? Einfach \"keine Kopplung\" lassen."
         }
       },
       "edit_device": {

@@ -38,6 +38,10 @@ from .const import (
     CONF_ENTITY_CONTROL_HOLD,
     CONF_VALUE_OFF,
     CONF_VALUE_ON,
+    CONF_VEHICLE_STATUS_VALUE_PLUGGED,
+    CONF_VEHICLE_STATUS_VALUE_UNPLUGGED,
+    CONF_VEHICLE_STATUS_VALUE_ERROR,
+    CONF_SHARES_HARDWARE_WITH,
     ENTITY_CONTROL_HOLD_ALWAYS,
     DEFAULT_API_URL,
     DEVICE_TYPES,
@@ -53,14 +57,15 @@ DEVICE_TYPE_LABELS_DE = {
     "battery": "Batterie",
     "wallbox": "Wallbox",
     "grid": "Netz",
-    "heatpump": "Wärmepumpe",
+    "heating": "Heizung (Wärmepumpe)",
+    "warmwater": "Warmwasser (Wärmepumpe)",
     "generic": "Sonstiges",
     "haushalt": "Haushalt",
 }
 
 # Device types that the Crowdergy app can switch on/off through the
 # user-mapped entity_control. Solar / Grid / Haushalt are read-only.
-_CONTROLLABLE_TYPES = {"battery", "wallbox", "heatpump", "generic"}
+_CONTROLLABLE_TYPES = {"battery", "wallbox", "heating", "warmwater", "generic"}
 
 # Entity domains where on/off is implicit (turn_on / turn_off services) —
 # no value_on / value_off needs to be typed by the user.
@@ -81,7 +86,11 @@ _READ_FIELDS: dict[str, list[str]] = {
         CONF_ENTITY_POWER, CONF_ENTITY_ENERGY_TOTAL,
         CONF_ENTITY_ENERGY_DISCHARGED_TOTAL,
     ],
-    "heatpump":  [
+    "heating":   [
+        CONF_ENTITY_POWER, CONF_ENTITY_CURRENT_TEMP, CONF_ENTITY_TARGET_TEMP,
+        CONF_ENTITY_ENERGY_TOTAL,
+    ],
+    "warmwater": [
         CONF_ENTITY_POWER, CONF_ENTITY_CURRENT_TEMP, CONF_ENTITY_TARGET_TEMP,
         CONF_ENTITY_ENERGY_TOTAL,
     ],
@@ -353,6 +362,87 @@ def _values_schema(
     })
 
 
+# ── v2.0: vehicle-status ternary mapping (wallbox-only) ────────────────────
+
+
+def _vehicle_status_schema(
+    hass, entity_vehicle_status: str, defaults: dict[str, Any] | None = None
+) -> vol.Schema:
+    """Schema for the three string values that map the wallbox's
+    vehicle-status sensor to the normalised ternary plugged /
+    unplugged / error. If the sensor is a select-style entity we
+    introspect the options and present a dropdown; otherwise plain
+    text fields with the current state pre-filled as a hint for the
+    "plugged" or "unplugged" default.
+    """
+    d = defaults or {}
+
+    field_type: Any = str
+    options_selector = None
+    if entity_vehicle_status:
+        domain = entity_vehicle_status.split(".", 1)[0]
+        state = hass.states.get(entity_vehicle_status)
+        if domain in ("select", "input_select") and state is not None:
+            opts = state.attributes.get("options") or []
+            if opts:
+                options_selector = selector.SelectSelector(
+                    selector.SelectSelectorConfig(
+                        options=[
+                            selector.SelectOptionDict(value=o, label=o)
+                            for o in opts
+                        ],
+                        mode=selector.SelectSelectorMode.DROPDOWN,
+                    )
+                )
+                field_type = options_selector
+
+    def _field(key: str, hint_default: str = "") -> Any:
+        default = d.get(key) or hint_default
+        if default:
+            return vol.Optional(key, default=default)
+        return vol.Optional(key)
+
+    return vol.Schema({
+        _field(CONF_VEHICLE_STATUS_VALUE_PLUGGED): field_type,
+        _field(CONF_VEHICLE_STATUS_VALUE_UNPLUGGED): field_type,
+        _field(CONF_VEHICLE_STATUS_VALUE_ERROR): field_type,
+    })
+
+
+# ── v2.0: shares-hardware picker (warmwater-only) ──────────────────────────
+
+
+def _shares_hardware_schema(
+    heating_devices: list[dict[str, str]],
+    defaults: dict[str, Any] | None = None,
+) -> vol.Schema:
+    """Optional picker letting a warmwater device declare it sits on
+    the same compressor as an existing heating device. Options are
+    (backend_device_id, device_name) pairs from the user's already-
+    registered heating devices. Empty selection = standalone (no
+    joint-power coupling)."""
+    d = defaults or {}
+    options = [
+        selector.SelectOptionDict(value=h["id"], label=h["name"])
+        for h in heating_devices
+    ]
+    # Sentinel for "no sibling" so the user can explicitly clear a
+    # previous selection in the edit flow.
+    options.insert(
+        0, selector.SelectOptionDict(value="", label="— keine Kopplung —")
+    )
+    picker = selector.SelectSelector(
+        selector.SelectSelectorConfig(
+            options=options,
+            mode=selector.SelectSelectorMode.DROPDOWN,
+        )
+    )
+    default = d.get(CONF_SHARES_HARDWARE_WITH, "")
+    return vol.Schema({
+        vol.Optional(CONF_SHARES_HARDWARE_WITH, default=default): picker,
+    })
+
+
 # ── Persistence helpers ─────────────────────────────────────────────────────
 
 
@@ -387,6 +477,25 @@ def _build_device_record(
             CONF_ENTITY_CONTROL_HOLD, ENTITY_CONTROL_HOLD_ALWAYS
         ),
         CONF_ENTITY_CHARGE_MODE: entity_input.get(CONF_ENTITY_CHARGE_MODE, ""),
+        # v2.0: ternary vehicle-status mapping (wallbox-only). Empty
+        # strings on non-wallbox types — they get filtered out before
+        # coordinator's mapping lookup.
+        CONF_VEHICLE_STATUS_VALUE_PLUGGED: entity_input.get(
+            CONF_VEHICLE_STATUS_VALUE_PLUGGED, ""
+        ),
+        CONF_VEHICLE_STATUS_VALUE_UNPLUGGED: entity_input.get(
+            CONF_VEHICLE_STATUS_VALUE_UNPLUGGED, ""
+        ),
+        CONF_VEHICLE_STATUS_VALUE_ERROR: entity_input.get(
+            CONF_VEHICLE_STATUS_VALUE_ERROR, ""
+        ),
+        # v2.0: warmwater-only. The backend device-id of the heating
+        # device sharing this compressor. Coordinator does nothing
+        # with this — it's POSTed once at device-register time so the
+        # backend can wire up the joint-power constraint.
+        CONF_SHARES_HARDWARE_WITH: entity_input.get(
+            CONF_SHARES_HARDWARE_WITH, ""
+        ),
     }
 
 
@@ -399,13 +508,19 @@ async def _register_device(
     location: dict[str, str],
 ) -> dict[str, Any]:
     """Register a device on the backend and return the full device dict."""
-    device_config = {
+    device_config: dict[str, Any] = {
         "name": device_name,
         "type": device_type,
         "district": location.get(CONF_DISTRICT, ""),
         "city": location.get(CONF_CITY, ""),
         "region": location.get(CONF_REGION, ""),
     }
+    # Warmwater only: tell the backend which heating device shares
+    # this compressor so the joint solver can couple them. Skipped
+    # when empty (standalone WW heater).
+    shares_with = entity_input.get(CONF_SHARES_HARDWARE_WITH, "")
+    if device_type == "warmwater" and shares_with:
+        device_config["shares_hardware_with_device_id"] = shares_with
     async with httpx.AsyncClient(timeout=15.0) as client:
         response = await client.post(
             f"{api_url}/api/v1/devices",
@@ -643,26 +758,120 @@ class CrowdergyConfigFlow(ConfigFlow, domain=DOMAIN):
 
         if user_input is not None:
             entity_input = _flatten_sections(user_input)
-            # Step 3 only when entity_control is mapped AND it's not a
-            # binary on/off entity (switch / input_boolean / light / fan)
-            # — for those the connector uses turn_on / turn_off implicitly,
-            # no value_on / value_off needs typing.
-            entity_control = entity_input.get(CONF_ENTITY_CONTROL, "")
-            needs_values = (
-                device_type in _CONTROLLABLE_TYPES
-                and entity_control
-                and not _is_binary_entity(entity_control)
-            )
-            if needs_values:
-                self._pending_entity_input = entity_input
-                return await self.async_step_device_values()
-            return await self._register_with_entities(entity_input)
+            return await self._dispatch_post_entities(entity_input)
 
         return self.async_show_form(
             step_id="device_entities",
             data_schema=_entities_schema(device_type),
             description_placeholders={
                 "device_number": str(len(self._devices) + 1),
+                "device_type": DEVICE_TYPE_LABELS_DE.get(device_type, device_type),
+                "device_name": device_name,
+            },
+        )
+
+    async def _dispatch_post_entities(
+        self, entity_input: dict[str, Any]
+    ) -> ConfigFlowResult:
+        """Decide which follow-up step (if any) to render next.
+
+        Order:
+          1. Vehicle-status ternary mapping  — wallbox + entity set, mapping unset
+          2. Shares-hardware picker         — warmwater
+          3. value_on / value_off           — controllable + non-binary control
+          4. Otherwise: register the device
+
+        Each branch stashes the (in-progress) entity_input on
+        `self._pending_entity_input` so the next step can pick up
+        where this one left off.
+        """
+        device_type = self._pending_type or "generic"
+
+        if (
+            device_type == "wallbox"
+            and entity_input.get(CONF_ENTITY_VEHICLE_STATUS)
+            and CONF_VEHICLE_STATUS_VALUE_PLUGGED not in entity_input
+        ):
+            self._pending_entity_input = entity_input
+            return await self.async_step_device_vehicle_status()
+
+        if (
+            device_type == "warmwater"
+            and CONF_SHARES_HARDWARE_WITH not in entity_input
+        ):
+            self._pending_entity_input = entity_input
+            return await self.async_step_device_shares_hardware()
+
+        entity_control = entity_input.get(CONF_ENTITY_CONTROL, "")
+        if (
+            device_type in _CONTROLLABLE_TYPES
+            and entity_control
+            and not _is_binary_entity(entity_control)
+        ):
+            self._pending_entity_input = entity_input
+            return await self.async_step_device_values()
+
+        return await self._register_with_entities(entity_input)
+
+    async def async_step_device_vehicle_status(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """v2.0 step: map the wallbox's vehicle-status sensor states
+        to the normalised plugged / unplugged / error trio."""
+        device_type = self._pending_type or "generic"
+        device_name = self._pending_name or ""
+        entity_input = dict(self._pending_entity_input or {})
+        entity_vehicle_status = entity_input.get(CONF_ENTITY_VEHICLE_STATUS, "")
+
+        if user_input is not None:
+            entity_input[CONF_VEHICLE_STATUS_VALUE_PLUGGED] = user_input.get(
+                CONF_VEHICLE_STATUS_VALUE_PLUGGED, ""
+            )
+            entity_input[CONF_VEHICLE_STATUS_VALUE_UNPLUGGED] = user_input.get(
+                CONF_VEHICLE_STATUS_VALUE_UNPLUGGED, ""
+            )
+            entity_input[CONF_VEHICLE_STATUS_VALUE_ERROR] = user_input.get(
+                CONF_VEHICLE_STATUS_VALUE_ERROR, ""
+            )
+            return await self._dispatch_post_entities(entity_input)
+
+        return self.async_show_form(
+            step_id="device_vehicle_status",
+            data_schema=_vehicle_status_schema(
+                self.hass, entity_vehicle_status, {}
+            ),
+            description_placeholders={
+                "device_type": DEVICE_TYPE_LABELS_DE.get(device_type, device_type),
+                "device_name": device_name,
+                "entity_vehicle_status": entity_vehicle_status,
+            },
+        )
+
+    async def async_step_device_shares_hardware(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """v2.0 step: link a warmwater device to its sibling heating
+        device on the same compressor (optional)."""
+        device_type = self._pending_type or "generic"
+        device_name = self._pending_name or ""
+        entity_input = dict(self._pending_entity_input or {})
+
+        heating_devices = [
+            {"id": d.get(CONF_DEVICE_ID, ""), "name": d.get(CONF_DEVICE_NAME, "")}
+            for d in self._devices
+            if d.get(CONF_DEVICE_TYPE) == "heating"
+        ]
+
+        if user_input is not None:
+            entity_input[CONF_SHARES_HARDWARE_WITH] = user_input.get(
+                CONF_SHARES_HARDWARE_WITH, ""
+            )
+            return await self._dispatch_post_entities(entity_input)
+
+        return self.async_show_form(
+            step_id="device_shares_hardware",
+            data_schema=_shares_hardware_schema(heating_devices, {}),
+            description_placeholders={
                 "device_type": DEVICE_TYPE_LABELS_DE.get(device_type, device_type),
                 "device_name": device_name,
             },
@@ -833,20 +1042,107 @@ class CrowdergyOptionsFlow(OptionsFlow):
 
         if user_input is not None:
             entity_input = _flatten_sections(user_input)
-            entity_control = entity_input.get(CONF_ENTITY_CONTROL, "")
-            needs_values = (
-                device_type in _CONTROLLABLE_TYPES
-                and entity_control
-                and not _is_binary_entity(entity_control)
-            )
-            if needs_values:
-                self._pending_entity_input = entity_input
-                return await self.async_step_add_device_values()
-            return await self._options_register(entity_input)
+            return await self._dispatch_add_post_entities(entity_input)
 
         return self.async_show_form(
             step_id="add_device_entities",
             data_schema=_entities_schema(device_type),
+            description_placeholders={
+                "device_type": DEVICE_TYPE_LABELS_DE.get(device_type, device_type),
+                "device_name": device_name,
+            },
+        )
+
+    async def _dispatch_add_post_entities(
+        self, entity_input: dict[str, Any]
+    ) -> ConfigFlowResult:
+        """Options-flow add path: same routing logic as the main
+        config flow's `_dispatch_post_entities` (vehicle-status →
+        shares-hardware → values → register)."""
+        device_type = self._pending_type or "generic"
+
+        if (
+            device_type == "wallbox"
+            and entity_input.get(CONF_ENTITY_VEHICLE_STATUS)
+            and CONF_VEHICLE_STATUS_VALUE_PLUGGED not in entity_input
+        ):
+            self._pending_entity_input = entity_input
+            return await self.async_step_add_device_vehicle_status()
+
+        if (
+            device_type == "warmwater"
+            and CONF_SHARES_HARDWARE_WITH not in entity_input
+        ):
+            self._pending_entity_input = entity_input
+            return await self.async_step_add_device_shares_hardware()
+
+        entity_control = entity_input.get(CONF_ENTITY_CONTROL, "")
+        if (
+            device_type in _CONTROLLABLE_TYPES
+            and entity_control
+            and not _is_binary_entity(entity_control)
+        ):
+            self._pending_entity_input = entity_input
+            return await self.async_step_add_device_values()
+
+        return await self._options_register(entity_input)
+
+    async def async_step_add_device_vehicle_status(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Options-flow variant of the wallbox vehicle-status mapping."""
+        device_type = self._pending_type or "generic"
+        device_name = self._pending_name or ""
+        entity_input = dict(self._pending_entity_input or {})
+        entity_vehicle_status = entity_input.get(CONF_ENTITY_VEHICLE_STATUS, "")
+
+        if user_input is not None:
+            entity_input[CONF_VEHICLE_STATUS_VALUE_PLUGGED] = user_input.get(
+                CONF_VEHICLE_STATUS_VALUE_PLUGGED, ""
+            )
+            entity_input[CONF_VEHICLE_STATUS_VALUE_UNPLUGGED] = user_input.get(
+                CONF_VEHICLE_STATUS_VALUE_UNPLUGGED, ""
+            )
+            entity_input[CONF_VEHICLE_STATUS_VALUE_ERROR] = user_input.get(
+                CONF_VEHICLE_STATUS_VALUE_ERROR, ""
+            )
+            return await self._dispatch_add_post_entities(entity_input)
+
+        return self.async_show_form(
+            step_id="add_device_vehicle_status",
+            data_schema=_vehicle_status_schema(
+                self.hass, entity_vehicle_status, {}
+            ),
+            description_placeholders={
+                "device_type": DEVICE_TYPE_LABELS_DE.get(device_type, device_type),
+                "device_name": device_name,
+                "entity_vehicle_status": entity_vehicle_status,
+            },
+        )
+
+    async def async_step_add_device_shares_hardware(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Options-flow variant of the warmwater shares-hardware picker."""
+        device_type = self._pending_type or "generic"
+        device_name = self._pending_name or ""
+        entity_input = dict(self._pending_entity_input or {})
+
+        heating_devices = [
+            {"id": d.get(CONF_DEVICE_ID, ""), "name": d.get(CONF_DEVICE_NAME, "")}
+            for d in self._devices
+            if d.get(CONF_DEVICE_TYPE) == "heating"
+        ]
+
+        if user_input is not None:
+            entity_input[CONF_SHARES_HARDWARE_WITH] = user_input.get(
+                CONF_SHARES_HARDWARE_WITH, ""
+            )
+            return await self._dispatch_add_post_entities(entity_input)
+
+        return self.async_show_form(
+            step_id="add_device_shares_hardware",
+            data_schema=_shares_hardware_schema(heating_devices, {}),
             description_placeholders={
                 "device_type": DEVICE_TYPE_LABELS_DE.get(device_type, device_type),
                 "device_name": device_name,

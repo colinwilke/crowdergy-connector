@@ -36,6 +36,9 @@ from .const import (
     CONF_USER_ID,
     CONF_VALUE_OFF,
     CONF_VALUE_ON,
+    CONF_VEHICLE_STATUS_VALUE_ERROR,
+    CONF_VEHICLE_STATUS_VALUE_PLUGGED,
+    CONF_VEHICLE_STATUS_VALUE_UNPLUGGED,
     DOMAIN,
     ENTITY_CONTROL_HOLD_ALWAYS,
     ENTITY_CONTROL_HOLD_NEVER,
@@ -396,6 +399,36 @@ class CrowdergyCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
         text = str(state.state)
         return text if text else None
 
+    def _normalised_vehicle_status(
+        self, dev: dict[str, Any], raw: str | None
+    ) -> str | None:
+        """Translate a wallbox's vehicle-status sensor reading into one
+        of the normalised values the backend / iOS expects:
+        'plugged' / 'unplugged' / 'error'. Returns the original string
+        when no mapping is configured (pre-v2.0 config entries) so the
+        iOS app still has something to display while the user re-runs
+        the config flow.
+        """
+        if raw is None:
+            return None
+        plugged = dev.get(CONF_VEHICLE_STATUS_VALUE_PLUGGED, "")
+        unplugged = dev.get(CONF_VEHICLE_STATUS_VALUE_UNPLUGGED, "")
+        error = dev.get(CONF_VEHICLE_STATUS_VALUE_ERROR, "")
+        # If neither plugged nor unplugged is mapped the user hasn't
+        # configured the ternary yet — pass through raw.
+        if not plugged and not unplugged:
+            return raw
+        if plugged and raw == plugged:
+            return "plugged"
+        if unplugged and raw == unplugged:
+            return "unplugged"
+        if error and raw == error:
+            return "error"
+        # The car reported a state the user didn't include in their
+        # mapping. Surface it as 'error' so the iOS UI doesn't silently
+        # treat it as plugged / unplugged.
+        return "error"
+
     def _read_is_on_state(self, dev: dict[str, Any]) -> bool | None:
         """Translate the device's entity_control current state into a
         Boolean `is_on`. Returns None when we can't decide cleanly so the
@@ -517,7 +550,15 @@ class CrowdergyCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
 
             current_power = self._read_power_kw(entity_power)
             soc_percent = self._read_entity_state(entity_soc)
-            vehicle_status = self._read_string(entity_vehicle_status)
+            # Vehicle-status: v2.0 normalises the raw HA state to one
+            # of 'plugged' / 'unplugged' / 'error' using the per-device
+            # mapping the user configured in the wallbox flow. If no
+            # mapping is set yet (pre-v2.0 config entry), we forward
+            # the raw string so the iOS app can still display *some*
+            # status while the user re-runs the flow.
+            vehicle_status = self._normalised_vehicle_status(
+                dev, self._read_string(entity_vehicle_status)
+            )
             # Read charge_mode back from HA so an external change (user
             # flipping the wallbox select in HA directly, or the
             # device's own logic) propagates up to iOS. Was previously

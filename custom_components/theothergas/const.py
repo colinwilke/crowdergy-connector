@@ -23,7 +23,17 @@ CONF_REFRESH_TOKEN = "refresh_token"
 CONF_USER_ID = "user_id"
 CONF_DEVICES = "devices"
 CONF_DEVICE_ID = "device_id"
-DEVICE_TYPES = ["solar", "battery", "wallbox", "grid", "heatpump", "generic", "haushalt"]
+# Connector v2.0 splits the legacy 'heatpump' type into 'heating' +
+# 'warmwater'. Each has its own thermal model in the joint MPC; a
+# warmwater device can declare it shares a compressor with a heating
+# device via CONF_SHARES_HARDWARE_WITH (joint-power constraint server-
+# side). Existing 'heatpump' config entries from v1.x are no longer
+# recognised — the user must delete and re-add as heating + warmwater.
+DEVICE_TYPES = [
+    "solar", "battery", "wallbox", "grid",
+    "heating", "warmwater",
+    "generic", "haushalt",
+]
 UPDATE_INTERVAL = 30
 
 CONF_DEVICE_NAME = "device_name"
@@ -79,6 +89,28 @@ CONF_VALUE_OFF = "value_off"
 # wallbox integration). Distinct from entity_control because the user
 # wants three-way manual control rather than a binary on/off mapping.
 CONF_ENTITY_CHARGE_MODE = "entity_charge_mode"
+
+# Wallbox-only ternary mapping for the vehicle-status sensor (v2.0+).
+# Pre-v2.0 the connector forwarded the raw HA state string and the
+# backend / iOS tried to interpret it from localized labels — fragile.
+# Now the user maps each of their wallbox's possible states to one of
+# three normalised values:
+#   * 'plugged'    — a car is connected (charging / connected / paused / …)
+#   * 'unplugged'  — no car (idle / disconnected / …)
+#   * 'error'      — fault / authorisation error / cable error
+# Coordinator normalises before pushing; mapping stays local to HA.
+# If none of the three values is configured the connector falls back
+# to passing the raw string (back-compat with pre-v2.0 config entries).
+CONF_VEHICLE_STATUS_VALUE_PLUGGED = "vehicle_status_value_plugged"
+CONF_VEHICLE_STATUS_VALUE_UNPLUGGED = "vehicle_status_value_unplugged"
+CONF_VEHICLE_STATUS_VALUE_ERROR = "vehicle_status_value_error"
+
+# Warmwater-only: the backend device id of the heating device that
+# shares the same compressor as this warmwater device. Sent to the
+# backend on POST /devices so the joint solver can enforce
+# `P_heat + P_ww ≤ P_compressor_max`. Optional — leave empty for a
+# standalone WW heater on a separate appliance.
+CONF_SHARES_HARDWARE_WITH = "shares_hardware_with_device_id"
 
 # Hold-mode for entity_control: how the connector handles devices whose
 # Modbus registers / OCPP transaction state revert to a default after a

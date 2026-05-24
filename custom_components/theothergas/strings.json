@@ -108,6 +108,32 @@
         },
         "submit": "Next"
       },
+      "device_vehicle_status": {
+        "title": "{device_name} ({device_type}) — vehicle-status mapping",
+        "description": "Which raw values from \"{entity_vehicle_status}\" mean what? Crowdergy normalises everything to plugged / unplugged / error. Any value not listed below is treated as error.",
+        "data": {
+          "vehicle_status_value_plugged": "Plugged-in value",
+          "vehicle_status_value_unplugged": "Unplugged value",
+          "vehicle_status_value_error": "Error value (optional)"
+        },
+        "data_description": {
+          "vehicle_status_value_plugged": "Value reported when a car is connected — e.g. \"connected\", \"charging\", \"plugged_in\".",
+          "vehicle_status_value_unplugged": "Value reported when no car is connected — e.g. \"idle\", \"disconnected\".",
+          "vehicle_status_value_error": "Value reported when something is wrong — e.g. \"error\", \"fault\". Optional."
+        },
+        "submit": "Next"
+      },
+      "device_shares_hardware": {
+        "title": "{device_name} ({device_type}) — shared compressor",
+        "description": "Does this hot-water device share a compressor with a heating device you already added? Crowdergy then enforces a joint power limit so the two never demand more than the compressor can deliver.",
+        "data": {
+          "shares_hardware_with_device_id": "Heating device on the same compressor (optional)"
+        },
+        "data_description": {
+          "shares_hardware_with_device_id": "Pick the heating device the hot-water unit is physically coupled with. Leave blank for standalone DHW heaters on a separate compressor."
+        },
+        "submit": "Next"
+      },
       "add_more": {
         "title": "Add another device?",
         "description": "You can add more devices or finish setup.",
@@ -214,6 +240,32 @@
           "value_off": "e.g. \"Lock Mode\", 0, \"off\"."
         },
         "submit": "OK"
+      },
+      "add_device_vehicle_status": {
+        "title": "{device_name} ({device_type}) — vehicle-status mapping",
+        "description": "Which raw values from \"{entity_vehicle_status}\" mean what? Crowdergy normalises everything to plugged / unplugged / error. Any value not listed below is treated as error.",
+        "data": {
+          "vehicle_status_value_plugged": "Plugged-in value",
+          "vehicle_status_value_unplugged": "Unplugged value",
+          "vehicle_status_value_error": "Error value (optional)"
+        },
+        "data_description": {
+          "vehicle_status_value_plugged": "Value reported when a car is connected — e.g. \"connected\", \"charging\", \"plugged_in\".",
+          "vehicle_status_value_unplugged": "Value reported when no car is connected — e.g. \"idle\", \"disconnected\".",
+          "vehicle_status_value_error": "Value reported when something is wrong — e.g. \"error\", \"fault\". Optional."
+        },
+        "submit": "Next"
+      },
+      "add_device_shares_hardware": {
+        "title": "{device_name} ({device_type}) — shared compressor",
+        "description": "Does this hot-water device share a compressor with a heating device you already added? Crowdergy then enforces a joint power limit so the two never demand more than the compressor can deliver.",
+        "data": {
+          "shares_hardware_with_device_id": "Heating device on the same compressor (optional)"
+        },
+        "data_description": {
+          "shares_hardware_with_device_id": "Pick the heating device the hot-water unit is physically coupled with. Leave blank for standalone DHW heaters on a separate compressor."
+        },
+        "submit": "Next"
       },
       "edit_device": {
         "title": "Edit device",
