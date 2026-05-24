@@ -614,8 +614,78 @@ async def _resolve_location_defaults(hass) -> dict[str, str]:
     }
 
 
+async def _refresh_token(
+    api_url: str, refresh_token: str
+) -> tuple[str, str] | None:
+    """One-shot token refresh for config-flow HTTP calls. The
+    coordinator has its own refresh path on `_authenticated_request`;
+    config-flow paths (register / update / delete) are too rare to
+    justify the same machinery, so this small helper covers them.
+    Returns (access_token, refresh_token) on success, None otherwise."""
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.post(
+                f"{api_url}/api/v1/auth/refresh",
+                json={"refresh_token": refresh_token},
+            )
+        if response.status_code == 200:
+            tokens = response.json()
+            return tokens["access_token"], tokens["refresh_token"]
+    except (httpx.HTTPStatusError, httpx.RequestError) as err:
+        _LOGGER.error("Token refresh failed in config flow: %s", err)
+    return None
+
+
+async def _authenticated_config_request(
+    hass,
+    entry,
+    method: str,
+    path: str,
+    **kwargs,
+) -> httpx.Response:
+    """Run an authenticated HTTP call against the backend from the
+    config / options flow. Retries once with a fresh access token
+    when the first attempt comes back 401 — same behaviour as the
+    coordinator's `_authenticated_request`, just without the
+    persistent `httpx.AsyncClient` (config-flow calls are rare and
+    short-lived). Persists rotated tokens back into the config
+    entry so the next call starts from the new pair."""
+    api_url = entry.data[CONF_API_URL]
+    access = entry.data[CONF_ACCESS_TOKEN]
+    refresh = entry.data[CONF_REFRESH_TOKEN]
+
+    async def _do(token: str) -> httpx.Response:
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            return await client.request(
+                method,
+                f"{api_url}{path}",
+                headers={"Authorization": f"Bearer {token}"},
+                **kwargs,
+            )
+
+    response = await _do(access)
+    if response.status_code == 401:
+        rotated = await _refresh_token(api_url, refresh)
+        if rotated is not None:
+            new_access, new_refresh = rotated
+            new_data = {
+                **entry.data,
+                CONF_ACCESS_TOKEN: new_access,
+                CONF_REFRESH_TOKEN: new_refresh,
+            }
+            hass.config_entries.async_update_entry(entry, data=new_data)
+            response = await _do(new_access)
+    return response
+
+
 async def _delete_device_backend(api_url: str, token: str, device_id: str) -> None:
-    """Delete a device from the backend."""
+    """Delete a device from the backend.
+
+    Legacy single-token signature kept for the (small) number of
+    call sites that haven't been routed through
+    `_authenticated_config_request` yet. New call sites should use
+    the entry-aware variant so 401s auto-refresh.
+    """
     async with httpx.AsyncClient(timeout=15.0) as client:
         response = await client.delete(
             f"{api_url}/api/v1/devices/{device_id}",
@@ -1288,23 +1358,18 @@ class CrowdergyOptionsFlow(OptionsFlow):
             entity_input = _flatten_sections(user_input)
             new_entity_control = entity_input.get(CONF_ENTITY_CONTROL, "")
             old_entity_control = target.get(CONF_ENTITY_CONTROL, "")
-            # Carry already-stored extras (v2.0+ shares_hardware, vehicle
-            # status mapping) forward by default — the dispatcher below
-            # skips its step if the value is already present in
-            # entity_input. The user can still re-edit them through the
-            # dedicated step by entering the relevant entity afresh.
-            for key in (
-                CONF_SHARES_HARDWARE_WITH,
-                CONF_VEHICLE_STATUS_VALUE_PLUGGED,
-                CONF_VEHICLE_STATUS_VALUE_UNPLUGGED,
-                CONF_VEHICLE_STATUS_VALUE_ERROR,
-            ):
-                if key in target and key not in entity_input:
-                    entity_input[key] = target[key]
-            # Carry value_on/off / hold-mode into the dispatcher so the
-            # values step can skip when nothing changed.
-            entity_input.setdefault(CONF_VALUE_ON, target.get(CONF_VALUE_ON, ""))
-            entity_input.setdefault(CONF_VALUE_OFF, target.get(CONF_VALUE_OFF, ""))
+            # NOTE: previously this block also carried v2.0+ extras
+            # (shares_hardware, vehicle_status mapping) into
+            # entity_input, but that made the dispatcher's "key
+            # already present → skip step" logic fire and the user
+            # never saw the step. The relevant step's `defaults`
+            # argument pulls from `target` directly, so leaving the
+            # keys ABSENT from entity_input keeps the step visible
+            # AND pre-filled.
+            #
+            # Hold-mode + value_on/off still get carried because the
+            # values step IS skipped on unchanged entities — they're
+            # not part of the user-visible step set anymore.
             entity_input.setdefault(
                 CONF_ENTITY_CONTROL_HOLD,
                 target.get(CONF_ENTITY_CONTROL_HOLD, ENTITY_CONTROL_HOLD_ALWAYS),
@@ -1313,6 +1378,10 @@ class CrowdergyOptionsFlow(OptionsFlow):
                 # Remapped — drop old values, force step 3 to start fresh.
                 entity_input.pop(CONF_VALUE_ON, None)
                 entity_input.pop(CONF_VALUE_OFF, None)
+            else:
+                # Same entity — carry stored values forward.
+                entity_input.setdefault(CONF_VALUE_ON, target.get(CONF_VALUE_ON, ""))
+                entity_input.setdefault(CONF_VALUE_OFF, target.get(CONF_VALUE_OFF, ""))
             return await self._dispatch_edit_post_entities(target, entity_input)
 
         return self.async_show_form(
@@ -1523,11 +1592,18 @@ class CrowdergyOptionsFlow(OptionsFlow):
         if user_input is not None:
             device_id = user_input["device_to_remove"]
             try:
-                await _delete_device_backend(
-                    self._entry.data[CONF_API_URL],
-                    self._entry.data[CONF_ACCESS_TOKEN],
-                    device_id,
+                response = await _authenticated_config_request(
+                    self.hass,
+                    self._entry,
+                    "DELETE",
+                    f"/api/v1/devices/{device_id}",
                 )
+                # 404 is a benign "already gone" — treat as success
+                # so the user can clean up an orphaned HA-side device
+                # even after the backend row vanished (e.g. test
+                # cleanup or another client deleted it concurrently).
+                if response.status_code != 404:
+                    response.raise_for_status()
             except (httpx.HTTPStatusError, httpx.RequestError) as err:
                 _LOGGER.error("Failed to delete device: %s", err)
                 errors["base"] = "cannot_connect"
