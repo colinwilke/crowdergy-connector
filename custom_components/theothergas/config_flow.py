@@ -77,7 +77,10 @@ def _is_binary_entity(entity_id: str) -> bool:
 # value_on + value_off) rendered as a separate section.
 _READ_FIELDS: dict[str, list[str]] = {
     "solar":     [CONF_ENTITY_POWER, CONF_ENTITY_ENERGY_TOTAL],
-    "grid":      [CONF_ENTITY_POWER, CONF_ENTITY_ENERGY_TOTAL],
+    "grid":      [
+        CONF_ENTITY_POWER, CONF_ENTITY_ENERGY_TOTAL,
+        CONF_ENTITY_ENERGY_DISCHARGED_TOTAL,
+    ],
     "heatpump":  [
         CONF_ENTITY_POWER, CONF_ENTITY_CURRENT_TEMP, CONF_ENTITY_TARGET_TEMP,
         CONF_ENTITY_ENERGY_TOTAL,

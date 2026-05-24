@@ -323,9 +323,10 @@ class CrowdergyCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
         last = self._last_send_at.get(device_id, 0.0)
         if time.time() - last >= PER_DEVICE_HEARTBEAT_INTERVAL:
             return True
-        if (payload.get("energy_kwh_delta") or 0.0) > 0:
-            return True
-        if (payload.get("energy_kwh_discharged_delta") or 0.0) > 0:
+        # Any non-zero energy Δ (signed for storage devices, positive
+        # otherwise) is reason enough to land a row — every kWh
+        # matters for the chart totals.
+        if abs(payload.get("energy_kwh_delta") or 0.0) > 0:
             return True
         for key, threshold in SEND_THRESHOLDS.items():
             cur, old = payload.get(key), prev.get(key)
@@ -538,24 +539,46 @@ class CrowdergyCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
             # (sensor reset / replacement) so the backend never lands
             # a negative contribution. `_prev_energy_kwh` is updated
             # ONLY after a successful PATCH below.
-            energy_kwh_delta: float | None = None
-            if energy_kwh_total is not None:
-                prev = self._prev_energy_kwh.get(device_id)
-                if prev is not None:
-                    delta = energy_kwh_total - prev
-                    energy_kwh_delta = delta if delta > 0 else 0.0
-            # Battery-only second stream: same Δ rules against its
-            # own _prev_ bookkeeping. None when the user hasn't
-            # mapped this entity (typical for non-battery devices).
-            energy_kwh_discharged_total = self._read_energy_kwh(
+            # Per-tick `energy_kwh_delta`. Sign convention matches the
+            # underlying power_kw convention for the device type:
+            #   * heatpump / wallbox / generic / haushalt / solar
+            #     (one entity mapped) → POSITIVE consumption Δ,
+            #     unchanged from pre-v1.24.
+            #   * battery / grid (two entities mapped, v1.24+)
+            #     → signed net `delivered − consumed`. Positive
+            #     when the device delivered net energy back to the
+            #     home (battery discharge, grid import). Matches the
+            #     existing battery/grid power_kw sign convention.
+            #
+            # `entity_energy_total` is the "consumed by device"
+            # counter (battery: charged; grid: imported); the
+            # optional `entity_energy_discharged_total` is the
+            # "delivered by device" counter (battery: discharged;
+            # grid: exported; later V2G wallbox: V2G-out). The
+            # backend stores whatever signed value we emit here.
+            energy_kwh_total_out = self._read_energy_kwh(
                 entity_energy_discharged_total
             )
-            energy_kwh_discharged_delta: float | None = None
-            if energy_kwh_discharged_total is not None:
-                prev_d = self._prev_energy_kwh_discharged.get(device_id)
-                if prev_d is not None:
-                    delta_d = energy_kwh_discharged_total - prev_d
-                    energy_kwh_discharged_delta = delta_d if delta_d > 0 else 0.0
+            in_delta: float | None = None
+            out_delta: float | None = None
+            if energy_kwh_total is not None:
+                prev_in = self._prev_energy_kwh.get(device_id)
+                if prev_in is not None:
+                    raw = energy_kwh_total - prev_in
+                    in_delta = raw if raw > 0 else 0.0
+            if energy_kwh_total_out is not None:
+                prev_out = self._prev_energy_kwh_discharged.get(device_id)
+                if prev_out is not None:
+                    raw = energy_kwh_total_out - prev_out
+                    out_delta = raw if raw > 0 else 0.0
+            energy_kwh_delta: float | None = None
+            if out_delta is not None:
+                # Two-entity storage device → signed net.
+                energy_kwh_delta = out_delta - (in_delta or 0.0)
+            elif in_delta is not None:
+                # Single-entity consumption (or production) device →
+                # positive Δ as before.
+                energy_kwh_delta = in_delta
             # Derive is_on from the live HA state of entity_control so a
             # user-driven HA-side toggle propagates up to the backend
             # (and from there to iOS via SSE). Returns None when we
@@ -586,8 +609,6 @@ class CrowdergyCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
                 payload["energy_kwh_total"] = energy_kwh_total
             if energy_kwh_delta is not None:
                 payload["energy_kwh_delta"] = energy_kwh_delta
-            if energy_kwh_discharged_delta is not None:
-                payload["energy_kwh_discharged_delta"] = energy_kwh_discharged_delta
             if is_on is not None:
                 payload["is_on"] = is_on
 
@@ -609,9 +630,9 @@ class CrowdergyCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
                     self._last_send_at[device_id] = time.time()
                     if energy_kwh_total is not None:
                         self._prev_energy_kwh[device_id] = energy_kwh_total
-                    if energy_kwh_discharged_total is not None:
+                    if energy_kwh_total_out is not None:
                         self._prev_energy_kwh_discharged[device_id] = (
-                            energy_kwh_discharged_total
+                            energy_kwh_total_out
                         )
                 except httpx.HTTPStatusError as err:
                     _LOGGER.error(

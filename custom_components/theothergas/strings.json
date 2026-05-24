@@ -68,7 +68,7 @@
               "entity_current_temp_c": "Current-temperature entity",
               "entity_target_temp_c": "Target-temperature entity",
               "entity_energy_total": "Total energy entity (kWh, cumulative)",
-              "entity_energy_discharged_total": "Discharged energy entity (kWh, cumulative) — battery only"
+              "entity_energy_discharged_total": "Out-flow energy entity (kWh, cumulative) — battery / grid"
             },
             "data_description": {
               "entity_current_power_kw": "Sensor providing current power in W or kW.",
@@ -77,7 +77,7 @@
               "entity_current_temp_c": "Current temperature in °C — e.g. flow temperature of a heat pump or the inside temperature of a DHW tank. Shown next to the heat-pump tile in the app.",
               "entity_target_temp_c": "Current target / setpoint temperature in °C. Optional — when empty the app only shows the current temperature. Crowdergy does NOT write this entity; you keep controlling the setpoint via your HA heating integration. Crowdergy reads the value to plan heating windows.",
               "entity_energy_total": "Sensor with state_class total_increasing in kWh (lifetime counter). Crowdergy computes daily/monthly/yearly consumption via delta math. Optional — without this sensor the app keeps showing kW only.",
-              "entity_energy_discharged_total": "Battery only: a second total_increasing counter in kWh for the discharge side. If your battery exposes separate sensors for charged and discharged energy, enter the discharge counter here — the app will then show charging and discharging separately in the kWh chart. Optional."
+              "entity_energy_discharged_total": "Optional second total_increasing kWh counter for the OTHER direction. Battery: discharge counter (`energy_total` above carries the charge counter). Grid: export counter (`energy_total` carries the import counter). When both are mapped Crowdergy stores the net signed value so the chart shows one bar per slot (consumption / import vs export / discharge). Leave empty if your inverter only exposes one signed sensor — that single value is used as-is."
             }
           },
           "control_section": {
@@ -175,7 +175,7 @@
               "entity_current_temp_c": "Current-temperature entity",
               "entity_target_temp_c": "Target-temperature entity",
               "entity_energy_total": "Total energy entity (kWh, cumulative)",
-              "entity_energy_discharged_total": "Discharged energy entity (kWh, cumulative) — battery only"
+              "entity_energy_discharged_total": "Out-flow energy entity (kWh, cumulative) — battery / grid"
             },
             "data_description": {
               "entity_current_power_kw": "Sensor providing current power in W or kW.",
@@ -184,7 +184,7 @@
               "entity_current_temp_c": "Current temperature in °C — e.g. flow temperature of a heat pump or the inside temperature of a DHW tank. Shown next to the heat-pump tile in the app.",
               "entity_target_temp_c": "Current target / setpoint temperature in °C. Optional — when empty the app only shows the current temperature. Crowdergy does NOT write this entity; you keep controlling the setpoint via your HA heating integration. Crowdergy reads the value to plan heating windows.",
               "entity_energy_total": "Sensor with state_class total_increasing in kWh (lifetime counter). Crowdergy computes daily/monthly/yearly consumption via delta math. Optional — without this sensor the app keeps showing kW only.",
-              "entity_energy_discharged_total": "Battery only: a second total_increasing counter in kWh for the discharge side. If your battery exposes separate sensors for charged and discharged energy, enter the discharge counter here — the app will then show charging and discharging separately in the kWh chart. Optional."
+              "entity_energy_discharged_total": "Optional second total_increasing kWh counter for the OTHER direction. Battery: discharge counter (`energy_total` above carries the charge counter). Grid: export counter (`energy_total` carries the import counter). When both are mapped Crowdergy stores the net signed value so the chart shows one bar per slot (consumption / import vs export / discharge). Leave empty if your inverter only exposes one signed sensor — that single value is used as-is."
             }
           },
           "control_section": {
@@ -260,7 +260,7 @@
               "entity_current_temp_c": "Current-temperature entity",
               "entity_target_temp_c": "Target-temperature entity",
               "entity_energy_total": "Total energy entity (kWh, cumulative)",
-              "entity_energy_discharged_total": "Discharged energy entity (kWh, cumulative) — battery only"
+              "entity_energy_discharged_total": "Out-flow energy entity (kWh, cumulative) — battery / grid"
             },
             "data_description": {
               "entity_current_power_kw": "Sensor providing current power in W or kW.",
@@ -269,7 +269,7 @@
               "entity_current_temp_c": "Current temperature in °C — e.g. flow temperature of a heat pump or the inside temperature of a DHW tank. Shown next to the heat-pump tile in the app.",
               "entity_target_temp_c": "Current target / setpoint temperature in °C. Optional — when empty the app only shows the current temperature. Crowdergy does NOT write this entity; you keep controlling the setpoint via your HA heating integration. Crowdergy reads the value to plan heating windows.",
               "entity_energy_total": "Sensor with state_class total_increasing in kWh (lifetime counter). Crowdergy computes daily/monthly/yearly consumption via delta math. Optional — without this sensor the app keeps showing kW only.",
-              "entity_energy_discharged_total": "Battery only: a second total_increasing counter in kWh for the discharge side. If your battery exposes separate sensors for charged and discharged energy, enter the discharge counter here — the app will then show charging and discharging separately in the kWh chart. Optional."
+              "entity_energy_discharged_total": "Optional second total_increasing kWh counter for the OTHER direction. Battery: discharge counter (`energy_total` above carries the charge counter). Grid: export counter (`energy_total` carries the import counter). When both are mapped Crowdergy stores the net signed value so the chart shows one bar per slot (consumption / import vs export / discharge). Leave empty if your inverter only exposes one signed sensor — that single value is used as-is."
             }
           },
           "control_section": {

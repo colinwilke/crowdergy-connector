@@ -69,7 +69,7 @@
               "entity_current_temp_c": "Ist-Temperatur-Sensor",
               "entity_target_temp_c": "Soll-Temperatur-Sensor",
               "entity_energy_total": "Gesamtenergie-Zähler (kWh, kumulativ)",
-              "entity_energy_discharged_total": "Entlade-Energiezähler (kWh, kumulativ) — nur Batterie"
+              "entity_energy_discharged_total": "Abfluss-Energiezähler (kWh, kumulativ) — Batterie / Netz"
             },
             "data_description": {
               "entity_current_power_kw": "Aktuelle Leistung in W oder kW (Sensor-Entität). Pflichtfeld — daraus berechnen wir die Live-Anzeige und beim Kalibrieren deinen Flex-Beitrag (kW). Bei Batterie/Netz: positive Werte = Bezug, negative = Abgabe.",
@@ -78,7 +78,7 @@
               "entity_current_temp_c": "Aktuelle Temperatur in °C — z. B. die Vorlauftemperatur einer Wärmepumpe oder die Innentemperatur eines Brauchwasser-Boilers. Wird in der App neben dem Wärmepumpen-Tile angezeigt.",
               "entity_target_temp_c": "Aktuelle Soll-/Zieltemperatur in °C. Optional — wenn leer, zeigt die App nur die Ist-Temperatur. Wichtig: Crowdergy schreibt diese Entität nicht; die Soll-Temperatur regelst du wie gewohnt über deine HA-Heizungsintegration. Crowdergy nutzt den Wert später nur, um Heizphasen besser einzuplanen.",
               "entity_energy_total": "Lebensdauer-Energiezähler in kWh (HA-Attribut state_class: total_increasing). Crowdergy speichert den Rohwert und berechnet daraus Tages-/Monats-/Jahresverbrauch via Delta. Optional — Geräte ohne diesen Sensor zeigen weiterhin nur kW. Niemals aus power_kw integrieren, der Drift summiert sich monatlich auf zweistellige Prozent.",
-              "entity_energy_discharged_total": "Nur Batterie: zweiter total_increasing-Zähler in kWh für die Entladeseite. Bei vielen Wechselrichtern liefern getrennte Sensoren „energy charged“ und „energy discharged“ — wenn Du beide hast, trag den Lade-Zähler oben und den Entlade-Zähler hier ein. Die App zeigt dann beide Flüsse separat im kWh-Chart. Optional — ohne diesen Sensor läuft alles wie bisher (ein einziger Δ-Strom)."
+              "entity_energy_discharged_total": "Optionaler zweiter total_increasing-kWh-Zähler für die GEGEN-Richtung. Batterie: Entlade-Zähler (oben steht der Lade-Zähler). Netz: Einspeise-Zähler (oben steht der Bezugs-Zähler). Wenn beide gesetzt, speichert Crowdergy den signed Netto-Wert — die App zeigt dann pro Slot einen Balken (Verbrauch/Bezug vs. Einspeisung/Entladung). Leer lassen, wenn dein Wechselrichter nur einen vorzeichenbehafteten Sensor liefert — der einzelne Wert wird dann direkt übernommen."
             }
           },
           "control_section": {
@@ -188,7 +188,7 @@
               "entity_current_temp_c": "Ist-Temperatur-Sensor",
               "entity_target_temp_c": "Soll-Temperatur-Sensor",
               "entity_energy_total": "Gesamtenergie-Zähler (kWh, kumulativ)",
-              "entity_energy_discharged_total": "Entlade-Energiezähler (kWh, kumulativ) — nur Batterie"
+              "entity_energy_discharged_total": "Abfluss-Energiezähler (kWh, kumulativ) — Batterie / Netz"
             },
             "data_description": {
               "entity_current_power_kw": "Aktuelle Leistung in W oder kW. Pflichtfeld — daraus berechnen wir Live-Anzeige + Flex-Beitrag bei Kalibrierung. Bei Batterie/Netz: positive Werte = Bezug, negative = Abgabe.",
@@ -271,7 +271,7 @@
               "entity_current_temp_c": "Ist-Temperatur-Sensor",
               "entity_target_temp_c": "Soll-Temperatur-Sensor",
               "entity_energy_total": "Gesamtenergie-Zähler (kWh, kumulativ)",
-              "entity_energy_discharged_total": "Entlade-Energiezähler (kWh, kumulativ) — nur Batterie"
+              "entity_energy_discharged_total": "Abfluss-Energiezähler (kWh, kumulativ) — Batterie / Netz"
             },
             "data_description": {
               "entity_current_power_kw": "Aktuelle Leistung in W oder kW. Pflichtfeld. Bei Batterie/Netz: positiv = Bezug, negativ = Abgabe.",
