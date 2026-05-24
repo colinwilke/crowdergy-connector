@@ -339,6 +339,32 @@
         },
         "submit": "Next"
       },
+      "edit_device_vehicle_status": {
+        "title": "{device_name} ({device_type}) — vehicle-status mapping",
+        "description": "Which raw values from \"{entity_vehicle_status}\" mean what? Crowdergy normalises to plugged / unplugged / error. Any unmapped value is treated as error.",
+        "data": {
+          "vehicle_status_value_plugged": "Plugged-in value",
+          "vehicle_status_value_unplugged": "Unplugged value",
+          "vehicle_status_value_error": "Error value (optional)"
+        },
+        "data_description": {
+          "vehicle_status_value_plugged": "Value reported when a car is connected.",
+          "vehicle_status_value_unplugged": "Value reported when no car is connected.",
+          "vehicle_status_value_error": "Value reported when something is wrong. Optional."
+        },
+        "submit": "Next"
+      },
+      "edit_device_shares_hardware": {
+        "title": "{device_name} ({device_type}) — shared compressor",
+        "description": "Does this hot-water device share a compressor with a heating device? Crowdergy then enforces a joint power limit.",
+        "data": {
+          "shares_hardware_with_device_id": "Heating device on the same compressor (optional)"
+        },
+        "data_description": {
+          "shares_hardware_with_device_id": "Pick the heating device coupled with this DHW unit. Leave blank for standalone DHW heaters."
+        },
+        "submit": "Next"
+      },
       "edit_device_values": {
         "title": "{device_name} ({device_type}) — control values",
         "description": "Which values should Crowdergy write to \"{entity_control}\" when the device turns on or off? For select/number/climate entities the picker is filled automatically.",

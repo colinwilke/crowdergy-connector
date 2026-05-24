@@ -347,6 +347,32 @@
           }
         }
       },
+      "edit_device_vehicle_status": {
+        "title": "{device_name} ({device_type}) — Fahrzeugstatus zuordnen",
+        "description": "Welche Rohwerte aus \"{entity_vehicle_status}\" bedeuten was? Crowdergy normalisiert alles auf eingesteckt / nicht eingesteckt / Fehler. Werte unten nicht aufgeführt = Fehler.",
+        "submit": "Weiter",
+        "data": {
+          "vehicle_status_value_plugged": "Wert für: Auto eingesteckt",
+          "vehicle_status_value_unplugged": "Wert für: kein Auto",
+          "vehicle_status_value_error": "Wert für: Fehler (optional)"
+        },
+        "data_description": {
+          "vehicle_status_value_plugged": "Wert, den dein Sensor meldet, sobald ein Auto an der Wallbox hängt.",
+          "vehicle_status_value_unplugged": "Wert für \"keine Verbindung\".",
+          "vehicle_status_value_error": "Wert für Fehler-/Stör-Zustände. Optional."
+        }
+      },
+      "edit_device_shares_hardware": {
+        "title": "{device_name} ({device_type}) — gemeinsamer Verdichter",
+        "description": "Teilt sich dieses Warmwasser-Gerät einen Verdichter mit einer Heizungs-Wärmepumpe? Crowdergy beachtet dann eine gemeinsame Leistungsgrenze.",
+        "submit": "Weiter",
+        "data": {
+          "shares_hardware_with_device_id": "Heizung mit demselben Verdichter (optional)"
+        },
+        "data_description": {
+          "shares_hardware_with_device_id": "Wähle die Heizungs-WP, an die diese WW-Bereitung gekoppelt ist. \"keine Kopplung\" für eigenständige Brauchwasser-WP."
+        }
+      },
       "edit_device_values": {
         "title": "{device_name} ({device_type}) — An/Aus-Werte für die Steuer-Entität",
         "description": "Was soll Crowdergy auf die Steuer-Entität schreiben? Switch / Input-Boolean füllen sich automatisch; bei Select / Number / Climate wählst du manuell.",

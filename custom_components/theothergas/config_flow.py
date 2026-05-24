@@ -1288,35 +1288,154 @@ class CrowdergyOptionsFlow(OptionsFlow):
             entity_input = _flatten_sections(user_input)
             new_entity_control = entity_input.get(CONF_ENTITY_CONTROL, "")
             old_entity_control = target.get(CONF_ENTITY_CONTROL, "")
-            # Step 3 only when entity_control is mapped AND non-binary.
-            # Switch/Light/Fan/Input-Boolean skip the values step since
-            # turn_on / turn_off is implicit.
-            needs_values = (
-                device_type in _CONTROLLABLE_TYPES
-                and new_entity_control
-                and not _is_binary_entity(new_entity_control)
+            # Carry already-stored extras (v2.0+ shares_hardware, vehicle
+            # status mapping) forward by default — the dispatcher below
+            # skips its step if the value is already present in
+            # entity_input. The user can still re-edit them through the
+            # dedicated step by entering the relevant entity afresh.
+            for key in (
+                CONF_SHARES_HARDWARE_WITH,
+                CONF_VEHICLE_STATUS_VALUE_PLUGGED,
+                CONF_VEHICLE_STATUS_VALUE_UNPLUGGED,
+                CONF_VEHICLE_STATUS_VALUE_ERROR,
+            ):
+                if key in target and key not in entity_input:
+                    entity_input[key] = target[key]
+            # Carry value_on/off / hold-mode into the dispatcher so the
+            # values step can skip when nothing changed.
+            entity_input.setdefault(CONF_VALUE_ON, target.get(CONF_VALUE_ON, ""))
+            entity_input.setdefault(CONF_VALUE_OFF, target.get(CONF_VALUE_OFF, ""))
+            entity_input.setdefault(
+                CONF_ENTITY_CONTROL_HOLD,
+                target.get(CONF_ENTITY_CONTROL_HOLD, ENTITY_CONTROL_HOLD_ALWAYS),
             )
-            if needs_values:
-                if new_entity_control != old_entity_control:
-                    # Remapped — drop old values, force step 3 to start fresh.
-                    entity_input.pop(CONF_VALUE_ON, None)
-                    entity_input.pop(CONF_VALUE_OFF, None)
-                else:
-                    # Same entity — carry stored values into step 3 defaults.
-                    entity_input[CONF_VALUE_ON] = target.get(CONF_VALUE_ON, "")
-                    entity_input[CONF_VALUE_OFF] = target.get(CONF_VALUE_OFF, "")
-                # Hold-mode survives a remap (it's about the device, not
-                # the specific entity), so always carry it forward.
-                entity_input[CONF_ENTITY_CONTROL_HOLD] = target.get(
-                    CONF_ENTITY_CONTROL_HOLD, ENTITY_CONTROL_HOLD_ALWAYS
-                )
-                self._edit_pending_entity_input = entity_input
-                return await self.async_step_edit_device_values()
-            return await self._edit_save(target, entity_input)
+            if new_entity_control != old_entity_control:
+                # Remapped — drop old values, force step 3 to start fresh.
+                entity_input.pop(CONF_VALUE_ON, None)
+                entity_input.pop(CONF_VALUE_OFF, None)
+            return await self._dispatch_edit_post_entities(target, entity_input)
 
         return self.async_show_form(
             step_id="edit_device_entities",
             data_schema=_entities_schema(device_type, defaults=target),
+            description_placeholders={
+                "device_type": DEVICE_TYPE_LABELS_DE.get(device_type, device_type),
+                "device_name": device_name,
+            },
+        )
+
+    async def _dispatch_edit_post_entities(
+        self, target: dict[str, Any], entity_input: dict[str, Any]
+    ) -> ConfigFlowResult:
+        """Edit-flow dispatcher mirrors `_dispatch_post_entities` /
+        `_dispatch_add_post_entities`: routes through optional steps
+        (vehicle-status, shares-hardware) before the values step.
+        Same skip logic — when the relevant key is already populated
+        the step is silently skipped, so users only see the step
+        when they actually need to fill it in."""
+        device_type = self._edit_pending_type or target[CONF_DEVICE_TYPE]
+
+        if (
+            device_type == "wallbox"
+            and entity_input.get(CONF_ENTITY_VEHICLE_STATUS)
+            and CONF_VEHICLE_STATUS_VALUE_PLUGGED not in entity_input
+        ):
+            self._edit_pending_entity_input = entity_input
+            return await self.async_step_edit_device_vehicle_status()
+
+        if (
+            device_type == "warmwater"
+            and CONF_SHARES_HARDWARE_WITH not in entity_input
+        ):
+            self._edit_pending_entity_input = entity_input
+            return await self.async_step_edit_device_shares_hardware()
+
+        entity_control = entity_input.get(CONF_ENTITY_CONTROL, "")
+        needs_values = (
+            device_type in _CONTROLLABLE_TYPES
+            and entity_control
+            and not _is_binary_entity(entity_control)
+            # If we already carried value_on / value_off forward from
+            # `target` (same entity, no remap), no need to re-prompt.
+            and not (entity_input.get(CONF_VALUE_ON) or entity_input.get(CONF_VALUE_OFF))
+        )
+        if needs_values:
+            self._edit_pending_entity_input = entity_input
+            return await self.async_step_edit_device_values()
+
+        return await self._edit_save(target, entity_input)
+
+    async def async_step_edit_device_vehicle_status(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Edit-flow variant of the wallbox vehicle-status mapping."""
+        target = next(
+            (d for d in self._devices if d.get(CONF_DEVICE_ID) == self._edit_target_id),
+            None,
+        )
+        if target is None:
+            return await self.async_step_init()
+        device_type = self._edit_pending_type or target[CONF_DEVICE_TYPE]
+        device_name = self._edit_pending_name or target[CONF_DEVICE_NAME]
+        entity_input = dict(self._edit_pending_entity_input or {})
+        entity_vehicle_status = entity_input.get(CONF_ENTITY_VEHICLE_STATUS, "")
+
+        if user_input is not None:
+            entity_input[CONF_VEHICLE_STATUS_VALUE_PLUGGED] = user_input.get(
+                CONF_VEHICLE_STATUS_VALUE_PLUGGED, ""
+            )
+            entity_input[CONF_VEHICLE_STATUS_VALUE_UNPLUGGED] = user_input.get(
+                CONF_VEHICLE_STATUS_VALUE_UNPLUGGED, ""
+            )
+            entity_input[CONF_VEHICLE_STATUS_VALUE_ERROR] = user_input.get(
+                CONF_VEHICLE_STATUS_VALUE_ERROR, ""
+            )
+            return await self._dispatch_edit_post_entities(target, entity_input)
+
+        return self.async_show_form(
+            step_id="edit_device_vehicle_status",
+            data_schema=_vehicle_status_schema(
+                self.hass, entity_vehicle_status, target
+            ),
+            description_placeholders={
+                "device_type": DEVICE_TYPE_LABELS_DE.get(device_type, device_type),
+                "device_name": device_name,
+                "entity_vehicle_status": entity_vehicle_status,
+            },
+        )
+
+    async def async_step_edit_device_shares_hardware(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Edit-flow variant of the warmwater shares-hardware picker.
+        Only the user's OTHER heating devices appear as candidates —
+        a device can't share hardware with itself."""
+        target = next(
+            (d for d in self._devices if d.get(CONF_DEVICE_ID) == self._edit_target_id),
+            None,
+        )
+        if target is None:
+            return await self.async_step_init()
+        device_type = self._edit_pending_type or target[CONF_DEVICE_TYPE]
+        device_name = self._edit_pending_name or target[CONF_DEVICE_NAME]
+        entity_input = dict(self._edit_pending_entity_input or {})
+
+        heating_devices = [
+            {"id": d.get(CONF_DEVICE_ID, ""), "name": d.get(CONF_DEVICE_NAME, "")}
+            for d in self._devices
+            if d.get(CONF_DEVICE_TYPE) == "heating"
+                and d.get(CONF_DEVICE_ID) != self._edit_target_id
+        ]
+
+        if user_input is not None:
+            entity_input[CONF_SHARES_HARDWARE_WITH] = user_input.get(
+                CONF_SHARES_HARDWARE_WITH, ""
+            )
+            return await self._dispatch_edit_post_entities(target, entity_input)
+
+        return self.async_show_form(
+            step_id="edit_device_shares_hardware",
+            data_schema=_shares_hardware_schema(heating_devices, target),
             description_placeholders={
                 "device_type": DEVICE_TYPE_LABELS_DE.get(device_type, device_type),
                 "device_name": device_name,
