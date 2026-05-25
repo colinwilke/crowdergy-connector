@@ -1547,32 +1547,22 @@ class CrowdergyOptionsFlow(OptionsFlow):
 
         if user_input is not None:
             entity_input = _flatten_sections(user_input)
-            new_entity_control = entity_input.get(CONF_ENTITY_CONTROL, "")
-            old_entity_control = target.get(CONF_ENTITY_CONTROL, "")
-            # NOTE: previously this block also carried v2.0+ extras
-            # (shares_hardware, vehicle_status mapping) into
-            # entity_input, but that made the dispatcher's "key
-            # already present → skip step" logic fire and the user
-            # never saw the step. The relevant step's `defaults`
-            # argument pulls from `target` directly, so leaving the
-            # keys ABSENT from entity_input keeps the step visible
-            # AND pre-filled.
-            #
-            # Hold-mode + value_on/off still get carried because the
-            # values step IS skipped on unchanged entities — they're
-            # not part of the user-visible step set anymore.
+            # Hold-mode is invisible in the user-facing flow (every
+            # device gets `always` since v1.20.0). Carry it forward
+            # so dispatch never reasons about it.
             entity_input.setdefault(
                 CONF_ENTITY_CONTROL_HOLD,
                 target.get(CONF_ENTITY_CONTROL_HOLD, ENTITY_CONTROL_HOLD_ALWAYS),
             )
-            if new_entity_control != old_entity_control:
-                # Remapped — drop old values, force step 3 to start fresh.
-                entity_input.pop(CONF_VALUE_ON, None)
-                entity_input.pop(CONF_VALUE_OFF, None)
-            else:
-                # Same entity — carry stored values forward.
-                entity_input.setdefault(CONF_VALUE_ON, target.get(CONF_VALUE_ON, ""))
-                entity_input.setdefault(CONF_VALUE_OFF, target.get(CONF_VALUE_OFF, ""))
+            # value_on / value_off are intentionally NOT carried
+            # forward. Pre-fix the carry caused the dispatcher's
+            # "step already filled → skip" logic to bypass the
+            # values step on every edit, even when the user wanted
+            # to adjust the mapping. The values step's
+            # `_values_schema(defaults=target)` pre-fills the input
+            # fields from the stored device record, so leaving the
+            # keys absent shows the step with the existing values
+            # already typed in — best of both worlds.
             return await self._dispatch_edit_post_entities(target, entity_input)
 
         return self.async_show_form(
@@ -1617,9 +1607,11 @@ class CrowdergyOptionsFlow(OptionsFlow):
             device_type in _CONTROLLABLE_TYPES
             and entity_control
             and not _is_binary_entity(entity_control)
-            # If we already carried value_on / value_off forward from
-            # `target` (same entity, no remap), no need to re-prompt.
-            and not (entity_input.get(CONF_VALUE_ON) or entity_input.get(CONF_VALUE_OFF))
+            # Re-entry guard: after the values step submits, it adds
+            # CONF_VALUE_ON to entity_input, so subsequent dispatches
+            # skip the step. The values step's defaults pre-fill from
+            # `target` on first show.
+            and CONF_VALUE_ON not in entity_input
         )
         if needs_values:
             self._edit_pending_entity_input = entity_input
