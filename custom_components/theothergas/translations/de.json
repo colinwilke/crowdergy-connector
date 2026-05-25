@@ -108,6 +108,21 @@
           "value_off": "Was schreiben wir wenn Crowdergy Gerät aus sagt? Wichtig: meist NICHT der Standard-/Normal-Modus, sondern aktiv nicht laufen. Beispiele:\n• Wallbox-Strom-Limit (Number): 0 (= Pause)\n• Wallbox-Lock-Switch: on (= Lock setzen)\n• SG-Ready-Select: Sperre oder dein Hersteller-Äquivalent\n• Allgemeiner Switch: off"
         }
       },
+      "device_charge_mode_values": {
+        "title": "{device_name} ({device_type}) — Lademodus zuordnen (Aus / An / Solaroptimiert)",
+        "description": "Welche Optionen von \"{entity_charge_mode}\" entsprechen welchen Crowdergy-Modi? Pro ausgefülltem Feld zeigt die iOS-Kachel einen Button (zusätzlich gibt es immer einen AI-Button). Felder leer lassen blendet den jeweiligen Modus in der App aus.",
+        "submit": "Weiter",
+        "data": {
+          "charge_mode_value_lock": "Aus",
+          "charge_mode_value_power": "An",
+          "charge_mode_value_solar": "Solaroptimiert"
+        },
+        "data_description": {
+          "charge_mode_value_lock": "Wallbox-Option, die das Laden SPERRT (z. B. \"Lock Mode\", \"Aus\").",
+          "charge_mode_value_power": "Wallbox-Option, die mit MAX-Leistung lädt (z. B. \"Power Mode\", \"Boost\").",
+          "charge_mode_value_solar": "Wallbox-Option, die PV-Überschuss folgt (z. B. \"Solar Pure Mode\", \"Eco\")."
+        }
+      },
       "device_vehicle_status": {
         "title": "{device_name} ({device_type}) — Fahrzeugstatus zuordnen",
         "description": "Welche Rohwerte aus \"{entity_vehicle_status}\" bedeuten was? Crowdergy normalisiert alles auf eingesteckt / nicht eingesteckt / Fehler — dann ist die App-Logik unabhängig von der konkreten Wallbox-Integration. Werte, die du unten nicht aufführst, behandelt Crowdergy als Fehler.",
@@ -251,6 +266,21 @@
           "value_off": "Aktiv nicht laufen — meist nicht Normal, sondern z. B.: Wallbox-Strom-Limit 0 (= Pause); SG-Ready-Select Sperre; Lock-Switch on (= sperren); Allgemein off."
         }
       },
+      "add_device_charge_mode_values": {
+        "title": "{device_name} ({device_type}) — Lademodus zuordnen (Aus / An / Solaroptimiert)",
+        "description": "Welche Optionen von \"{entity_charge_mode}\" entsprechen welchen Crowdergy-Modi? Pro ausgefülltem Feld zeigt die iOS-Kachel einen Button (zusätzlich gibt es immer einen AI-Button). Felder leer lassen blendet den jeweiligen Modus in der App aus.",
+        "submit": "Weiter",
+        "data": {
+          "charge_mode_value_lock": "Aus",
+          "charge_mode_value_power": "An",
+          "charge_mode_value_solar": "Solaroptimiert"
+        },
+        "data_description": {
+          "charge_mode_value_lock": "Wallbox-Option, die das Laden SPERRT (z. B. \"Lock Mode\", \"Aus\").",
+          "charge_mode_value_power": "Wallbox-Option, die mit MAX-Leistung lädt (z. B. \"Power Mode\", \"Boost\").",
+          "charge_mode_value_solar": "Wallbox-Option, die PV-Überschuss folgt (z. B. \"Solar Pure Mode\", \"Eco\")."
+        }
+      },
       "add_device_vehicle_status": {
         "title": "{device_name} ({device_type}) — Fahrzeugstatus zuordnen",
         "description": "Welche Rohwerte aus \"{entity_vehicle_status}\" bedeuten was? Crowdergy normalisiert alles auf eingesteckt / nicht eingesteckt / Fehler — dann ist die App-Logik unabhängig von der konkreten Wallbox-Integration. Werte, die du unten nicht aufführst, behandelt Crowdergy als Fehler.",
@@ -345,6 +375,21 @@
               "entity_charge_mode": "Nur Wallbox: Select-Entität für den App-Lademodus-Picker. Unabhängig von Crowdergize. Optional."
             }
           }
+        }
+      },
+      "edit_device_charge_mode_values": {
+        "title": "{device_name} ({device_type}) — Lademodus zuordnen (Aus / An / Solaroptimiert)",
+        "description": "Passe an, welche Optionen von \"{entity_charge_mode}\" welchem Crowdergy-Modus entsprechen. Felder leer lassen blendet den jeweiligen Modus-Button in der iOS-Kachel aus.",
+        "submit": "Weiter",
+        "data": {
+          "charge_mode_value_lock": "Aus",
+          "charge_mode_value_power": "An",
+          "charge_mode_value_solar": "Solaroptimiert"
+        },
+        "data_description": {
+          "charge_mode_value_lock": "Wallbox-Option, die das Laden SPERRT.",
+          "charge_mode_value_power": "Wallbox-Option, die mit MAX-Leistung lädt.",
+          "charge_mode_value_solar": "Wallbox-Option, die PV-Überschuss folgt."
         }
       },
       "edit_device_vehicle_status": {

@@ -90,6 +90,24 @@ CONF_VALUE_OFF = "value_off"
 # wants three-way manual control rather than a binary on/off mapping.
 CONF_ENTITY_CHARGE_MODE = "entity_charge_mode"
 
+# Wallbox-only ternary mapping for the charge-mode select entity (v2.2+).
+# The Crowdergy app exposes three explicit modes — "Aus", "An",
+# "Solaroptimiert" — plus the AI auto-pilot. Each maps onto one of the
+# wallbox's HA select-options (e.g. "Lock Mode" / "Power Mode" /
+# "Solar Pure Mode" on a go-eCharger; "Off" / "Boost" / "Eco" on
+# others). v2.1 and earlier had the user enter these strings in the
+# iOS app — moving the mapping here keeps all infrastructure plumbing
+# in one place alongside CONF_VALUE_ON / OFF and CONF_VEHICLE_STATUS_*.
+#
+# Internal token names track the solver's vocabulary:
+#   * lock  → "Aus"             (charging blocked)
+#   * power → "An"              (max-power push)
+#   * solar → "Solaroptimiert"  (PV-surplus follow)
+# Any mode the user leaves blank simply doesn't get a button in iOS.
+CONF_CHARGE_MODE_VALUE_LOCK = "charge_mode_value_lock"
+CONF_CHARGE_MODE_VALUE_POWER = "charge_mode_value_power"
+CONF_CHARGE_MODE_VALUE_SOLAR = "charge_mode_value_solar"
+
 # Wallbox-only ternary mapping for the vehicle-status sensor (v2.0+).
 # Pre-v2.0 the connector forwarded the raw HA state string and the
 # backend / iOS tried to interpret it from localized labels — fragile.

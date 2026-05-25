@@ -41,6 +41,9 @@ from .const import (
     CONF_VEHICLE_STATUS_VALUE_PLUGGED,
     CONF_VEHICLE_STATUS_VALUE_UNPLUGGED,
     CONF_VEHICLE_STATUS_VALUE_ERROR,
+    CONF_CHARGE_MODE_VALUE_LOCK,
+    CONF_CHARGE_MODE_VALUE_POWER,
+    CONF_CHARGE_MODE_VALUE_SOLAR,
     CONF_SHARES_HARDWARE_WITH,
     ENTITY_CONTROL_HOLD_ALWAYS,
     DEFAULT_API_URL,
@@ -409,6 +412,51 @@ def _vehicle_status_schema(
     })
 
 
+# ── v2.2: charge-mode-values ternary mapping (wallbox-only) ─────────────────
+
+
+def _charge_mode_values_schema(
+    hass, entity_charge_mode: str, defaults: dict[str, Any] | None = None
+) -> vol.Schema:
+    """Schema for the three Lademodus mappings — Aus / An / Solaroptimiert
+    → the wallbox's HA select-options. Mirrors `_vehicle_status_schema`:
+    introspects the select entity's `options` attribute to render a
+    dropdown when available, falls back to free-text otherwise. All
+    three fields are optional — modes the user leaves blank simply
+    don't get a button in the iOS tile.
+    """
+    d = defaults or {}
+
+    field_type: Any = str
+    if entity_charge_mode:
+        domain = entity_charge_mode.split(".", 1)[0]
+        state = hass.states.get(entity_charge_mode)
+        if domain in ("select", "input_select") and state is not None:
+            opts = state.attributes.get("options") or []
+            if opts:
+                field_type = selector.SelectSelector(
+                    selector.SelectSelectorConfig(
+                        options=[
+                            selector.SelectOptionDict(value=o, label=o)
+                            for o in opts
+                        ],
+                        mode=selector.SelectSelectorMode.DROPDOWN,
+                    )
+                )
+
+    def _field(key: str) -> Any:
+        default = d.get(key) or ""
+        if default:
+            return vol.Optional(key, default=default)
+        return vol.Optional(key)
+
+    return vol.Schema({
+        _field(CONF_CHARGE_MODE_VALUE_LOCK): field_type,
+        _field(CONF_CHARGE_MODE_VALUE_POWER): field_type,
+        _field(CONF_CHARGE_MODE_VALUE_SOLAR): field_type,
+    })
+
+
 # ── v2.0: shares-hardware picker (warmwater-only) ──────────────────────────
 
 
@@ -489,6 +537,18 @@ def _build_device_record(
         CONF_VEHICLE_STATUS_VALUE_ERROR: entity_input.get(
             CONF_VEHICLE_STATUS_VALUE_ERROR, ""
         ),
+        # v2.2: wallbox-only Lademodus-Werte (Aus / An / Solaroptimiert
+        # → wallbox HA select-options). Persisted here AND POSTed to
+        # the backend so iOS knows which mode buttons to render.
+        CONF_CHARGE_MODE_VALUE_LOCK: entity_input.get(
+            CONF_CHARGE_MODE_VALUE_LOCK, ""
+        ),
+        CONF_CHARGE_MODE_VALUE_POWER: entity_input.get(
+            CONF_CHARGE_MODE_VALUE_POWER, ""
+        ),
+        CONF_CHARGE_MODE_VALUE_SOLAR: entity_input.get(
+            CONF_CHARGE_MODE_VALUE_SOLAR, ""
+        ),
         # v2.0: warmwater-only. The backend device-id of the heating
         # device sharing this compressor. Coordinator does nothing
         # with this — it's POSTed once at device-register time so the
@@ -521,6 +581,19 @@ async def _register_device(
     shares_with = entity_input.get(CONF_SHARES_HARDWARE_WITH, "")
     if device_type == "warmwater" and shares_with:
         device_config["shares_hardware_with_device_id"] = shares_with
+    # Wallbox only (v2.2+): push the Lademodus mappings so iOS knows
+    # which mode buttons to render (Aus / An / Solaroptimiert). Each
+    # field is independent — omit blanks rather than overwriting with
+    # empty strings the backend would treat as "user cleared this".
+    if device_type == "wallbox":
+        for key, api_field in (
+            (CONF_CHARGE_MODE_VALUE_LOCK, "charge_mode_value_lock"),
+            (CONF_CHARGE_MODE_VALUE_POWER, "charge_mode_value_power"),
+            (CONF_CHARGE_MODE_VALUE_SOLAR, "charge_mode_value_solar"),
+        ):
+            value = entity_input.get(key, "")
+            if value:
+                device_config[api_field] = value
     async with httpx.AsyncClient(timeout=15.0) as client:
         response = await client.post(
             f"{api_url}/api/v1/devices",
@@ -539,9 +612,23 @@ async def _update_device_backend(
     device_id: str,
     device_type: str,
     device_name: str,
+    entity_input: dict[str, Any] | None = None,
 ) -> None:
-    """PUT a device's mutable fields (name, type) to the backend."""
-    payload = {"name": device_name, "type": device_type}
+    """PUT a device's mutable fields (name, type, and v2.2+ wallbox
+    Lademodus-Werte) to the backend. The mode-values are sent as
+    plain strings — backend treats empty string as "user cleared this"
+    and renders the button accordingly in iOS."""
+    payload: dict[str, Any] = {"name": device_name, "type": device_type}
+    if entity_input is not None and device_type == "wallbox":
+        for key, api_field in (
+            (CONF_CHARGE_MODE_VALUE_LOCK, "charge_mode_value_lock"),
+            (CONF_CHARGE_MODE_VALUE_POWER, "charge_mode_value_power"),
+            (CONF_CHARGE_MODE_VALUE_SOLAR, "charge_mode_value_solar"),
+        ):
+            # Send unconditionally (even empty) so clearing a mapping
+            # in the connector propagates to iOS — the connector is
+            # authoritative for these values.
+            payload[api_field] = entity_input.get(key, "")
     async with httpx.AsyncClient(timeout=15.0) as client:
         response = await client.put(
             f"{api_url}/api/v1/devices/{device_id}",
@@ -846,16 +933,26 @@ class CrowdergyConfigFlow(ConfigFlow, domain=DOMAIN):
         """Decide which follow-up step (if any) to render next.
 
         Order:
-          1. Vehicle-status ternary mapping  — wallbox + entity set, mapping unset
-          2. Shares-hardware picker         — warmwater
-          3. value_on / value_off           — controllable + non-binary control
-          4. Otherwise: register the device
+          1. Charge-mode-values ternary mapping (Aus / An / Solaroptimiert)
+                                            — wallbox + entity_charge_mode set
+          2. Vehicle-status ternary mapping  — wallbox + entity_vehicle_status set
+          3. Shares-hardware picker         — warmwater
+          4. value_on / value_off           — controllable + non-binary control
+          5. Otherwise: register the device
 
         Each branch stashes the (in-progress) entity_input on
         `self._pending_entity_input` so the next step can pick up
         where this one left off.
         """
         device_type = self._pending_type or "generic"
+
+        if (
+            device_type == "wallbox"
+            and entity_input.get(CONF_ENTITY_CHARGE_MODE)
+            and CONF_CHARGE_MODE_VALUE_LOCK not in entity_input
+        ):
+            self._pending_entity_input = entity_input
+            return await self.async_step_device_charge_mode_values()
 
         if (
             device_type == "wallbox"
@@ -882,6 +979,43 @@ class CrowdergyConfigFlow(ConfigFlow, domain=DOMAIN):
             return await self.async_step_device_values()
 
         return await self._register_with_entities(entity_input)
+
+    async def async_step_device_charge_mode_values(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """v2.2 step: map the wallbox's HA charge-mode select-options
+        to the three Crowdergy modes (Aus / An / Solaroptimiert).
+        Each field is optional — modes left blank simply don't get a
+        button in the iOS tile.
+        """
+        device_type = self._pending_type or "generic"
+        device_name = self._pending_name or ""
+        entity_input = dict(self._pending_entity_input or {})
+        entity_charge_mode = entity_input.get(CONF_ENTITY_CHARGE_MODE, "")
+
+        if user_input is not None:
+            entity_input[CONF_CHARGE_MODE_VALUE_LOCK] = user_input.get(
+                CONF_CHARGE_MODE_VALUE_LOCK, ""
+            )
+            entity_input[CONF_CHARGE_MODE_VALUE_POWER] = user_input.get(
+                CONF_CHARGE_MODE_VALUE_POWER, ""
+            )
+            entity_input[CONF_CHARGE_MODE_VALUE_SOLAR] = user_input.get(
+                CONF_CHARGE_MODE_VALUE_SOLAR, ""
+            )
+            return await self._dispatch_post_entities(entity_input)
+
+        return self.async_show_form(
+            step_id="device_charge_mode_values",
+            data_schema=_charge_mode_values_schema(
+                self.hass, entity_charge_mode, {}
+            ),
+            description_placeholders={
+                "device_type": DEVICE_TYPE_LABELS_DE.get(device_type, device_type),
+                "device_name": device_name,
+                "entity_charge_mode": entity_charge_mode,
+            },
+        )
 
     async def async_step_device_vehicle_status(
         self, user_input: dict[str, Any] | None = None
@@ -1127,9 +1261,17 @@ class CrowdergyOptionsFlow(OptionsFlow):
         self, entity_input: dict[str, Any]
     ) -> ConfigFlowResult:
         """Options-flow add path: same routing logic as the main
-        config flow's `_dispatch_post_entities` (vehicle-status →
-        shares-hardware → values → register)."""
+        config flow's `_dispatch_post_entities` (charge-mode-values →
+        vehicle-status → shares-hardware → values → register)."""
         device_type = self._pending_type or "generic"
+
+        if (
+            device_type == "wallbox"
+            and entity_input.get(CONF_ENTITY_CHARGE_MODE)
+            and CONF_CHARGE_MODE_VALUE_LOCK not in entity_input
+        ):
+            self._pending_entity_input = entity_input
+            return await self.async_step_add_device_charge_mode_values()
 
         if (
             device_type == "wallbox"
@@ -1156,6 +1298,40 @@ class CrowdergyOptionsFlow(OptionsFlow):
             return await self.async_step_add_device_values()
 
         return await self._options_register(entity_input)
+
+    async def async_step_add_device_charge_mode_values(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Options-flow variant of the wallbox Lademodus-Werte mapping
+        (Aus / An / Solaroptimiert → wallbox HA select-options)."""
+        device_type = self._pending_type or "generic"
+        device_name = self._pending_name or ""
+        entity_input = dict(self._pending_entity_input or {})
+        entity_charge_mode = entity_input.get(CONF_ENTITY_CHARGE_MODE, "")
+
+        if user_input is not None:
+            entity_input[CONF_CHARGE_MODE_VALUE_LOCK] = user_input.get(
+                CONF_CHARGE_MODE_VALUE_LOCK, ""
+            )
+            entity_input[CONF_CHARGE_MODE_VALUE_POWER] = user_input.get(
+                CONF_CHARGE_MODE_VALUE_POWER, ""
+            )
+            entity_input[CONF_CHARGE_MODE_VALUE_SOLAR] = user_input.get(
+                CONF_CHARGE_MODE_VALUE_SOLAR, ""
+            )
+            return await self._dispatch_add_post_entities(entity_input)
+
+        return self.async_show_form(
+            step_id="add_device_charge_mode_values",
+            data_schema=_charge_mode_values_schema(
+                self.hass, entity_charge_mode, {}
+            ),
+            description_placeholders={
+                "device_type": DEVICE_TYPE_LABELS_DE.get(device_type, device_type),
+                "device_name": device_name,
+                "entity_charge_mode": entity_charge_mode,
+            },
+        )
 
     async def async_step_add_device_vehicle_status(
         self, user_input: dict[str, Any] | None = None
@@ -1398,11 +1574,19 @@ class CrowdergyOptionsFlow(OptionsFlow):
     ) -> ConfigFlowResult:
         """Edit-flow dispatcher mirrors `_dispatch_post_entities` /
         `_dispatch_add_post_entities`: routes through optional steps
-        (vehicle-status, shares-hardware) before the values step.
-        Same skip logic — when the relevant key is already populated
-        the step is silently skipped, so users only see the step
-        when they actually need to fill it in."""
+        (charge-mode-values, vehicle-status, shares-hardware) before
+        the values step. Same skip logic — when the relevant key is
+        already populated the step is silently skipped, so users only
+        see the step when they actually need to fill it in."""
         device_type = self._edit_pending_type or target[CONF_DEVICE_TYPE]
+
+        if (
+            device_type == "wallbox"
+            and entity_input.get(CONF_ENTITY_CHARGE_MODE)
+            and CONF_CHARGE_MODE_VALUE_LOCK not in entity_input
+        ):
+            self._edit_pending_entity_input = entity_input
+            return await self.async_step_edit_device_charge_mode_values()
 
         if (
             device_type == "wallbox"
@@ -1433,6 +1617,46 @@ class CrowdergyOptionsFlow(OptionsFlow):
             return await self.async_step_edit_device_values()
 
         return await self._edit_save(target, entity_input)
+
+    async def async_step_edit_device_charge_mode_values(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Edit-flow variant of the wallbox Lademodus-Werte mapping
+        (Aus / An / Solaroptimiert → wallbox HA select-options)."""
+        target = next(
+            (d for d in self._devices if d.get(CONF_DEVICE_ID) == self._edit_target_id),
+            None,
+        )
+        if target is None:
+            return await self.async_step_init()
+        device_type = self._edit_pending_type or target[CONF_DEVICE_TYPE]
+        device_name = self._edit_pending_name or target[CONF_DEVICE_NAME]
+        entity_input = dict(self._edit_pending_entity_input or {})
+        entity_charge_mode = entity_input.get(CONF_ENTITY_CHARGE_MODE, "")
+
+        if user_input is not None:
+            entity_input[CONF_CHARGE_MODE_VALUE_LOCK] = user_input.get(
+                CONF_CHARGE_MODE_VALUE_LOCK, ""
+            )
+            entity_input[CONF_CHARGE_MODE_VALUE_POWER] = user_input.get(
+                CONF_CHARGE_MODE_VALUE_POWER, ""
+            )
+            entity_input[CONF_CHARGE_MODE_VALUE_SOLAR] = user_input.get(
+                CONF_CHARGE_MODE_VALUE_SOLAR, ""
+            )
+            return await self._dispatch_edit_post_entities(target, entity_input)
+
+        return self.async_show_form(
+            step_id="edit_device_charge_mode_values",
+            data_schema=_charge_mode_values_schema(
+                self.hass, entity_charge_mode, target
+            ),
+            description_placeholders={
+                "device_type": DEVICE_TYPE_LABELS_DE.get(device_type, device_type),
+                "device_name": device_name,
+                "entity_charge_mode": entity_charge_mode,
+            },
+        )
 
     async def async_step_edit_device_vehicle_status(
         self, user_input: dict[str, Any] | None = None
@@ -1560,6 +1784,7 @@ class CrowdergyOptionsFlow(OptionsFlow):
                 target[CONF_DEVICE_ID],
                 device_type,
                 device_name,
+                entity_input,
             )
             updated = _build_device_record(
                 target[CONF_DEVICE_ID], device_type, device_name, entity_input

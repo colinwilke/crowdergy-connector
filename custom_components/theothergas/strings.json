@@ -108,6 +108,21 @@
         },
         "submit": "Next"
       },
+      "device_charge_mode_values": {
+        "title": "{device_name} ({device_type}) — charge-mode mapping (Aus / An / Solaroptimiert)",
+        "description": "Which option of \"{entity_charge_mode}\" maps to which Crowdergy mode? The iOS tile renders one button per filled-in row (plus an AI button). Leave a row blank to hide that mode in the app.",
+        "data": {
+          "charge_mode_value_lock": "Aus",
+          "charge_mode_value_power": "An",
+          "charge_mode_value_solar": "Solaroptimiert"
+        },
+        "data_description": {
+          "charge_mode_value_lock": "Wallbox select-option that BLOCKS charging (e.g. \"Lock Mode\", \"Off\").",
+          "charge_mode_value_power": "Wallbox select-option that charges at MAX power (e.g. \"Power Mode\", \"Boost\").",
+          "charge_mode_value_solar": "Wallbox select-option that follows PV surplus (e.g. \"Solar Pure Mode\", \"Eco\")."
+        },
+        "submit": "Next"
+      },
       "device_vehicle_status": {
         "title": "{device_name} ({device_type}) — vehicle-status mapping",
         "description": "Which raw values from \"{entity_vehicle_status}\" mean what? Crowdergy normalises everything to plugged / unplugged / error. Any value not listed below is treated as error.",
@@ -241,6 +256,21 @@
         },
         "submit": "OK"
       },
+      "add_device_charge_mode_values": {
+        "title": "{device_name} ({device_type}) — charge-mode mapping (Aus / An / Solaroptimiert)",
+        "description": "Which option of \"{entity_charge_mode}\" maps to which Crowdergy mode? The iOS tile renders one button per filled-in row (plus an AI button). Leave a row blank to hide that mode in the app.",
+        "data": {
+          "charge_mode_value_lock": "Aus",
+          "charge_mode_value_power": "An",
+          "charge_mode_value_solar": "Solaroptimiert"
+        },
+        "data_description": {
+          "charge_mode_value_lock": "Wallbox select-option that BLOCKS charging (e.g. \"Lock Mode\", \"Off\").",
+          "charge_mode_value_power": "Wallbox select-option that charges at MAX power (e.g. \"Power Mode\", \"Boost\").",
+          "charge_mode_value_solar": "Wallbox select-option that follows PV surplus (e.g. \"Solar Pure Mode\", \"Eco\")."
+        },
+        "submit": "Next"
+      },
       "add_device_vehicle_status": {
         "title": "{device_name} ({device_type}) — vehicle-status mapping",
         "description": "Which raw values from \"{entity_vehicle_status}\" mean what? Crowdergy normalises everything to plugged / unplugged / error. Any value not listed below is treated as error.",
@@ -336,6 +366,21 @@
               "entity_charge_mode": "Select entity offering the app's charge modes (e.g. \"Power Mode\" / \"Lock Mode\" / \"Solar Pure Mode\") as options."
             }
           }
+        },
+        "submit": "Next"
+      },
+      "edit_device_charge_mode_values": {
+        "title": "{device_name} ({device_type}) — charge-mode mapping (Aus / An / Solaroptimiert)",
+        "description": "Adjust which option of \"{entity_charge_mode}\" maps to which Crowdergy mode. Leaving a row blank hides that mode's button in the iOS tile.",
+        "data": {
+          "charge_mode_value_lock": "Aus",
+          "charge_mode_value_power": "An",
+          "charge_mode_value_solar": "Solaroptimiert"
+        },
+        "data_description": {
+          "charge_mode_value_lock": "Wallbox select-option that BLOCKS charging.",
+          "charge_mode_value_power": "Wallbox select-option that charges at MAX power.",
+          "charge_mode_value_solar": "Wallbox select-option that follows PV surplus."
         },
         "submit": "Next"
       },
