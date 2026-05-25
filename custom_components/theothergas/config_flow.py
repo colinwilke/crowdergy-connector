@@ -936,9 +936,18 @@ class CrowdergyConfigFlow(ConfigFlow, domain=DOMAIN):
           1. Charge-mode-values ternary mapping (Aus / An / Solaroptimiert)
                                             — wallbox + entity_charge_mode set
           2. Vehicle-status ternary mapping  — wallbox + entity_vehicle_status set
-          3. Shares-hardware picker         — warmwater
-          4. value_on / value_off           — controllable + non-binary control
+          3. value_on / value_off           — controllable + non-binary control
+          4. Shares-hardware picker         — warmwater
           5. Otherwise: register the device
+
+        value_on / value_off is entity-level config (defines what the
+        connector writes to `entity_control`) and is a precondition
+        for ANY on/off automation. Shares-hardware is a household
+        coupling that only affects the joint MILP. Asking values
+        first keeps setup-flow semantics top-down (entity → coupling
+        → register) and surfaces the values step for warmwater
+        devices, which used to be skipped over by the shares step's
+        early return on its second visit.
 
         Each branch stashes the (in-progress) entity_input on
         `self._pending_entity_input` so the next step can pick up
@@ -962,21 +971,22 @@ class CrowdergyConfigFlow(ConfigFlow, domain=DOMAIN):
             self._pending_entity_input = entity_input
             return await self.async_step_device_vehicle_status()
 
+        entity_control = entity_input.get(CONF_ENTITY_CONTROL, "")
+        if (
+            device_type in _CONTROLLABLE_TYPES
+            and entity_control
+            and not _is_binary_entity(entity_control)
+            and CONF_VALUE_ON not in entity_input
+        ):
+            self._pending_entity_input = entity_input
+            return await self.async_step_device_values()
+
         if (
             device_type == "warmwater"
             and CONF_SHARES_HARDWARE_WITH not in entity_input
         ):
             self._pending_entity_input = entity_input
             return await self.async_step_device_shares_hardware()
-
-        entity_control = entity_input.get(CONF_ENTITY_CONTROL, "")
-        if (
-            device_type in _CONTROLLABLE_TYPES
-            and entity_control
-            and not _is_binary_entity(entity_control)
-        ):
-            self._pending_entity_input = entity_input
-            return await self.async_step_device_values()
 
         return await self._register_with_entities(entity_input)
 
@@ -1098,7 +1108,7 @@ class CrowdergyConfigFlow(ConfigFlow, domain=DOMAIN):
             # gets nudged every 30 s. Legacy entries with `auto` keep
             # working: the coordinator collapses both to `always`.
             entity_input[CONF_ENTITY_CONTROL_HOLD] = ENTITY_CONTROL_HOLD_ALWAYS
-            return await self._register_with_entities(entity_input)
+            return await self._dispatch_post_entities(entity_input)
 
         return self.async_show_form(
             step_id="device_values",
@@ -1262,7 +1272,9 @@ class CrowdergyOptionsFlow(OptionsFlow):
     ) -> ConfigFlowResult:
         """Options-flow add path: same routing logic as the main
         config flow's `_dispatch_post_entities` (charge-mode-values →
-        vehicle-status → shares-hardware → values → register)."""
+        vehicle-status → values → shares-hardware → register).
+        Values runs before shares-hardware because it's entity-level
+        config, while shares-hardware is a household-level coupling."""
         device_type = self._pending_type or "generic"
 
         if (
@@ -1281,21 +1293,22 @@ class CrowdergyOptionsFlow(OptionsFlow):
             self._pending_entity_input = entity_input
             return await self.async_step_add_device_vehicle_status()
 
+        entity_control = entity_input.get(CONF_ENTITY_CONTROL, "")
+        if (
+            device_type in _CONTROLLABLE_TYPES
+            and entity_control
+            and not _is_binary_entity(entity_control)
+            and CONF_VALUE_ON not in entity_input
+        ):
+            self._pending_entity_input = entity_input
+            return await self.async_step_add_device_values()
+
         if (
             device_type == "warmwater"
             and CONF_SHARES_HARDWARE_WITH not in entity_input
         ):
             self._pending_entity_input = entity_input
             return await self.async_step_add_device_shares_hardware()
-
-        entity_control = entity_input.get(CONF_ENTITY_CONTROL, "")
-        if (
-            device_type in _CONTROLLABLE_TYPES
-            and entity_control
-            and not _is_binary_entity(entity_control)
-        ):
-            self._pending_entity_input = entity_input
-            return await self.async_step_add_device_values()
 
         return await self._options_register(entity_input)
 
@@ -1398,7 +1411,9 @@ class CrowdergyOptionsFlow(OptionsFlow):
     async def async_step_add_device_values(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
-        """Step 3 (add): typ-bewusste value_on / value_off."""
+        """Step 3 (add): typ-bewusste value_on / value_off. Returns
+        to `_dispatch_add_post_entities` so the warmwater shares-
+        hardware step still fires on the second pass."""
         device_type = self._pending_type or "generic"
         device_name = self._pending_name or ""
         entity_input = dict(self._pending_entity_input or {})
@@ -1412,7 +1427,7 @@ class CrowdergyOptionsFlow(OptionsFlow):
             # gets nudged every 30 s. Legacy entries with `auto` keep
             # working: the coordinator collapses both to `always`.
             entity_input[CONF_ENTITY_CONTROL_HOLD] = ENTITY_CONTROL_HOLD_ALWAYS
-            return await self._options_register(entity_input)
+            return await self._dispatch_add_post_entities(entity_input)
 
         return self.async_show_form(
             step_id="add_device_values",
@@ -1573,11 +1588,12 @@ class CrowdergyOptionsFlow(OptionsFlow):
         self, target: dict[str, Any], entity_input: dict[str, Any]
     ) -> ConfigFlowResult:
         """Edit-flow dispatcher mirrors `_dispatch_post_entities` /
-        `_dispatch_add_post_entities`: routes through optional steps
-        (charge-mode-values, vehicle-status, shares-hardware) before
-        the values step. Same skip logic — when the relevant key is
-        already populated the step is silently skipped, so users only
-        see the step when they actually need to fill it in."""
+        `_dispatch_add_post_entities`: charge-mode-values →
+        vehicle-status → values → shares-hardware → save. Values
+        runs before shares-hardware because it's entity-level
+        config. Same skip logic — when the relevant key is already
+        populated the step is silently skipped, so users only see
+        the step when they actually need to fill it in."""
         device_type = self._edit_pending_type or target[CONF_DEVICE_TYPE]
 
         if (
@@ -1596,13 +1612,6 @@ class CrowdergyOptionsFlow(OptionsFlow):
             self._edit_pending_entity_input = entity_input
             return await self.async_step_edit_device_vehicle_status()
 
-        if (
-            device_type == "warmwater"
-            and CONF_SHARES_HARDWARE_WITH not in entity_input
-        ):
-            self._edit_pending_entity_input = entity_input
-            return await self.async_step_edit_device_shares_hardware()
-
         entity_control = entity_input.get(CONF_ENTITY_CONTROL, "")
         needs_values = (
             device_type in _CONTROLLABLE_TYPES
@@ -1615,6 +1624,13 @@ class CrowdergyOptionsFlow(OptionsFlow):
         if needs_values:
             self._edit_pending_entity_input = entity_input
             return await self.async_step_edit_device_values()
+
+        if (
+            device_type == "warmwater"
+            and CONF_SHARES_HARDWARE_WITH not in entity_input
+        ):
+            self._edit_pending_entity_input = entity_input
+            return await self.async_step_edit_device_shares_hardware()
 
         return await self._edit_save(target, entity_input)
 
@@ -1759,7 +1775,7 @@ class CrowdergyOptionsFlow(OptionsFlow):
             # gets nudged every 30 s. Legacy entries with `auto` keep
             # working: the coordinator collapses both to `always`.
             entity_input[CONF_ENTITY_CONTROL_HOLD] = ENTITY_CONTROL_HOLD_ALWAYS
-            return await self._edit_save(target, entity_input)
+            return await self._dispatch_edit_post_entities(target, entity_input)
 
         return self.async_show_form(
             step_id="edit_device_values",
