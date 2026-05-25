@@ -176,6 +176,7 @@
           "add_device": "Add device",
           "edit_device": "Edit device",
           "remove_device": "Remove device",
+          "edit_outdoor_temp": "Outdoor-temp sensor",
           "done": "Done"
         }
       },
