@@ -117,9 +117,9 @@
           "vehicle_status_value_error": "Error value (optional)"
         },
         "data_description": {
-          "vehicle_status_value_plugged": "Value reported when a car is connected — e.g. \"connected\", \"charging\", \"plugged_in\".",
-          "vehicle_status_value_unplugged": "Value reported when no car is connected — e.g. \"idle\", \"disconnected\".",
-          "vehicle_status_value_error": "Value reported when something is wrong — e.g. \"error\", \"fault\". Optional."
+          "vehicle_status_value_plugged": "Values reported when a car is connected — comma-separated if multiple (e.g. \"connected, charging, paused\").",
+          "vehicle_status_value_unplugged": "Values reported when no car is connected — e.g. \"idle, disconnected, ready\".",
+          "vehicle_status_value_error": "Values reported for error / fault states — e.g. \"error, fault\". Optional. Values that match none of the three lists pass through unchanged (no auto-error since v2.2)."
         },
         "submit": "Next"
       },
@@ -250,9 +250,9 @@
           "vehicle_status_value_error": "Error value (optional)"
         },
         "data_description": {
-          "vehicle_status_value_plugged": "Value reported when a car is connected — e.g. \"connected\", \"charging\", \"plugged_in\".",
-          "vehicle_status_value_unplugged": "Value reported when no car is connected — e.g. \"idle\", \"disconnected\".",
-          "vehicle_status_value_error": "Value reported when something is wrong — e.g. \"error\", \"fault\". Optional."
+          "vehicle_status_value_plugged": "Values reported when a car is connected — comma-separated if multiple (e.g. \"connected, charging, paused\").",
+          "vehicle_status_value_unplugged": "Values reported when no car is connected — e.g. \"idle, disconnected, ready\".",
+          "vehicle_status_value_error": "Values reported for error / fault states — e.g. \"error, fault\". Optional. Values that match none of the three lists pass through unchanged (no auto-error since v2.2)."
         },
         "submit": "Next"
       },

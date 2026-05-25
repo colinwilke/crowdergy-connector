@@ -118,9 +118,9 @@
           "vehicle_status_value_error": "Wert für: Fehler (optional)"
         },
         "data_description": {
-          "vehicle_status_value_plugged": "Wert, den dein Sensor meldet, sobald ein Auto an der Wallbox hängt — z. B. connected, charging, plugged_in.",
-          "vehicle_status_value_unplugged": "Wert für \"keine Verbindung\" — z. B. idle, disconnected, ready.",
-          "vehicle_status_value_error": "Wert für Fehler-/Stör-Zustände — z. B. error, fault. Optional; nicht-zuordbare Werte werden automatisch als Fehler interpretiert."
+          "vehicle_status_value_plugged": "Werte, die dein Sensor meldet sobald ein Auto an der Wallbox hängt — kommasepariert wenn mehrere (z. B. \"connected, charging, paused\").",
+          "vehicle_status_value_unplugged": "Werte für \"keine Verbindung\" — z. B. \"idle, disconnected, ready\".",
+          "vehicle_status_value_error": "Werte für Fehler-/Stör-Zustände — z. B. \"error, fault\". Optional. Werte, die zu keiner der drei Listen passen, werden unverändert weitergegeben (kein Auto-Fehler mehr ab v2.2)."
         }
       },
       "device_shares_hardware": {
@@ -261,9 +261,9 @@
           "vehicle_status_value_error": "Wert für: Fehler (optional)"
         },
         "data_description": {
-          "vehicle_status_value_plugged": "Wert, den dein Sensor meldet, sobald ein Auto an der Wallbox hängt — z. B. connected, charging, plugged_in.",
-          "vehicle_status_value_unplugged": "Wert für \"keine Verbindung\" — z. B. idle, disconnected, ready.",
-          "vehicle_status_value_error": "Wert für Fehler-/Stör-Zustände — z. B. error, fault. Optional; nicht-zuordbare Werte werden automatisch als Fehler interpretiert."
+          "vehicle_status_value_plugged": "Werte, die dein Sensor meldet sobald ein Auto an der Wallbox hängt — kommasepariert wenn mehrere (z. B. \"connected, charging, paused\").",
+          "vehicle_status_value_unplugged": "Werte für \"keine Verbindung\" — z. B. \"idle, disconnected, ready\".",
+          "vehicle_status_value_error": "Werte für Fehler-/Stör-Zustände — z. B. \"error, fault\". Optional. Werte, die zu keiner der drei Listen passen, werden unverändert weitergegeben (kein Auto-Fehler mehr ab v2.2)."
         }
       },
       "add_device_shares_hardware": {
@@ -349,7 +349,7 @@
       },
       "edit_device_vehicle_status": {
         "title": "{device_name} ({device_type}) — Fahrzeugstatus zuordnen",
-        "description": "Welche Rohwerte aus \"{entity_vehicle_status}\" bedeuten was? Crowdergy normalisiert alles auf eingesteckt / nicht eingesteckt / Fehler. Werte unten nicht aufgeführt = Fehler.",
+        "description": "Welche Rohwerte aus \"{entity_vehicle_status}\" bedeuten was? Crowdergy normalisiert auf eingesteckt / nicht eingesteckt / Fehler. Mehrere Werte pro Kategorie kommasepariert. Nicht zugeordnete Werte werden 1:1 angezeigt.",
         "submit": "Weiter",
         "data": {
           "vehicle_status_value_plugged": "Wert für: Auto eingesteckt",

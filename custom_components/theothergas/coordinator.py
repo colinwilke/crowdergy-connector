@@ -404,30 +404,50 @@ class CrowdergyCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
     ) -> str | None:
         """Translate a wallbox's vehicle-status sensor reading into one
         of the normalised values the backend / iOS expects:
-        'plugged' / 'unplugged' / 'error'. Returns the original string
-        when no mapping is configured (pre-v2.0 config entries) so the
-        iOS app still has something to display while the user re-runs
-        the config flow.
+        'plugged' / 'unplugged' / 'error'.
+
+        Each mapping field is treated as a COMMA-SEPARATED list — most
+        wallboxes have multiple states that semantically mean the same
+        thing (e.g. "Connected, Charging, Paused" all = plugged). The
+        user can comma-list them in a single field; the connector
+        matches case-insensitively after stripping whitespace.
+
+        Returns:
+          - the matching normalised value when raw matches a mapping,
+          - the RAW string when nothing matches (v2.1 used to force
+            "error" here, which alarmed users whose wallbox had a
+            state they hadn't mapped yet — better to pass through and
+            let iOS display the actual wallbox label),
+          - raw when no mapping is configured at all (pre-v2.0 setups).
         """
         if raw is None:
             return None
         plugged = dev.get(CONF_VEHICLE_STATUS_VALUE_PLUGGED, "")
         unplugged = dev.get(CONF_VEHICLE_STATUS_VALUE_UNPLUGGED, "")
         error = dev.get(CONF_VEHICLE_STATUS_VALUE_ERROR, "")
-        # If neither plugged nor unplugged is mapped the user hasn't
-        # configured the ternary yet — pass through raw.
-        if not plugged and not unplugged:
+        # No mapping at all → pass through raw.
+        if not plugged and not unplugged and not error:
             return raw
-        if plugged and raw == plugged:
+        normalised = raw.strip().lower()
+
+        def _matches(mapping: str) -> bool:
+            if not mapping:
+                return False
+            return any(
+                normalised == part.strip().lower()
+                for part in mapping.split(",")
+                if part.strip()
+            )
+
+        if _matches(plugged):
             return "plugged"
-        if unplugged and raw == unplugged:
+        if _matches(unplugged):
             return "unplugged"
-        if error and raw == error:
+        if _matches(error):
             return "error"
-        # The car reported a state the user didn't include in their
-        # mapping. Surface it as 'error' so the iOS UI doesn't silently
-        # treat it as plugged / unplugged.
-        return "error"
+        # Unmapped state — surface the wallbox's raw label rather than
+        # mis-labelling it "error" and panicking the user.
+        return raw
 
     def _read_is_on_state(self, dev: dict[str, Any]) -> bool | None:
         """Translate the device's entity_control current state into a
