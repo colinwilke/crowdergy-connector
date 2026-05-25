@@ -856,9 +856,23 @@ class CrowdergyCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
                         )
                     elif not new_value:
                         await self._restore_charge_mode(device_id)
-                    # Crowdergize off → stop holding the entity_control
-                    # value. The device is the user's again.
-                    if not new_value:
+                    if new_value:
+                        # Crowdergize on → force an entity_control write
+                        # + start the hold loop using the currently
+                        # cached desired state. Without this, the user
+                        # sees no HA-side action until the backend
+                        # publishes the FIRST is_on *transition*, which
+                        # never happens when the device's current state
+                        # already matches the solver's decision (common
+                        # case: WW physically off, solver decides off,
+                        # backend's "publish only on change" guard
+                        # suppresses the SSE frame). Result: value_off
+                        # never written, hold loop never started.
+                        desired_on = bool(self._on_state.get(device_id, False))
+                        await self._apply_device_state(device_id, desired_on)
+                    else:
+                        # Crowdergize off → stop holding the entity_control
+                        # value. The device is the user's again.
                         self._cancel_hold(device_id)
             if "is_on" in payload:
                 new_on = bool(payload["is_on"])
