@@ -85,7 +85,7 @@
             "description": "Which HA entities may Crowdergy control? Wallbox: a charge-mode select for the app picker AND optionally a control entity for later smart on/off logic. Other types: just the control entity + \"on\"/\"off\" values in the next step.",
             "data": {
               "entity_control": "Control entity (smart on/off)",
-              "entity_charge_mode": "Charge-mode entity (Wallbox)"
+              "entity_charge_mode": "Charge-mode entity (Wallbox / Battery)"
             },
             "data_description": {
               "entity_control": "Any writable HA entity: switch, number, select, input helper, climate, light, fan. Toggled automatically by Crowdergy whenever Crowdergize is on (smart logic comes later).",
@@ -249,7 +249,7 @@
             "description": "Which HA entities may Crowdergy control? Wallbox: a charge-mode select for the app picker AND optionally a control entity for later smart on/off logic. Other types: just the control entity + \"on\"/\"off\" values in the next step.",
             "data": {
               "entity_control": "Control entity (smart on/off)",
-              "entity_charge_mode": "Charge-mode entity (Wallbox)"
+              "entity_charge_mode": "Charge-mode entity (Wallbox / Battery)"
             },
             "data_description": {
               "entity_control": "Any writable HA entity: switch, number, select, input helper, climate, light, fan. Toggled automatically by Crowdergy whenever Crowdergize is on (smart logic comes later).",
@@ -390,7 +390,7 @@
             "description": "Which HA entities may Crowdergy control? Wallbox: a charge-mode select for the app picker AND optionally a control entity for later smart on/off logic. Other types: just the control entity + \"on\"/\"off\" values in the next step.",
             "data": {
               "entity_control": "Control entity (smart on/off)",
-              "entity_charge_mode": "Charge-mode entity (Wallbox)"
+              "entity_charge_mode": "Charge-mode entity (Wallbox / Battery)"
             },
             "data_description": {
               "entity_control": "Any writable HA entity: switch, number, select, input helper, climate, light, fan. Toggled automatically by Crowdergy whenever Crowdergize is on (smart logic comes later).",

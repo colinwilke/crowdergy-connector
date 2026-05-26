@@ -86,11 +86,11 @@
             "description": "Crowdergy schaltet jedes Gerät über genau eine schreibbare Entität deiner Wahl — egal ob es im Hintergrund ein Switch, ein Number-Slider, ein Climate-Mode oder ein Select-Picker ist. Du verknüpfst hier die Entität; im nächsten Schritt sagst du uns, welcher Wert dem An- und welcher dem Aus-Zustand entspricht. So bleibt die Integration mit jedem HA-Setup kompatibel.\n\nFür Wallboxen kommt zusätzlich der Lademodus-Picker dazu, damit du in der App direkt z. B. zwischen Power Mode und Lock Mode wählen kannst.",
             "data": {
               "entity_control": "Steuer-Entität (Crowdergize An/Aus)",
-              "entity_charge_mode": "Lademodus-Entität (nur Wallbox)"
+              "entity_charge_mode": "Lademodus-Entität (Wallbox / Batterie)"
             },
             "data_description": {
               "entity_control": "Eine schreibbare HA-Entität — beliebig: Switch, Input-Boolean, Number, Input-Number, Select, Input-Select, Climate, Light, Fan. Beispiele:\n• Wärmepumpe: ein SG-Ready-Select (Optionen Sperre / Normal / Erhöht) oder ein simpler Boost-Schalter.\n• Wallbox: die Lade-Pause-Entität (oft ein Switch) oder ein Strom-Limit-Number-Helper (0 A = Pause, 16 A = Laden).\n• Batterie: meist Lade-/Entlade-Steuer-Select oder Power-Limit-Number.\n• Gerät (Klima, Pool, Boiler): der zugehörige Switch.\n• Solar / Netz / Haushalt: hier nicht relevant — leer lassen.\nWICHTIG: Crowdergy schreibt nur, wenn du in der App Crowdergize aktiv schaltest. Solange das Toggle aus ist, fasst der Connector deine HA-Entitäten nicht an.",
-              "entity_charge_mode": "Nur für Wallboxen: Select-Entität, deren Optionen direkt in der App als Lademodus-Picker erscheinen (typisch Lock Mode / Power Mode / Solar Pure Mode o. Ä.). Unabhängig von Crowdergize — der User kann seine Wallbox jederzeit über diesen Picker steuern. Optional; leer lassen wenn nicht benötigt."
+              "entity_charge_mode": "Wallbox: Select-Entität mit Lademodus-Optionen (Lock Mode / Power Mode / Solar Pure Mode). Batterie: schreibbare Entität (typisch Number) mit den drei Steuer-Werten +max / 0 / -max W, die Crowdergy für Laden / Aus / Entladen schreibt. Werte mappt der nächste Schritt."
             }
           }
         }
@@ -246,11 +246,11 @@
             "description": "Crowdergy schaltet Geräte über GENAU EINE schreibbare Entität deiner Wahl — universell, egal ob Switch, Number, Select oder Climate. Die zwei Werte (an / aus) trägst du im nächsten Schritt ein. Bei Wallboxen optional zusätzlich die Lademodus-Select für den App-Picker.",
             "data": {
               "entity_control": "Steuer-Entität (Crowdergize An/Aus)",
-              "entity_charge_mode": "Lademodus-Entität (nur Wallbox)"
+              "entity_charge_mode": "Lademodus-Entität (Wallbox / Batterie)"
             },
             "data_description": {
               "entity_control": "Eine schreibbare HA-Entität: Switch, Input-Boolean, Number, Input-Number, Select, Input-Select, Climate, Light, Fan. Beispiele: SG-Ready-Select (Wärmepumpe), Lade-Pause-Switch oder Strom-Limit-Number (Wallbox), Lade-/Entlade-Select (Batterie), normaler Switch (sonstiges Gerät). Solar/Netz/Haushalt: leer lassen. Crowdergy schreibt nur wenn Crowdergize aktiv geschaltet ist.",
-              "entity_charge_mode": "Nur Wallbox: Select-Entität, deren Optionen direkt als Picker in der App erscheinen (z. B. Power Mode / Lock Mode / Solar Pure Mode). Unabhängig von Crowdergize — manuelle Steuerung jederzeit möglich. Optional."
+              "entity_charge_mode": "Wallbox: Select-Entität für den App-Lademodus-Picker. Batterie: schreibbare Steuer-Entität (typisch Number, +max / 0 / -max W). Werte mappt der nächste Schritt."
             }
           }
         }
@@ -372,11 +372,11 @@
             "description": "Eine schreibbare HA-Entität deiner Wahl + zwei Werte (an / aus) im nächsten Schritt. Bei Wallboxen optional zusätzlich die Lademodus-Select für den App-Picker.",
             "data": {
               "entity_control": "Steuer-Entität (Crowdergize An/Aus)",
-              "entity_charge_mode": "Lademodus-Entität (nur Wallbox)"
+              "entity_charge_mode": "Lademodus-Entität (Wallbox / Batterie)"
             },
             "data_description": {
               "entity_control": "Schreibbare HA-Entität: Switch, Number, Select, Climate, Light, Fan oder Input-Helper. Beispiele: SG-Ready (WP), Lade-Pause oder Strom-Limit (Wallbox), Lade-/Entlade-Select (Batterie), Switch (Gerät). Solar/Netz/Haushalt: leer lassen. Crowdergy schreibt nur wenn Crowdergize aktiv ist.",
-              "entity_charge_mode": "Nur Wallbox: Select-Entität für den App-Lademodus-Picker. Unabhängig von Crowdergize. Optional."
+              "entity_charge_mode": "Wallbox: Select-Entität für den App-Lademodus-Picker. Batterie: schreibbare Steuer-Entität (typisch Number)."
             }
           }
         }

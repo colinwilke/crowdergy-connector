@@ -247,17 +247,15 @@ def _entities_schema(
             control_schema, {"collapsed": False}
         )
     elif device_type == "battery":
-        # Battery uses BOTH:
-        #  - entity_charge_mode: the 4-mode dispatch entity (typically
-        #    a number-entity taking +max / 0 / -max W). Solver picks
-        #    charge / idle / discharge / passive per slot.
-        #  - entity_control + value_on/value_off (next step): future
-        #    binary on/off (e.g. an "AI active" master switch — most
-        #    setups leave this empty).
+        # Battery uses the 4-mode dispatch entity (typically a
+        # number-entity taking +max / 0 / -max W). Solver picks
+        # charge / idle / discharge / passive per slot, mapped to
+        # one of the three written values in the follow-up step.
+        # No separate entity_control / value_on/value_off — the
+        # 4-mode entity covers everything the inverter exposes.
         control_schema = vol.Schema({
             _entity_field(CONF_ENTITY_CHARGE_MODE, d):
                 _ENTITY_SELECTORS[CONF_ENTITY_CHARGE_MODE],
-            _entity_field(CONF_ENTITY_CONTROL, d): _ENTITY_SELECTORS[CONF_ENTITY_CONTROL],
         })
         schema_dict[vol.Required("control_section")] = section(
             control_schema, {"collapsed": False}
