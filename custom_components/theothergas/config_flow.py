@@ -44,6 +44,9 @@ from .const import (
     CONF_CHARGE_MODE_VALUE_LOCK,
     CONF_CHARGE_MODE_VALUE_POWER,
     CONF_CHARGE_MODE_VALUE_SOLAR,
+    CONF_BATTERY_VALUE_CHARGE,
+    CONF_BATTERY_VALUE_IDLE,
+    CONF_BATTERY_VALUE_DISCHARGE,
     CONF_SHARES_HARDWARE_WITH,
     ENTITY_CONTROL_HOLD_ALWAYS,
     DEFAULT_API_URL,
@@ -243,10 +246,26 @@ def _entities_schema(
         schema_dict[vol.Required("control_section")] = section(
             control_schema, {"collapsed": False}
         )
+    elif device_type == "battery":
+        # Battery uses BOTH:
+        #  - entity_charge_mode: the 4-mode dispatch entity (typically
+        #    a number-entity taking +max / 0 / -max W). Solver picks
+        #    charge / idle / discharge / passive per slot.
+        #  - entity_control + value_on/value_off (next step): future
+        #    binary on/off (e.g. an "AI active" master switch — most
+        #    setups leave this empty).
+        control_schema = vol.Schema({
+            _entity_field(CONF_ENTITY_CHARGE_MODE, d):
+                _ENTITY_SELECTORS[CONF_ENTITY_CHARGE_MODE],
+            _entity_field(CONF_ENTITY_CONTROL, d): _ENTITY_SELECTORS[CONF_ENTITY_CONTROL],
+        })
+        schema_dict[vol.Required("control_section")] = section(
+            control_schema, {"collapsed": False}
+        )
     elif device_type in _CONTROLLABLE_TYPES:
-        # Other controllable types (battery / heatpump / generic):
-        # universal entity_control here, value_on/off in the follow-up
-        # step where the schema can adapt to the entity domain.
+        # Other controllable types (heatpump / generic): universal
+        # entity_control here, value_on/off in the follow-up step
+        # where the schema can adapt to the entity domain.
         control_schema = vol.Schema({
             _entity_field(CONF_ENTITY_CONTROL, d): _ENTITY_SELECTORS[CONF_ENTITY_CONTROL],
         })
@@ -457,6 +476,50 @@ def _charge_mode_values_schema(
     })
 
 
+# ── v2.3: battery-mode-values ternary mapping (battery-only) ────────────────
+
+
+def _battery_values_schema(
+    hass, entity_charge_mode: str, defaults: dict[str, Any] | None = None
+) -> vol.Schema:
+    """Schema for the three battery-mode mappings — Laden / Aus / Entladen
+    → the value written to the user's HA-entity (typically a number-entity
+    taking e.g. +5000 / 0 / -5000 W). Free-text by default; if the
+    entity happens to be a select with options, render as a dropdown
+    like the wallbox three-mode step. All three fields are optional —
+    modes the user leaves blank get suppressed in the worker dispatch."""
+    d = defaults or {}
+
+    field_type: Any = str
+    if entity_charge_mode:
+        domain = entity_charge_mode.split(".", 1)[0]
+        state = hass.states.get(entity_charge_mode)
+        if domain in ("select", "input_select") and state is not None:
+            opts = state.attributes.get("options") or []
+            if opts:
+                field_type = selector.SelectSelector(
+                    selector.SelectSelectorConfig(
+                        options=[
+                            selector.SelectOptionDict(value=o, label=o)
+                            for o in opts
+                        ],
+                        mode=selector.SelectSelectorMode.DROPDOWN,
+                    )
+                )
+
+    def _field(key: str) -> Any:
+        default = d.get(key) or ""
+        if default:
+            return vol.Optional(key, default=default)
+        return vol.Optional(key)
+
+    return vol.Schema({
+        _field(CONF_BATTERY_VALUE_CHARGE): field_type,
+        _field(CONF_BATTERY_VALUE_IDLE): field_type,
+        _field(CONF_BATTERY_VALUE_DISCHARGE): field_type,
+    })
+
+
 # ── v2.0: shares-hardware picker (warmwater-only) ──────────────────────────
 
 
@@ -549,6 +612,19 @@ def _build_device_record(
         CONF_CHARGE_MODE_VALUE_SOLAR: entity_input.get(
             CONF_CHARGE_MODE_VALUE_SOLAR, ""
         ),
+        # v2.3: battery-only mode mapping (Laden / Aus / Entladen → the
+        # entity-value the connector writes). Empty strings on non-
+        # battery types — worker dispatch suppresses any mode whose
+        # mapping is empty.
+        CONF_BATTERY_VALUE_CHARGE: entity_input.get(
+            CONF_BATTERY_VALUE_CHARGE, ""
+        ),
+        CONF_BATTERY_VALUE_IDLE: entity_input.get(
+            CONF_BATTERY_VALUE_IDLE, ""
+        ),
+        CONF_BATTERY_VALUE_DISCHARGE: entity_input.get(
+            CONF_BATTERY_VALUE_DISCHARGE, ""
+        ),
         # v2.0: warmwater-only. The backend device-id of the heating
         # device sharing this compressor. Coordinator does nothing
         # with this — it's POSTed once at device-register time so the
@@ -594,6 +670,18 @@ async def _register_device(
             value = entity_input.get(key, "")
             if value:
                 device_config[api_field] = value
+    # Battery only (v2.3+): push the 4-mode mappings so the worker
+    # can resolve solver decisions to entity-write values without
+    # asking the connector each tick.
+    if device_type == "battery":
+        for key, api_field in (
+            (CONF_BATTERY_VALUE_CHARGE, "battery_value_charge"),
+            (CONF_BATTERY_VALUE_IDLE, "battery_value_idle"),
+            (CONF_BATTERY_VALUE_DISCHARGE, "battery_value_discharge"),
+        ):
+            value = entity_input.get(key, "")
+            if value:
+                device_config[api_field] = value
     async with httpx.AsyncClient(timeout=15.0) as client:
         response = await client.post(
             f"{api_url}/api/v1/devices",
@@ -628,6 +716,13 @@ async def _update_device_backend(
             # Send unconditionally (even empty) so clearing a mapping
             # in the connector propagates to iOS — the connector is
             # authoritative for these values.
+            payload[api_field] = entity_input.get(key, "")
+    if entity_input is not None and device_type == "battery":
+        for key, api_field in (
+            (CONF_BATTERY_VALUE_CHARGE, "battery_value_charge"),
+            (CONF_BATTERY_VALUE_IDLE, "battery_value_idle"),
+            (CONF_BATTERY_VALUE_DISCHARGE, "battery_value_discharge"),
+        ):
             payload[api_field] = entity_input.get(key, "")
     async with httpx.AsyncClient(timeout=15.0) as client:
         response = await client.put(
@@ -964,6 +1059,14 @@ class CrowdergyConfigFlow(ConfigFlow, domain=DOMAIN):
             return await self.async_step_device_charge_mode_values()
 
         if (
+            device_type == "battery"
+            and entity_input.get(CONF_ENTITY_CHARGE_MODE)
+            and CONF_BATTERY_VALUE_CHARGE not in entity_input
+        ):
+            self._pending_entity_input = entity_input
+            return await self.async_step_device_battery_values()
+
+        if (
             device_type == "wallbox"
             and entity_input.get(CONF_ENTITY_VEHICLE_STATUS)
             and CONF_VEHICLE_STATUS_VALUE_PLUGGED not in entity_input
@@ -1018,6 +1121,44 @@ class CrowdergyConfigFlow(ConfigFlow, domain=DOMAIN):
         return self.async_show_form(
             step_id="device_charge_mode_values",
             data_schema=_charge_mode_values_schema(
+                self.hass, entity_charge_mode, {}
+            ),
+            description_placeholders={
+                "device_type": DEVICE_TYPE_LABELS_DE.get(device_type, device_type),
+                "device_name": device_name,
+                "entity_charge_mode": entity_charge_mode,
+            },
+        )
+
+    async def async_step_device_battery_values(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """v2.3 step: map the battery's 4-mode dispatch to the values
+        the connector writes to its entity_charge_mode entity. Three
+        fields (Laden / Aus / Entladen) — modes left blank get
+        suppressed in the worker dispatch (battery stays passive for
+        that branch).
+        """
+        device_type = self._pending_type or "generic"
+        device_name = self._pending_name or ""
+        entity_input = dict(self._pending_entity_input or {})
+        entity_charge_mode = entity_input.get(CONF_ENTITY_CHARGE_MODE, "")
+
+        if user_input is not None:
+            entity_input[CONF_BATTERY_VALUE_CHARGE] = user_input.get(
+                CONF_BATTERY_VALUE_CHARGE, ""
+            )
+            entity_input[CONF_BATTERY_VALUE_IDLE] = user_input.get(
+                CONF_BATTERY_VALUE_IDLE, ""
+            )
+            entity_input[CONF_BATTERY_VALUE_DISCHARGE] = user_input.get(
+                CONF_BATTERY_VALUE_DISCHARGE, ""
+            )
+            return await self._dispatch_post_entities(entity_input)
+
+        return self.async_show_form(
+            step_id="device_battery_values",
+            data_schema=_battery_values_schema(
                 self.hass, entity_charge_mode, {}
             ),
             description_placeholders={
@@ -1286,6 +1427,14 @@ class CrowdergyOptionsFlow(OptionsFlow):
             return await self.async_step_add_device_charge_mode_values()
 
         if (
+            device_type == "battery"
+            and entity_input.get(CONF_ENTITY_CHARGE_MODE)
+            and CONF_BATTERY_VALUE_CHARGE not in entity_input
+        ):
+            self._pending_entity_input = entity_input
+            return await self.async_step_add_device_battery_values()
+
+        if (
             device_type == "wallbox"
             and entity_input.get(CONF_ENTITY_VEHICLE_STATUS)
             and CONF_VEHICLE_STATUS_VALUE_PLUGGED not in entity_input
@@ -1337,6 +1486,40 @@ class CrowdergyOptionsFlow(OptionsFlow):
         return self.async_show_form(
             step_id="add_device_charge_mode_values",
             data_schema=_charge_mode_values_schema(
+                self.hass, entity_charge_mode, {}
+            ),
+            description_placeholders={
+                "device_type": DEVICE_TYPE_LABELS_DE.get(device_type, device_type),
+                "device_name": device_name,
+                "entity_charge_mode": entity_charge_mode,
+            },
+        )
+
+    async def async_step_add_device_battery_values(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Options-flow variant of the battery 4-mode mapping
+        (Laden / Aus / Entladen → entity-write values)."""
+        device_type = self._pending_type or "generic"
+        device_name = self._pending_name or ""
+        entity_input = dict(self._pending_entity_input or {})
+        entity_charge_mode = entity_input.get(CONF_ENTITY_CHARGE_MODE, "")
+
+        if user_input is not None:
+            entity_input[CONF_BATTERY_VALUE_CHARGE] = user_input.get(
+                CONF_BATTERY_VALUE_CHARGE, ""
+            )
+            entity_input[CONF_BATTERY_VALUE_IDLE] = user_input.get(
+                CONF_BATTERY_VALUE_IDLE, ""
+            )
+            entity_input[CONF_BATTERY_VALUE_DISCHARGE] = user_input.get(
+                CONF_BATTERY_VALUE_DISCHARGE, ""
+            )
+            return await self._dispatch_add_post_entities(entity_input)
+
+        return self.async_show_form(
+            step_id="add_device_battery_values",
+            data_schema=_battery_values_schema(
                 self.hass, entity_charge_mode, {}
             ),
             description_placeholders={
@@ -1595,6 +1778,14 @@ class CrowdergyOptionsFlow(OptionsFlow):
             return await self.async_step_edit_device_charge_mode_values()
 
         if (
+            device_type == "battery"
+            and entity_input.get(CONF_ENTITY_CHARGE_MODE)
+            and CONF_BATTERY_VALUE_CHARGE not in entity_input
+        ):
+            self._edit_pending_entity_input = entity_input
+            return await self.async_step_edit_device_battery_values()
+
+        if (
             device_type == "wallbox"
             and entity_input.get(CONF_ENTITY_VEHICLE_STATUS)
             and CONF_VEHICLE_STATUS_VALUE_PLUGGED not in entity_input
@@ -1657,6 +1848,46 @@ class CrowdergyOptionsFlow(OptionsFlow):
         return self.async_show_form(
             step_id="edit_device_charge_mode_values",
             data_schema=_charge_mode_values_schema(
+                self.hass, entity_charge_mode, target
+            ),
+            description_placeholders={
+                "device_type": DEVICE_TYPE_LABELS_DE.get(device_type, device_type),
+                "device_name": device_name,
+                "entity_charge_mode": entity_charge_mode,
+            },
+        )
+
+    async def async_step_edit_device_battery_values(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Edit-flow variant of the battery 4-mode mapping
+        (Laden / Aus / Entladen → entity-write values)."""
+        target = next(
+            (d for d in self._devices if d.get(CONF_DEVICE_ID) == self._edit_target_id),
+            None,
+        )
+        if target is None:
+            return await self.async_step_init()
+        device_type = self._edit_pending_type or target[CONF_DEVICE_TYPE]
+        device_name = self._edit_pending_name or target[CONF_DEVICE_NAME]
+        entity_input = dict(self._edit_pending_entity_input or {})
+        entity_charge_mode = entity_input.get(CONF_ENTITY_CHARGE_MODE, "")
+
+        if user_input is not None:
+            entity_input[CONF_BATTERY_VALUE_CHARGE] = user_input.get(
+                CONF_BATTERY_VALUE_CHARGE, ""
+            )
+            entity_input[CONF_BATTERY_VALUE_IDLE] = user_input.get(
+                CONF_BATTERY_VALUE_IDLE, ""
+            )
+            entity_input[CONF_BATTERY_VALUE_DISCHARGE] = user_input.get(
+                CONF_BATTERY_VALUE_DISCHARGE, ""
+            )
+            return await self._dispatch_edit_post_entities(target, entity_input)
+
+        return self.async_show_form(
+            step_id="edit_device_battery_values",
+            data_schema=_battery_values_schema(
                 self.hass, entity_charge_mode, target
             ),
             description_placeholders={

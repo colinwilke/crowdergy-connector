@@ -123,6 +123,21 @@
         },
         "submit": "Next"
       },
+      "device_battery_values": {
+        "title": "{device_name} ({device_type}) — battery mode mapping (Laden / Aus / Entladen)",
+        "description": "Which value should Crowdergy write to \"{entity_charge_mode}\" for each of the three active modes? Typical numbers: +max_W / 0 / -max_W (e.g. +5000 / 0 / -5000). Leave a row blank to suppress that mode — battery stays passive (inverter's native PV-priority) for that branch.",
+        "data": {
+          "battery_value_charge": "Laden",
+          "battery_value_idle": "Aus (SOC halten)",
+          "battery_value_discharge": "Entladen"
+        },
+        "data_description": {
+          "battery_value_charge": "Value written when AI wants to force-charge from PV/grid at max power.",
+          "battery_value_idle": "Value written when AI wants to freeze SOC (suppress inverter's PV-self-consumption for this slot).",
+          "battery_value_discharge": "Value written when AI wants to force-discharge into home/grid at max power."
+        },
+        "submit": "Next"
+      },
       "device_vehicle_status": {
         "title": "{device_name} ({device_type}) — vehicle-status mapping",
         "description": "Which raw values from \"{entity_vehicle_status}\" mean what? Crowdergy normalises everything to plugged / unplugged / error. Any value not listed below is treated as error.",
@@ -272,6 +287,21 @@
         },
         "submit": "Next"
       },
+      "add_device_battery_values": {
+        "title": "{device_name} ({device_type}) — battery mode mapping (Laden / Aus / Entladen)",
+        "description": "Which value should Crowdergy write to \"{entity_charge_mode}\" for each of the three active modes? Typical numbers: +max_W / 0 / -max_W (e.g. +5000 / 0 / -5000). Leave a row blank to suppress that mode — battery stays passive (inverter's native PV-priority) for that branch.",
+        "data": {
+          "battery_value_charge": "Laden",
+          "battery_value_idle": "Aus (SOC halten)",
+          "battery_value_discharge": "Entladen"
+        },
+        "data_description": {
+          "battery_value_charge": "Value written when AI wants to force-charge from PV/grid at max power.",
+          "battery_value_idle": "Value written when AI wants to freeze SOC (suppress inverter's PV-self-consumption for this slot).",
+          "battery_value_discharge": "Value written when AI wants to force-discharge into home/grid at max power."
+        },
+        "submit": "Next"
+      },
       "add_device_vehicle_status": {
         "title": "{device_name} ({device_type}) — vehicle-status mapping",
         "description": "Which raw values from \"{entity_vehicle_status}\" mean what? Crowdergy normalises everything to plugged / unplugged / error. Any value not listed below is treated as error.",
@@ -382,6 +412,21 @@
           "charge_mode_value_lock": "Wallbox select-option that BLOCKS charging.",
           "charge_mode_value_power": "Wallbox select-option that charges at MAX power.",
           "charge_mode_value_solar": "Wallbox select-option that follows PV surplus."
+        },
+        "submit": "Next"
+      },
+      "edit_device_battery_values": {
+        "title": "{device_name} ({device_type}) — battery mode mapping (Laden / Aus / Entladen)",
+        "description": "Adjust which value gets written to \"{entity_charge_mode}\" for each active mode. Leave a row blank to suppress that mode — battery stays passive (inverter's PV-priority) for that branch.",
+        "data": {
+          "battery_value_charge": "Laden",
+          "battery_value_idle": "Aus (SOC halten)",
+          "battery_value_discharge": "Entladen"
+        },
+        "data_description": {
+          "battery_value_charge": "Value for force-charging at max power.",
+          "battery_value_idle": "Value for freezing SOC.",
+          "battery_value_discharge": "Value for force-discharging at max power."
         },
         "submit": "Next"
       },

@@ -895,8 +895,20 @@ class CrowdergyCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
                 "Crowdergy SSE command frame: action=%s device=%s value=%r",
                 action, device_id, value,
             )
-            if action == "set_charge_mode" and device_id and value is not None:
-                await self._apply_charge_mode(device_id, str(value))
+            if action == "set_charge_mode" and device_id:
+                # `value is None` is the explicit "passive" signal —
+                # the backend deliberately suppresses the write so the
+                # inverter's native PV-priority kicks in. Log it for
+                # visibility but do nothing else (no HA write).
+                if value is None:
+                    mode_tag = data.get("mode") or "passive"
+                    _LOGGER.info(
+                        "set_charge_mode passive on %s (mode=%s) — not "
+                        "writing, inverter follows its own logic.",
+                        device_id, mode_tag,
+                    )
+                else:
+                    await self._apply_charge_mode(device_id, str(value))
 
     async def _snapshot_and_override_charge_mode(
         self, device_id: str, override_value: str
@@ -952,7 +964,16 @@ class CrowdergyCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
         await self._apply_charge_mode(device_id, snapshot)
 
     async def _apply_charge_mode(self, device_id: str, mode: str) -> None:
-        """Write the wallbox's configured entity_charge_mode select entity."""
+        """Write the device's configured entity_charge_mode entity.
+
+        Two domains supported:
+          * `select` / `input_select` — `select.select_option` with the
+            mode string as the option. Used by wallbox Lademodus and by
+            batteries whose mode-entity happens to be a select.
+          * `number` / `input_number` — `number.set_value` with the
+            mode string parsed as a float. Used by batteries whose
+            mode-entity is a number taking e.g. +5000 / 0 / -5000 W.
+        """
         dev = next(
             (d for d in self.devices if d.get(CONF_DEVICE_ID) == device_id),
             None,
@@ -967,29 +988,42 @@ class CrowdergyCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
         if not entity_id:
             _LOGGER.warning(
                 "set_charge_mode: device %s has no entity_charge_mode "
-                "configured — re-add the device with v1.10.0+",
-                device_id,
+                "configured", device_id,
             )
             return
         domain = entity_id.split(".", 1)[0]
-        if domain not in ("select", "input_select"):
-            _LOGGER.warning(
-                "set_charge_mode: entity_charge_mode for %s is not a select "
-                "entity (%s)", device_id, domain,
-            )
-            return
         _LOGGER.warning(
             "set_charge_mode: %s → %s",
             entity_id, mode,
         )
         try:
-            await self.hass.services.async_call(
-                domain, "select_option",
-                {"entity_id": entity_id, "option": mode},
-                blocking=True,
-            )
+            if domain in ("select", "input_select"):
+                await self.hass.services.async_call(
+                    domain, "select_option",
+                    {"entity_id": entity_id, "option": mode},
+                    blocking=True,
+                )
+            elif domain in ("number", "input_number"):
+                try:
+                    value = float(mode)
+                except (TypeError, ValueError):
+                    _LOGGER.warning(
+                        "set_charge_mode: '%s' is not numeric, can't write "
+                        "to %s entity %s", mode, domain, entity_id,
+                    )
+                    return
+                await self.hass.services.async_call(
+                    domain, "set_value",
+                    {"entity_id": entity_id, "value": value},
+                    blocking=True,
+                )
+            else:
+                _LOGGER.warning(
+                    "set_charge_mode: entity %s domain %s not supported "
+                    "(expected select / number)", entity_id, domain,
+                )
         except Exception as err:  # noqa: BLE001
-            _LOGGER.exception("select.select_option failed: %s", err)
+            _LOGGER.exception("set_charge_mode service call failed: %s", err)
 
     def _sync_field_into_data(self, device_id: str, field: str, value: Any) -> None:
         """Mutate `self.data[device_id][field]` and notify CoordinatorEntities.
