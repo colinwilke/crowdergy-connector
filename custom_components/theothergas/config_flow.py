@@ -232,16 +232,20 @@ def _entities_schema(
         )
 
     if device_type == "wallbox":
-        # Wallbox uses BOTH:
-        #  - entity_charge_mode: user-driven Lademodus picker in the iOS app
-        #    (manual: Lock / Power / Solar Pure / …)
-        #  - entity_control + value_on/value_off (next step): future smart
-        #    on/off when Crowdergize is active.
-        # Either / both can stay empty if the user only wants one path.
+        # Wallbox's full control surface lives behind ONE entity: a
+        # select with Lock / Solar / Power options that the solver
+        # picks between per slot. The follow-up step then maps each
+        # option to its select-string in the wallbox's firmware
+        # (typically named differently per vendor — go-eCharger calls
+        # them "Lock Mode" / "Solar Pure Mode" / "Power Mode").
+        # We dropped the parallel entity_control + value_on/value_off
+        # path because it duplicated the same on/off semantics the
+        # Lademodus already covers via the Lock option, and users
+        # found being asked twice for what looked like the same
+        # entity confusing.
         control_schema = vol.Schema({
             _entity_field(CONF_ENTITY_CHARGE_MODE, d):
                 _ENTITY_SELECTORS[CONF_ENTITY_CHARGE_MODE],
-            _entity_field(CONF_ENTITY_CONTROL, d): _ENTITY_SELECTORS[CONF_ENTITY_CONTROL],
         })
         schema_dict[vol.Required("control_section")] = section(
             control_schema, {"collapsed": False}

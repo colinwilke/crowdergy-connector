@@ -82,7 +82,7 @@
           },
           "control_section": {
             "name": "Control (Crowdergize)",
-            "description": "Which HA entities may Crowdergy control? Wallbox: a charge-mode select for the app picker AND optionally a control entity for later smart on/off logic. Other types: just the control entity + \"on\"/\"off\" values in the next step.",
+            "description": "Which HA entities may Crowdergy control? Wallbox: just the Lademodus select (Lock / Solar / Power are mapped in the next step). Other types: the control entity + the on/off values in the follow-up step.",
             "data": {
               "entity_control": "Control entity (smart on/off)",
               "entity_charge_mode": "Charge-mode entity (Wallbox / Battery)"
@@ -246,7 +246,7 @@
           },
           "control_section": {
             "name": "Control (Crowdergize)",
-            "description": "Which HA entities may Crowdergy control? Wallbox: a charge-mode select for the app picker AND optionally a control entity for later smart on/off logic. Other types: just the control entity + \"on\"/\"off\" values in the next step.",
+            "description": "Which HA entities may Crowdergy control? Wallbox: just the Lademodus select (Lock / Solar / Power are mapped in the next step). Other types: the control entity + the on/off values in the follow-up step.",
             "data": {
               "entity_control": "Control entity (smart on/off)",
               "entity_charge_mode": "Charge-mode entity (Wallbox / Battery)"
@@ -387,7 +387,7 @@
           },
           "control_section": {
             "name": "Control (Crowdergize)",
-            "description": "Which HA entities may Crowdergy control? Wallbox: a charge-mode select for the app picker AND optionally a control entity for later smart on/off logic. Other types: just the control entity + \"on\"/\"off\" values in the next step.",
+            "description": "Which HA entities may Crowdergy control? Wallbox: just the Lademodus select (Lock / Solar / Power are mapped in the next step). Other types: the control entity + the on/off values in the follow-up step.",
             "data": {
               "entity_control": "Control entity (smart on/off)",
               "entity_charge_mode": "Charge-mode entity (Wallbox / Battery)"
