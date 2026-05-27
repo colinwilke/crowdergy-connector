@@ -782,10 +782,17 @@ class CrowdergyCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
     # level heartbeat.
 
     def _sse_url(self) -> str:
-        return f"{self.api_url}/api/v1/stream?token={self._access_token}"
+        return f"{self.api_url}/api/v1/stream"
 
     async def _run_ws_loop(self) -> None:
-        """Reconnecting SSE listener for inbound commands from the backend."""
+        """Reconnecting SSE listener for inbound commands from the backend.
+
+        Auth: `Authorization: Bearer …` (not `?token=…`). The query-param
+        form was deprecated 2026-05-27 because URL-embedded tokens leak
+        into nginx + reverse-proxy access logs; aiohttp can set headers
+        on streamed GETs cleanly so we get the same SSE semantics with
+        proper authentication.
+        """
         delay = WS_RECONNECT_INITIAL
         session = aiohttp_client.async_get_clientsession(self.hass)
         while True:
@@ -795,6 +802,7 @@ class CrowdergyCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
                     headers={
                         "Accept": "text/event-stream",
                         "Cache-Control": "no-cache",
+                        "Authorization": f"Bearer {self._access_token}",
                     },
                     timeout=aiohttp.ClientTimeout(total=None, sock_read=None),
                 ) as resp:
