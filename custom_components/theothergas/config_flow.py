@@ -1989,8 +1989,22 @@ class CrowdergyOptionsFlow(OptionsFlow):
         entity_control = entity_input.get(CONF_ENTITY_CONTROL, "")
 
         if user_input is not None:
-            entity_input[CONF_VALUE_ON] = user_input.get(CONF_VALUE_ON, "")
-            entity_input[CONF_VALUE_OFF] = user_input.get(CONF_VALUE_OFF, "")
+            # Fall back to the stored values when the form submits an
+            # absent field. voluptuous treats vol.Optional fields with
+            # no value as not-submitted, so a user who just hits Next
+            # on a pre-filled form ends up with user_input.get(key)
+            # = None / missing. Without the target-fallback those
+            # ticks silently cleared the stored mapping — observed
+            # bug: WW value_on/value_off disappeared on every edit
+            # round-trip, leaving the warmwater entity uncontrolled.
+            entity_input[CONF_VALUE_ON] = (
+                user_input.get(CONF_VALUE_ON)
+                or target.get(CONF_VALUE_ON, "")
+            )
+            entity_input[CONF_VALUE_OFF] = (
+                user_input.get(CONF_VALUE_OFF)
+                or target.get(CONF_VALUE_OFF, "")
+            )
             # Hold-mode picker is no longer in the form (v1.20.0+) —
             # every device gets `always` so hysteresis-laden hardware
             # gets nudged every 30 s. Legacy entries with `auto` keep
@@ -1998,9 +2012,17 @@ class CrowdergyOptionsFlow(OptionsFlow):
             entity_input[CONF_ENTITY_CONTROL_HOLD] = ENTITY_CONTROL_HOLD_ALWAYS
             return await self._dispatch_edit_post_entities(target, entity_input)
 
+        # Pre-fill from `target` (the stored device record) so the
+        # user sees their existing mapping when they open the edit
+        # flow. Earlier code passed `entity_input` here, but that
+        # dict deliberately doesn't carry value_on/value_off (the
+        # v2.2.2 fix in async_step_edit_device_entities strips them
+        # so the dispatcher's "skip-when-filled" guard always re-runs
+        # this step). Result: form showed empty, user re-typed or hit
+        # Next, values got cleared.
         return self.async_show_form(
             step_id="edit_device_values",
-            data_schema=_values_schema(self.hass, entity_control, entity_input),
+            data_schema=_values_schema(self.hass, entity_control, target),
             description_placeholders={
                 "device_type": DEVICE_TYPE_LABELS_DE.get(device_type, device_type),
                 "device_name": device_name,
