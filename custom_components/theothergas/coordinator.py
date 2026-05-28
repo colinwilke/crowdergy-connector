@@ -44,6 +44,8 @@ from .const import (
     ENTITY_CONTROL_HOLD_NEVER,
     HOLD_INITIAL_DELAY,
     HOLD_POLL_INTERVAL,
+    CHARGE_MODE_HOLD_INITIAL_DELAY,
+    CHARGE_MODE_HOLD_INTERVAL,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -141,6 +143,14 @@ class CrowdergyCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
         # Crowdergize OFF, on shutdown, or when a fresh apply happens
         # (the old loop is replaced).
         self._hold_tasks: dict[str, asyncio.Task] = {}
+        # v2.4: separate hold-loop tracker for the charge_mode entity.
+        # Battery + wallbox Lademodus need a fresh write every ~15 s
+        # because some inverters reset the mode otherwise. Keyed by
+        # device_id, replaced on every fresh `_apply_charge_mode`.
+        self._charge_mode_hold_tasks: dict[str, asyncio.Task] = {}
+        # Last charge_mode value commanded per device — re-written
+        # by the hold loop. Cleared when a "passive" command arrives.
+        self._held_charge_mode: dict[str, str] = {}
         # Wallbox charge_mode snapshot per device — captures whatever
         # the user had set on entity_charge_mode BEFORE Crowdergize
         # was switched ON, so we can restore it on OFF. In-memory only;
@@ -292,6 +302,10 @@ class CrowdergyCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
         for task in list(self._hold_tasks.values()):
             task.cancel()
         self._hold_tasks.clear()
+        for task in list(self._charge_mode_hold_tasks.values()):
+            task.cancel()
+        self._charge_mode_hold_tasks.clear()
+        self._held_charge_mode.clear()
         await self._client.aclose()
 
     def _read_entity_state(self, entity_id: str) -> Any:
@@ -915,6 +929,10 @@ class CrowdergyCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
                         "writing, inverter follows its own logic.",
                         device_id, mode_tag,
                     )
+                    # Stop the periodic re-write so we don't stomp on
+                    # the inverter's native PV-priority once Crowdergy
+                    # intentionally backs off.
+                    self._cancel_charge_mode_hold(device_id)
                 else:
                     await self._apply_charge_mode(device_id, str(value))
 
@@ -971,7 +989,9 @@ class CrowdergyCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
         )
         await self._apply_charge_mode(device_id, snapshot)
 
-    async def _apply_charge_mode(self, device_id: str, mode: str) -> None:
+    async def _apply_charge_mode(
+        self, device_id: str, mode: str, *, schedule_hold: bool = True
+    ) -> None:
         """Write the device's configured entity_charge_mode entity.
 
         Two domains supported:
@@ -981,6 +1001,15 @@ class CrowdergyCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
           * `number` / `input_number` — `number.set_value` with the
             mode string parsed as a float. Used by batteries whose
             mode-entity is a number taking e.g. +5000 / 0 / -5000 W.
+
+        `schedule_hold=True` (the default for fresh SSE commands)
+        replaces any existing hold-loop task for this device with one
+        that re-writes the same value every `CHARGE_MODE_HOLD_INTERVAL`
+        seconds. The loop is what keeps inverters that reset their
+        mode after ~15 s of silence (Kostal, BYD, some Sungrow firmware)
+        actually obeying Crowdergy's commanded mode. The hold loop
+        itself calls this method with `schedule_hold=False` so it
+        doesn't keep reseeding its own task.
         """
         dev = next(
             (d for d in self.devices if d.get(CONF_DEVICE_ID) == device_id),
@@ -1000,10 +1029,11 @@ class CrowdergyCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
             )
             return
         domain = entity_id.split(".", 1)[0]
-        _LOGGER.warning(
-            "set_charge_mode: %s → %s",
-            entity_id, mode,
-        )
+        # First write (fresh SSE command) keeps the WARNING so the
+        # user sees Crowdergy acting; the hold-loop rewrites drop to
+        # DEBUG so a healthy 15-s cadence doesn't flood the HA log.
+        log_level = logging.WARNING if schedule_hold else logging.DEBUG
+        _LOGGER.log(log_level, "set_charge_mode: %s → %s", entity_id, mode)
         try:
             if domain in ("select", "input_select"):
                 await self.hass.services.async_call(
@@ -1032,6 +1062,64 @@ class CrowdergyCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
                 )
         except Exception as err:  # noqa: BLE001
             _LOGGER.exception("set_charge_mode service call failed: %s", err)
+
+        if schedule_hold:
+            self._held_charge_mode[device_id] = mode
+            self._start_charge_mode_hold(device_id)
+
+    def _start_charge_mode_hold(self, device_id: str) -> None:
+        """Replace any existing charge_mode hold task for this device.
+        Idempotent — cancelling a not-yet-started task is a no-op.
+        """
+        prev = self._charge_mode_hold_tasks.pop(device_id, None)
+        if prev is not None and not prev.done():
+            prev.cancel()
+        self._charge_mode_hold_tasks[device_id] = self.hass.async_create_task(
+            self._charge_mode_hold_loop(device_id),
+            name=f"theothergas_charge_mode_hold_{device_id}",
+        )
+
+    def _cancel_charge_mode_hold(self, device_id: str) -> None:
+        """Stop the per-device charge_mode hold and drop the cached
+        held value. Called on `passive` commands (worker signals
+        inverter should follow its own logic) and on device removal.
+        """
+        self._held_charge_mode.pop(device_id, None)
+        task = self._charge_mode_hold_tasks.pop(device_id, None)
+        if task is not None and not task.done():
+            task.cancel()
+
+    async def _charge_mode_hold_loop(self, device_id: str) -> None:
+        """Re-write the last commanded charge_mode every
+        CHARGE_MODE_HOLD_INTERVAL seconds. Bails when the held value
+        is cleared (cancel via `_cancel_charge_mode_hold`), when
+        Crowdergize gets toggled off for this device, or on
+        coordinator shutdown.
+        """
+        try:
+            await asyncio.sleep(CHARGE_MODE_HOLD_INITIAL_DELAY)
+            while True:
+                # Crowdergize toggled off → stop writing so the
+                # inverter's native logic regains control. Drop the
+                # held value so a future re-activation triggers a
+                # fresh worker command rather than auto-resuming the
+                # stale mode.
+                if not self._active_state.get(device_id, False):
+                    self._held_charge_mode.pop(device_id, None)
+                    return
+                mode = self._held_charge_mode.get(device_id)
+                if mode is None:
+                    return
+                await self._apply_charge_mode(
+                    device_id, mode, schedule_hold=False
+                )
+                await asyncio.sleep(CHARGE_MODE_HOLD_INTERVAL)
+        except asyncio.CancelledError:
+            raise
+        except Exception:  # noqa: BLE001
+            _LOGGER.exception(
+                "charge_mode hold loop for %s crashed", device_id
+            )
 
     def _sync_field_into_data(self, device_id: str, field: str, value: Any) -> None:
         """Mutate `self.data[device_id][field]` and notify CoordinatorEntities.
@@ -1219,6 +1307,7 @@ class CrowdergyCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
         coordinator instance (HA doesn't force a reload on device
         removal). Idempotent — missing keys are silently ignored."""
         self._cancel_hold(device_id)
+        self._cancel_charge_mode_hold(device_id)
         for d in (
             self._active_state,
             self._on_state,

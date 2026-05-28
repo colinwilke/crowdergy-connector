@@ -149,6 +149,17 @@
           "shares_hardware_with_device_id": "Wähle die Heizungs-WP, an die diese WW-Bereitung gekoppelt ist. Standalone-Brauchwasser-Wärmepumpe auf eigenem Gerät? Einfach \"keine Kopplung\" lassen."
         }
       },
+      "device_included_in_haushalt": {
+        "title": "{device_name} ({device_type}) — im Haushaltsverbrauch enthalten?",
+        "description": "Ist der Stromverbrauch dieses Geräts bereits in deinem Haushalts-Sensor enthalten (häufiger Fall, wenn beide am selben Hauszähler hängen)? Crowdergy zieht das Gerät dann automatisch vom Haushalts-Wert ab, damit kW und kWh nicht doppelt gezählt werden.",
+        "submit": "Weiter",
+        "data": {
+          "included_in_haushalt": "Bereits im Haushalts-Sensor enthalten"
+        },
+        "data_description": {
+          "included_in_haushalt": "An für den häufigsten Fall (ein gemeinsamer Hauszähler erfasst alles). Aus nur, wenn dieses Gerät einen separaten Zähler hat, den der Haushalts-Sensor nicht sieht."
+        }
+      },
       "add_more": {
         "title": "Weiteres Gerät hinzufügen?",
         "description": "Du kannst weitere Geräte anlegen oder die Einrichtung jetzt abschließen. Neue Geräte kannst du auch jederzeit über Einstellungen → Crowdergy → Konfigurieren nachtragen.",
@@ -309,6 +320,17 @@
           "shares_hardware_with_device_id": "Wähle die Heizungs-WP, an die diese WW-Bereitung gekoppelt ist. Standalone-Brauchwasser-Wärmepumpe auf eigenem Gerät? Einfach \"keine Kopplung\" lassen."
         }
       },
+      "add_device_included_in_haushalt": {
+        "title": "{device_name} ({device_type}) — im Haushaltsverbrauch enthalten?",
+        "description": "Ist der Stromverbrauch dieses Geräts bereits in deinem Haushalts-Sensor enthalten (häufiger Fall, wenn beide am selben Hauszähler hängen)? Crowdergy zieht das Gerät dann automatisch vom Haushalts-Wert ab, damit kW und kWh nicht doppelt gezählt werden.",
+        "submit": "Weiter",
+        "data": {
+          "included_in_haushalt": "Bereits im Haushalts-Sensor enthalten"
+        },
+        "data_description": {
+          "included_in_haushalt": "An für den häufigsten Fall (ein gemeinsamer Hauszähler erfasst alles). Aus nur, wenn dieses Gerät einen separaten Zähler hat, den der Haushalts-Sensor nicht sieht."
+        }
+      },
       "edit_device": {
         "title": "Gerät bearbeiten",
         "description": "Wähle das Gerät, das du anpassen möchtest.",
@@ -420,6 +442,17 @@
         },
         "data_description": {
           "shares_hardware_with_device_id": "Wähle die Heizungs-WP, an die diese WW-Bereitung gekoppelt ist. \"keine Kopplung\" für eigenständige Brauchwasser-WP."
+        }
+      },
+      "edit_device_included_in_haushalt": {
+        "title": "{device_name} ({device_type}) — im Haushaltsverbrauch enthalten?",
+        "description": "Ist der Stromverbrauch dieses Geräts bereits im Haushalts-Sensor enthalten? Crowdergy zieht das Gerät dann automatisch ab, damit kW und kWh nicht doppelt gezählt werden.",
+        "submit": "Speichern",
+        "data": {
+          "included_in_haushalt": "Bereits im Haushalts-Sensor enthalten"
+        },
+        "data_description": {
+          "included_in_haushalt": "An für den häufigsten Fall (gemeinsamer Hauszähler). Aus nur, wenn das Gerät einen separaten Zähler hat."
         }
       },
       "edit_device_values": {

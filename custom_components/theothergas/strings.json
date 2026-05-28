@@ -164,6 +164,17 @@
         },
         "submit": "Next"
       },
+      "device_included_in_haushalt": {
+        "title": "{device_name} ({device_type}) — counted in haushalt sensor?",
+        "description": "Is this device's draw already part of your haushalt sensor reading (typically the case when both run through the same home meter)? If yes, Crowdergy subtracts this device's kW and kWh from the haushalt value so the same energy isn't counted twice.",
+        "data": {
+          "included_in_haushalt": "Already counted in haushalt sensor"
+        },
+        "data_description": {
+          "included_in_haushalt": "Switch on for the common case (one main meter that sees every consumer). Off only if this device has its own separate meter that the haushalt sensor doesn't see."
+        },
+        "submit": "Next"
+      },
       "add_more": {
         "title": "Add another device?",
         "description": "You can add more devices or finish setup.",
@@ -328,6 +339,17 @@
         },
         "submit": "Next"
       },
+      "add_device_included_in_haushalt": {
+        "title": "{device_name} ({device_type}) — counted in haushalt sensor?",
+        "description": "Is this device's draw already part of your haushalt sensor reading (typically the case when both run through the same home meter)? If yes, Crowdergy subtracts this device's kW and kWh from the haushalt value so the same energy isn't counted twice.",
+        "data": {
+          "included_in_haushalt": "Already counted in haushalt sensor"
+        },
+        "data_description": {
+          "included_in_haushalt": "Switch on for the common case (one main meter that sees every consumer). Off only if this device has its own separate meter that the haushalt sensor doesn't see."
+        },
+        "submit": "Next"
+      },
       "edit_device": {
         "title": "Edit device",
         "description": "Pick the device to change.",
@@ -455,6 +477,17 @@
           "shares_hardware_with_device_id": "Pick the heating device coupled with this DHW unit. Leave blank for standalone DHW heaters."
         },
         "submit": "Next"
+      },
+      "edit_device_included_in_haushalt": {
+        "title": "{device_name} ({device_type}) — counted in haushalt sensor?",
+        "description": "Is this device's draw already part of your haushalt sensor reading? If yes, Crowdergy subtracts this device's kW and kWh from the haushalt value so the same energy isn't counted twice.",
+        "data": {
+          "included_in_haushalt": "Already counted in haushalt sensor"
+        },
+        "data_description": {
+          "included_in_haushalt": "On for the common case (single home meter that sees every consumer). Off if this device has its own separate meter."
+        },
+        "submit": "Save"
       },
       "edit_device_values": {
         "title": "{device_name} ({device_type}) — control values",

@@ -163,10 +163,27 @@ CONF_ENTITY_CONTROL_HOLD = "entity_control_hold"
 ENTITY_CONTROL_HOLD_ALWAYS = "always"
 ENTITY_CONTROL_HOLD_NEVER = "never"
 
+# v2.4: classic-consumer flag for the haushalt double-counting fix.
+# When True, the device's draw is already counted by the user's
+# haushalt-sensor — the backend subtracts the device from the
+# haushalt's reading on every snapshot fetch. Shown only for
+# heating / warmwater / heatpump / wallbox / generic; solar / grid /
+# battery / haushalt itself never carry it.
+CONF_INCLUDED_IN_HAUSHALT = "included_in_haushalt"
+
 # Hold loop timing. Initial 10 s lets the apply call's effect
 # propagate before the first rewrite. 30 s catches most auto-revert
 # cycles (Kostal's is 60 s).
 HOLD_INITIAL_DELAY = 10
 HOLD_POLL_INTERVAL = 30
+
+# v2.4: separate, tighter hold cadence for the charge-mode entity
+# (input_select for battery Lademodus + wallbox Lademodus). User-
+# reported: some inverters reset the mode after ~15 s if not
+# refreshed, so the 30 s entity_control cadence is too slow for
+# this path. Initial delay matches HOLD_INITIAL_DELAY so the
+# debounce-after-write rhythm stays consistent.
+CHARGE_MODE_HOLD_INITIAL_DELAY = 10
+CHARGE_MODE_HOLD_INTERVAL = 15
 
 PLATFORMS = ["sensor", "switch"]

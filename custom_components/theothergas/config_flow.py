@@ -48,6 +48,7 @@ from .const import (
     CONF_BATTERY_VALUE_IDLE,
     CONF_BATTERY_VALUE_DISCHARGE,
     CONF_SHARES_HARDWARE_WITH,
+    CONF_INCLUDED_IN_HAUSHALT,
     ENTITY_CONTROL_HOLD_ALWAYS,
     DEFAULT_API_URL,
     DEVICE_TYPES,
@@ -72,6 +73,16 @@ DEVICE_TYPE_LABELS_DE = {
 # Device types that the Crowdergy app can switch on/off through the
 # user-mapped entity_control. Solar / Grid / Haushalt are read-only.
 _CONTROLLABLE_TYPES = {"battery", "wallbox", "heating", "warmwater", "generic"}
+
+# v2.4: device types that can carry the "included in haushalt sensor"
+# flag. Classic consumers — their draw is plausibly already counted by
+# the user's haushalt-sensor (single home-meter). Solar / Grid /
+# Battery / Haushalt itself are excluded: solar generates, grid is the
+# meter itself, battery is bidirectional storage, haushalt is the
+# residual we're computing.
+_HAUSHALT_FLAG_TYPES = {
+    "heating", "warmwater", "heatpump", "wallbox", "generic",
+}
 
 # Entity domains where on/off is implicit (turn_on / turn_off services) —
 # no value_on / value_off needs to be typed by the user.
@@ -556,6 +567,26 @@ def _shares_hardware_schema(
     })
 
 
+def _included_in_haushalt_schema(
+    defaults: dict[str, Any] | None = None,
+    *,
+    new_device: bool,
+) -> vol.Schema:
+    """v2.4 form: single Boolean — "Im Haushaltsverbrauch enthalten?".
+
+    `new_device=True` pre-selects Ja (the common case: one home-meter
+    that sees every classic consumer). Edit-flow passes False so the
+    stored value drives the default.
+    """
+    d = defaults or {}
+    default = d.get(CONF_INCLUDED_IN_HAUSHALT, True if new_device else False)
+    return vol.Schema({
+        vol.Optional(
+            CONF_INCLUDED_IN_HAUSHALT, default=default
+        ): selector.BooleanSelector(),
+    })
+
+
 # ── Persistence helpers ─────────────────────────────────────────────────────
 
 
@@ -634,6 +665,13 @@ def _build_device_record(
         CONF_SHARES_HARDWARE_WITH: entity_input.get(
             CONF_SHARES_HARDWARE_WITH, ""
         ),
+        # v2.4: classic-consumer flag for the haushalt double-counting
+        # fix. Defaults to False on types that don't carry it (solar /
+        # grid / battery / haushalt) — the backend ignores it anyway
+        # for those types.
+        CONF_INCLUDED_IN_HAUSHALT: bool(
+            entity_input.get(CONF_INCLUDED_IN_HAUSHALT, False)
+        ),
     }
 
 
@@ -684,6 +722,17 @@ async def _register_device(
             value = entity_input.get(key, "")
             if value:
                 device_config[api_field] = value
+    # v2.4: classic-consumer haushalt flag. Sent only for the types
+    # where it has semantics — solar / grid / battery / haushalt
+    # itself don't carry it, and the backend ignores it for those
+    # types regardless. Form pre-selects Ja for new devices so the
+    # POST always carries a value for classic consumers.
+    if device_type in {
+        "heating", "warmwater", "heatpump", "wallbox", "generic",
+    }:
+        device_config["included_in_haushalt"] = bool(
+            entity_input.get(CONF_INCLUDED_IN_HAUSHALT, False)
+        )
     async with httpx.AsyncClient(timeout=15.0) as client:
         response = await client.post(
             f"{api_url}/api/v1/devices",
@@ -726,6 +775,17 @@ async def _update_device_backend(
             (CONF_BATTERY_VALUE_DISCHARGE, "battery_value_discharge"),
         ):
             payload[api_field] = entity_input.get(key, "")
+    # v2.4: classic-consumer haushalt flag — mirror the edit flow
+    # selection so toggling it in the connector propagates to iOS.
+    if (
+        entity_input is not None
+        and device_type in {
+            "heating", "warmwater", "heatpump", "wallbox", "generic",
+        }
+    ):
+        payload["included_in_haushalt"] = bool(
+            entity_input.get(CONF_INCLUDED_IN_HAUSHALT, False)
+        )
     async with httpx.AsyncClient(timeout=15.0) as client:
         response = await client.put(
             f"{api_url}/api/v1/devices/{device_id}",
@@ -1093,6 +1153,13 @@ class CrowdergyConfigFlow(ConfigFlow, domain=DOMAIN):
             self._pending_entity_input = entity_input
             return await self.async_step_device_shares_hardware()
 
+        if (
+            device_type in _HAUSHALT_FLAG_TYPES
+            and CONF_INCLUDED_IN_HAUSHALT not in entity_input
+        ):
+            self._pending_entity_input = entity_input
+            return await self.async_step_device_included_in_haushalt()
+
         return await self._register_with_entities(entity_input)
 
     async def async_step_device_charge_mode_values(
@@ -1228,6 +1295,33 @@ class CrowdergyConfigFlow(ConfigFlow, domain=DOMAIN):
         return self.async_show_form(
             step_id="device_shares_hardware",
             data_schema=_shares_hardware_schema(heating_devices, {}),
+            description_placeholders={
+                "device_type": DEVICE_TYPE_LABELS_DE.get(device_type, device_type),
+                "device_name": device_name,
+            },
+        )
+
+    async def async_step_device_included_in_haushalt(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """v2.4 step: mark classic-consumer devices whose draw is
+        already counted by the user's haushalt-sensor. Backend
+        subtracts these from the haushalt's reading so kW and kWh
+        aren't doubled. Pre-selected `Ja` (the common case: one
+        home-meter that sees every consumer)."""
+        device_type = self._pending_type or "generic"
+        device_name = self._pending_name or ""
+        entity_input = dict(self._pending_entity_input or {})
+
+        if user_input is not None:
+            entity_input[CONF_INCLUDED_IN_HAUSHALT] = bool(
+                user_input.get(CONF_INCLUDED_IN_HAUSHALT, True)
+            )
+            return await self._dispatch_post_entities(entity_input)
+
+        return self.async_show_form(
+            step_id="device_included_in_haushalt",
+            data_schema=_included_in_haushalt_schema({}, new_device=True),
             description_placeholders={
                 "device_type": DEVICE_TYPE_LABELS_DE.get(device_type, device_type),
                 "device_name": device_name,
@@ -1461,6 +1555,13 @@ class CrowdergyOptionsFlow(OptionsFlow):
             self._pending_entity_input = entity_input
             return await self.async_step_add_device_shares_hardware()
 
+        if (
+            device_type in _HAUSHALT_FLAG_TYPES
+            and CONF_INCLUDED_IN_HAUSHALT not in entity_input
+        ):
+            self._pending_entity_input = entity_input
+            return await self.async_step_add_device_included_in_haushalt()
+
         return await self._options_register(entity_input)
 
     async def async_step_add_device_charge_mode_values(
@@ -1587,6 +1688,29 @@ class CrowdergyOptionsFlow(OptionsFlow):
         return self.async_show_form(
             step_id="add_device_shares_hardware",
             data_schema=_shares_hardware_schema(heating_devices, {}),
+            description_placeholders={
+                "device_type": DEVICE_TYPE_LABELS_DE.get(device_type, device_type),
+                "device_name": device_name,
+            },
+        )
+
+    async def async_step_add_device_included_in_haushalt(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Options-flow variant of the v2.4 haushalt-inclusion picker."""
+        device_type = self._pending_type or "generic"
+        device_name = self._pending_name or ""
+        entity_input = dict(self._pending_entity_input or {})
+
+        if user_input is not None:
+            entity_input[CONF_INCLUDED_IN_HAUSHALT] = bool(
+                user_input.get(CONF_INCLUDED_IN_HAUSHALT, True)
+            )
+            return await self._dispatch_add_post_entities(entity_input)
+
+        return self.async_show_form(
+            step_id="add_device_included_in_haushalt",
+            data_schema=_included_in_haushalt_schema({}, new_device=True),
             description_placeholders={
                 "device_type": DEVICE_TYPE_LABELS_DE.get(device_type, device_type),
                 "device_name": device_name,
@@ -1817,6 +1941,13 @@ class CrowdergyOptionsFlow(OptionsFlow):
             self._edit_pending_entity_input = entity_input
             return await self.async_step_edit_device_shares_hardware()
 
+        if (
+            device_type in _HAUSHALT_FLAG_TYPES
+            and CONF_INCLUDED_IN_HAUSHALT not in entity_input
+        ):
+            self._edit_pending_entity_input = entity_input
+            return await self.async_step_edit_device_included_in_haushalt()
+
         return await self._edit_save(target, entity_input)
 
     async def async_step_edit_device_charge_mode_values(
@@ -1935,6 +2066,37 @@ class CrowdergyOptionsFlow(OptionsFlow):
                 "device_type": DEVICE_TYPE_LABELS_DE.get(device_type, device_type),
                 "device_name": device_name,
                 "entity_vehicle_status": entity_vehicle_status,
+            },
+        )
+
+    async def async_step_edit_device_included_in_haushalt(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Edit-flow variant of the v2.4 haushalt-inclusion picker.
+        Pre-fills the stored value so re-saving without touching
+        anything is a true no-op."""
+        target = next(
+            (d for d in self._devices if d.get(CONF_DEVICE_ID) == self._edit_target_id),
+            None,
+        )
+        if target is None:
+            return await self.async_step_init()
+        device_type = self._edit_pending_type or target[CONF_DEVICE_TYPE]
+        device_name = self._edit_pending_name or target[CONF_DEVICE_NAME]
+        entity_input = dict(self._edit_pending_entity_input or {})
+
+        if user_input is not None:
+            entity_input[CONF_INCLUDED_IN_HAUSHALT] = bool(
+                user_input.get(CONF_INCLUDED_IN_HAUSHALT, False)
+            )
+            return await self._dispatch_edit_post_entities(target, entity_input)
+
+        return self.async_show_form(
+            step_id="edit_device_included_in_haushalt",
+            data_schema=_included_in_haushalt_schema(target, new_device=False),
+            description_placeholders={
+                "device_type": DEVICE_TYPE_LABELS_DE.get(device_type, device_type),
+                "device_name": device_name,
             },
         )
 
