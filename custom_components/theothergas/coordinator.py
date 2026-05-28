@@ -1034,6 +1034,13 @@ class CrowdergyCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
         # DEBUG so a healthy 15-s cadence doesn't flood the HA log.
         log_level = logging.WARNING if schedule_hold else logging.DEBUG
         _LOGGER.log(log_level, "set_charge_mode: %s → %s", entity_id, mode)
+        # Update the held value BEFORE the actual write so any in-
+        # flight old hold-tick that wakes up between our cancel and
+        # its next read still sees the new value rather than re-
+        # writing the previous one. Race-safe even if `_start_charge_
+        # mode_hold` below loses the cancel race.
+        if schedule_hold:
+            self._held_charge_mode[device_id] = mode
         try:
             if domain in ("select", "input_select"):
                 await self.hass.services.async_call(
@@ -1064,7 +1071,6 @@ class CrowdergyCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
             _LOGGER.exception("set_charge_mode service call failed: %s", err)
 
         if schedule_hold:
-            self._held_charge_mode[device_id] = mode
             self._start_charge_mode_hold(device_id)
 
     def _start_charge_mode_hold(self, device_id: str) -> None:
@@ -1091,22 +1097,21 @@ class CrowdergyCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
 
     async def _charge_mode_hold_loop(self, device_id: str) -> None:
         """Re-write the last commanded charge_mode every
-        CHARGE_MODE_HOLD_INTERVAL seconds. Bails when the held value
-        is cleared (cancel via `_cancel_charge_mode_hold`), when
-        Crowdergize gets toggled off for this device, or on
-        coordinator shutdown.
+        CHARGE_MODE_HOLD_INTERVAL seconds. Bails only when the held
+        value is cleared (cancel via `_cancel_charge_mode_hold` —
+        called on `passive` from the worker, on `_restore_charge_mode`
+        when Crowdergize toggles off, on device removal, and on
+        coordinator shutdown).
+
+        Deliberately does NOT gate on `_active_state`. The user can
+        manually tap Wallbox modes (Aus / An / Solar) while AI is off,
+        and those still need to hold against firmwares that auto-
+        revert. AI-off scenarios are handled by the explicit cancel
+        paths above, not by an inline is_active check.
         """
         try:
             await asyncio.sleep(CHARGE_MODE_HOLD_INITIAL_DELAY)
             while True:
-                # Crowdergize toggled off → stop writing so the
-                # inverter's native logic regains control. Drop the
-                # held value so a future re-activation triggers a
-                # fresh worker command rather than auto-resuming the
-                # stale mode.
-                if not self._active_state.get(device_id, False):
-                    self._held_charge_mode.pop(device_id, None)
-                    return
                 mode = self._held_charge_mode.get(device_id)
                 if mode is None:
                     return
