@@ -195,4 +195,4 @@ CHARGE_MODE_HOLD_INTERVAL = 15
 # packet loss.
 SSE_STALE_THRESHOLD_S = 60
 
-PLATFORMS = ["sensor", "switch"]
+PLATFORMS = ["sensor", "switch", "binary_sensor"]
