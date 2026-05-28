@@ -186,4 +186,13 @@ HOLD_POLL_INTERVAL = 30
 CHARGE_MODE_HOLD_INITIAL_DELAY = 10
 CHARGE_MODE_HOLD_INTERVAL = 15
 
+# v2.4.2: safety guard. If no SSE event (ping or data) has arrived in
+# this many seconds, the hold-loop assumes Crowdergy is offline or
+# unreachable and bails — the inverter's native logic regains control
+# rather than being stuck on the last commanded mode. Backend sends
+# `{"type":"ping"}` every 15 s, so 60 s = 4 missed pings = honest
+# "Crowdergy is gone" signal without false-triggering on a single
+# packet loss.
+SSE_STALE_THRESHOLD_S = 60
+
 PLATFORMS = ["sensor", "switch"]

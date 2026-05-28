@@ -46,6 +46,7 @@ from .const import (
     HOLD_POLL_INTERVAL,
     CHARGE_MODE_HOLD_INITIAL_DELAY,
     CHARGE_MODE_HOLD_INTERVAL,
+    SSE_STALE_THRESHOLD_S,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -151,6 +152,12 @@ class CrowdergyCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
         # Last charge_mode value commanded per device — re-written
         # by the hold loop. Cleared when a "passive" command arrives.
         self._held_charge_mode: dict[str, str] = {}
+        # v2.4.2: wall-clock of the last received SSE message (any
+        # type — ping, telemetry, command). Hold loops gate on this
+        # so a backend outage or SSE drop pauses the periodic
+        # re-write and lets the inverter take back over instead of
+        # holding the last commanded mode forever.
+        self._last_sse_event_at: float = 0.0
         # Wallbox charge_mode snapshot per device — captures whatever
         # the user had set on entity_charge_mode BEFORE Crowdergize
         # was switched ON, so we can restore it on OFF. In-memory only;
@@ -850,6 +857,11 @@ class CrowdergyCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
             delay = min(delay * 2, WS_RECONNECT_MAX)
 
     async def _handle_ws_message(self, data: dict[str, Any]) -> None:
+        # Update liveness clock for the charge-mode hold-loop kill
+        # switch — any received message (ping included) counts as
+        # "Crowdergy still talking to us". The 15-s server ping is
+        # the most common message type when nothing else is changing.
+        self._last_sse_event_at = time.time()
         # Telemetry mirror frames carry device-level state changes the user
         # may have driven from the iOS app. We watch two flags:
         #   - is_active (Crowdergize consent) — just update the local cache
@@ -1097,11 +1109,14 @@ class CrowdergyCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
 
     async def _charge_mode_hold_loop(self, device_id: str) -> None:
         """Re-write the last commanded charge_mode every
-        CHARGE_MODE_HOLD_INTERVAL seconds. Bails only when the held
-        value is cleared (cancel via `_cancel_charge_mode_hold` —
-        called on `passive` from the worker, on `_restore_charge_mode`
-        when Crowdergize toggles off, on device removal, and on
-        coordinator shutdown).
+        CHARGE_MODE_HOLD_INTERVAL seconds. Bails when the held value
+        is cleared (cancel via `_cancel_charge_mode_hold` — called on
+        `passive` from the worker, on `_restore_charge_mode` when
+        Crowdergize toggles off, on device removal, and on coordinator
+        shutdown) OR when the SSE channel has been silent past
+        SSE_STALE_THRESHOLD_S (Crowdergy backend / network unreachable
+        → the inverter's native logic regains control rather than
+        being stuck on the last command forever).
 
         Deliberately does NOT gate on `_active_state`. The user can
         manually tap Wallbox modes (Aus / An / Solar) while AI is off,
@@ -1114,6 +1129,20 @@ class CrowdergyCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
             while True:
                 mode = self._held_charge_mode.get(device_id)
                 if mode is None:
+                    return
+                # Liveness check: if Crowdergy isn't talking to us,
+                # stop holding so the user's inverter can take over.
+                # When SSE reconnects, the next MPC tick re-establishes
+                # the hold via a fresh `set_charge_mode` event.
+                staleness = time.time() - self._last_sse_event_at
+                if staleness > SSE_STALE_THRESHOLD_S:
+                    _LOGGER.warning(
+                        "charge_mode hold: bailing for %s — Crowdergy "
+                        "SSE silent for %.1fs (> %ds). Inverter "
+                        "native logic resumes.",
+                        device_id, staleness, SSE_STALE_THRESHOLD_S,
+                    )
+                    self._held_charge_mode.pop(device_id, None)
                     return
                 await self._apply_charge_mode(
                     device_id, mode, schedule_hold=False
