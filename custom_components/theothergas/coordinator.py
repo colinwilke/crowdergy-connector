@@ -182,11 +182,13 @@ class CrowdergyCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
         # Last charge_mode value commanded per device — re-written
         # by the hold loop. Cleared when a "passive" command arrives.
         self._held_charge_mode: dict[str, str] = {}
-        # v2.4.2: wall-clock of the last received SSE message (any
-        # type — ping, telemetry, command). Hold loops gate on this
-        # so a backend outage or SSE drop pauses the periodic
-        # re-write and lets the inverter take back over instead of
-        # holding the last commanded mode forever.
+        # Wall-clock des letzten SSE-Events (any type — ping,
+        # telemetry, command). Hold-Loops gaten darauf, sodass ein
+        # Backend-Outage oder SSE-Drop die periodische Re-Write-Logik
+        # pausiert und dem Inverter die Steuerung zurückgibt statt
+        # den letzten Mode-Wert ewig zu halten. Externe Reader (z.B.
+        # binary_sensor.is_on) sollten über `last_sse_event_at`
+        # zugreifen (public property), nicht direkt aufs Private-Attr.
         self._last_sse_event_at: float = 0.0
         # Wallbox charge_mode snapshot per device — captures whatever
         # the user had set on entity_charge_mode BEFORE Crowdergize
@@ -405,6 +407,12 @@ class CrowdergyCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
         self._charge_mode_hold_tasks.clear()
         self._held_charge_mode.clear()
         await self._client.aclose()
+
+    @property
+    def last_sse_event_at(self) -> float:
+        """Public Accessor für externe Reader (z.B. binary_sensor) —
+        statt das _last_sse_event_at Privat-Attribut direkt zu lesen."""
+        return self._last_sse_event_at
 
     def _read_entity_state(self, entity_id: str) -> Any:
         if not entity_id:
@@ -1617,9 +1625,11 @@ class CrowdergyCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
         self, raw_value: Any, on: bool, domain: str
     ) -> str | None:
         """Normalise the value we'd compare an entity's current state
-        against. Returns a string (HA states are strings) or None if
-        we can't decide — in that case the loop just re-writes blindly
-        in `always` mode and stays passive in `auto`.
+        against. Returns a string (HA states are strings) or None
+        wenn wir's nicht entscheiden können — dann re-write die
+        Hold-Loop blind im 'always' Modus (es gab früher einen
+        'auto' Modus der bei None passiv blieb; collapse zu 'always'
+        seit v1.20.0, also kein Branching mehr nötig).
         """
         if domain in ("switch", "input_boolean", "light", "fan"):
             return "on" if on else "off"

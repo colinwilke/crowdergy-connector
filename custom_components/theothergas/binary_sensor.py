@@ -66,7 +66,7 @@ class CrowdergyConnectedBinarySensor(
 
     @property
     def is_on(self) -> bool:
-        last = self.coordinator._last_sse_event_at
+        last = self.coordinator.last_sse_event_at
         if last == 0.0:
             # Never seen an SSE event — boot state. Report OFF so
             # take-over automations don't sit in limbo waiting for a
