@@ -68,16 +68,28 @@ previous one, skip it. The scheduled 30 s heartbeat will catch
 anything missed. Prevents storms when a power sensor updates every
 sub-second."""
 
-PER_DEVICE_HEARTBEAT_INTERVAL = 30.0
-"""Even when nothing crossed a value threshold, send at least one
-PATCH per device every 30 s — matches the coordinator's scheduled
-tick so EVERY tick a quiet device sends one row. Why so frequent:
-iOS marks "connecting" after 35 s and "offline" after 70 s of
-global silence. A 60 s heartbeat looked fine on average but flickered
-to offline when devices synced into the same tick window (no PATCH
-between them for > 70 s). 30 s leaves no room for that race.
-Quiet devices therefore cost 1 row / 30 s = 2880 rows/device/day,
-still ≥ 10× reduction vs the pre-v1.18 event-storm."""
+PER_DEVICE_HEARTBEAT_INTERVAL = 300.0
+"""Floor for the per-device "send something even when nothing changed"
+gate. Raised 30 s → 300 s in v2.5.4 once the dedicated
+`_heartbeat_loop` started pinging `/me/heartbeat` separately for
+freshness. Effect on a quiet device: 1 telemetry row / 5 min
+instead of 1 / 30 s (~10× reduction, ~90 % HTTP cut on idle homes).
+Categorical / numeric state-changes still PATCH within the same
+tick — this only applies when literally nothing crossed a threshold.
+
+Why not zero: an occasional row keeps the iOS-side
+`latest_telemetry` cache up-to-date and lets the backend's near-
+duplicate gate self-heal if `_should_send`'s in-memory state ever
+diverges from what the DB has."""
+
+HEARTBEAT_PING_INTERVAL = 25.0
+"""Cadence of the lightweight liveness ping the connector POSTs to
+`/api/v1/users/me/heartbeat`. Independent of any device's PATCH
+schedule — exists so the backend can stamp
+`users.connector_last_seen` (and thus iOS's connection dot) without
+relying on the high-frequency telemetry stream. Slightly under
+30 s so iOS's 35 s 'live' threshold has one full ping of grace
+even if the request lands at the back of a network queue."""
 
 # Per-field "changed enough to be worth a row" thresholds. When NO
 # field crosses these AND the per-device heartbeat hasn't expired,
@@ -129,6 +141,11 @@ class CrowdergyCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
         self._unsub_listeners: list[Any] = []
         self._entity_to_devices: dict[str, list[str]] = {}
         self._ws_task: asyncio.Task | None = None
+        # v2.5.4: dedicated liveness ping. Decoupled from the
+        # per-device telemetry stream so a fully idle home no longer
+        # has to PATCH N devices every 30 s purely to keep iOS's
+        # connection dot green. See `_heartbeat_loop` docstring.
+        self._heartbeat_task: asyncio.Task | None = None
         # Crowdergize state per device — authoritative source is the backend
         # (`devices.is_active`). We mirror it locally so the HA switch
         # entity can render the latest value without round-tripping each
@@ -261,6 +278,43 @@ class CrowdergyCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
             name=f"{DOMAIN}_ws_listener",
         )
 
+    def start_heartbeat(self) -> None:
+        """Start the dedicated liveness ping loop (v2.5.4+). Idempotent."""
+        if self._heartbeat_task and not self._heartbeat_task.done():
+            return
+        self._heartbeat_task = self.hass.async_create_background_task(
+            self._run_heartbeat_loop(),
+            name=f"{DOMAIN}_heartbeat",
+        )
+
+    async def _run_heartbeat_loop(self) -> None:
+        """POST /users/me/heartbeat every HEARTBEAT_PING_INTERVAL.
+
+        Backend stamps `connector_last_seen` + `connector_version`
+        from this call — same effect as a telemetry PATCH used to
+        have, but without writing a row to the `telemetry` table.
+
+        Failures are logged at DEBUG (transient network blips are
+        expected) and the loop continues. A sustained outage just
+        means iOS will mark the connector offline after 70 s —
+        identical to pre-v2.5.4 behaviour.
+        """
+        while True:
+            try:
+                response = await self._authenticated_request(
+                    "POST", "/api/v1/users/me/heartbeat"
+                )
+                if response.status_code >= 400:
+                    _LOGGER.debug(
+                        "heartbeat ping returned %s: %s",
+                        response.status_code, response.text,
+                    )
+            except asyncio.CancelledError:
+                raise
+            except Exception as err:  # noqa: BLE001
+                _LOGGER.debug("heartbeat ping failed: %s", err)
+            await asyncio.sleep(HEARTBEAT_PING_INTERVAL)
+
     def _auth_headers(self) -> dict[str, str]:
         return {
             "Authorization": f"Bearer {self._access_token}",
@@ -312,6 +366,12 @@ class CrowdergyCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
             self._ws_task.cancel()
             try:
                 await self._ws_task
+            except (asyncio.CancelledError, Exception):  # noqa: BLE001
+                pass
+        if self._heartbeat_task and not self._heartbeat_task.done():
+            self._heartbeat_task.cancel()
+            try:
+                await self._heartbeat_task
             except (asyncio.CancelledError, Exception):  # noqa: BLE001
                 pass
         for task in list(self._hold_tasks.values()):
