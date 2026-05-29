@@ -49,10 +49,12 @@ CONF_ENTITY_POWER = "entity_current_power_kw"
 CONF_ENTITY_SOC = "entity_soc_percent"
 # Wallbox-only read-only field.
 CONF_ENTITY_VEHICLE_STATUS = "entity_vehicle_status"
-# Heatpump (and hot-water tank) read-only temperature entities. Both
-# optional — devices without a target-temp sensor leave it null.
+# Heatpump (and hot-water tank) read-only current-temperature entity.
+# Optional — devices without a temp sensor leave it null. The setpoint
+# entity was removed in v2.5.3: Crowdergy never wrote it, and the
+# stored value duplicated information the user controls via their own
+# HA heating integration.
 CONF_ENTITY_CURRENT_TEMP = "entity_current_temp_c"
-CONF_ENTITY_TARGET_TEMP = "entity_target_temp_c"
 # Optional per-device kWh meter. Must be an HA sensor with
 # `state_class: total_increasing` (lifetime cumulative). The
 # Crowdergy backend stores the raw value and derives day / month /

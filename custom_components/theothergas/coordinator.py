@@ -28,7 +28,6 @@ from .const import (
     CONF_ENTITY_SOC,
     CONF_ENTITY_VEHICLE_STATUS,
     CONF_ENTITY_CURRENT_TEMP,
-    CONF_ENTITY_TARGET_TEMP,
     CONF_ENTITY_ENERGY_TOTAL,
     CONF_ENTITY_ENERGY_DISCHARGED_TOTAL,
     CONF_ENTITY_OUTDOOR_TEMP,
@@ -88,7 +87,6 @@ SEND_THRESHOLDS: dict[str, float] = {
     "power_kw": 0.05,         # 50 W
     "soc_percent": 1.0,       # 1 percentage point
     "current_temp_c": 0.3,    # 0.3 °C
-    "target_temp_c": 0.3,
 }
 
 WS_RECONNECT_INITIAL = 1
@@ -220,7 +218,6 @@ class CrowdergyCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
                 CONF_ENTITY_SOC,
                 CONF_ENTITY_VEHICLE_STATUS,
                 CONF_ENTITY_CURRENT_TEMP,
-                CONF_ENTITY_TARGET_TEMP,
                 CONF_ENTITY_ENERGY_TOTAL,
                 CONF_ENTITY_CONTROL,
             ):
@@ -594,7 +591,6 @@ class CrowdergyCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
             entity_vehicle_status = dev.get(CONF_ENTITY_VEHICLE_STATUS, "")
             entity_charge_mode = dev.get(CONF_ENTITY_CHARGE_MODE, "")
             entity_current_temp = dev.get(CONF_ENTITY_CURRENT_TEMP, "")
-            entity_target_temp = dev.get(CONF_ENTITY_TARGET_TEMP, "")
             entity_energy_total = dev.get(CONF_ENTITY_ENERGY_TOTAL, "")
             entity_energy_discharged_total = dev.get(
                 CONF_ENTITY_ENERGY_DISCHARGED_TOTAL, ""
@@ -619,7 +615,6 @@ class CrowdergyCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
             # changed it on its own.
             charge_mode = self._read_string(entity_charge_mode)
             current_temp_c = self._read_entity_state(entity_current_temp)
-            target_temp_c = self._read_entity_state(entity_target_temp)
             # Lifetime cumulative energy in kWh (unit-normalised from
             # the HA `unit_of_measurement` attribute). We still send
             # the raw cumulative for debugging, but the iOS chart
@@ -696,8 +691,6 @@ class CrowdergyCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
                 payload["charge_mode"] = charge_mode
             if current_temp_c is not None:
                 payload["current_temp_c"] = current_temp_c
-            if target_temp_c is not None:
-                payload["target_temp_c"] = target_temp_c
             if energy_kwh_total is not None:
                 payload["energy_kwh_total"] = energy_kwh_total
             if energy_kwh_delta is not None:

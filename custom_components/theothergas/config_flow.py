@@ -28,7 +28,6 @@ from .const import (
     CONF_ENTITY_SOC,
     CONF_ENTITY_VEHICLE_STATUS,
     CONF_ENTITY_CURRENT_TEMP,
-    CONF_ENTITY_TARGET_TEMP,
     CONF_ENTITY_ENERGY_TOTAL,
     CONF_ENTITY_ENERGY_DISCHARGED_TOTAL,
     CONF_PASSWORD,
@@ -117,11 +116,11 @@ _READ_FIELDS: dict[str, list[str]] = {
         CONF_ENTITY_ENERGY_DISCHARGED_TOTAL,
     ],
     "heating":   [
-        CONF_ENTITY_POWER, CONF_ENTITY_CURRENT_TEMP, CONF_ENTITY_TARGET_TEMP,
+        CONF_ENTITY_POWER, CONF_ENTITY_CURRENT_TEMP,
         CONF_ENTITY_ENERGY_TOTAL,
     ],
     "warmwater": [
-        CONF_ENTITY_POWER, CONF_ENTITY_CURRENT_TEMP, CONF_ENTITY_TARGET_TEMP,
+        CONF_ENTITY_POWER, CONF_ENTITY_CURRENT_TEMP,
         CONF_ENTITY_ENERGY_TOTAL,
     ],
     "haushalt":  [CONF_ENTITY_POWER, CONF_ENTITY_ENERGY_TOTAL],
@@ -149,9 +148,6 @@ _ENTITY_SELECTORS: dict[str, selector.EntitySelector] = {
     ),
     CONF_ENTITY_CURRENT_TEMP: selector.EntitySelector(
         selector.EntitySelectorConfig(domain="sensor")
-    ),
-    CONF_ENTITY_TARGET_TEMP: selector.EntitySelector(
-        selector.EntitySelectorConfig(domain=["sensor", "number", "input_number"])
     ),
     # Any settable HA entity — connector adapts the service call to the
     # entity's domain at runtime (switch.turn_on/off, number.set_value,
@@ -607,12 +603,13 @@ def _cooling_schema(
     return vol.Schema({
         vol.Optional(
             CONF_SUPPORTS_COOLING,
-            default=d.get(CONF_SUPPORTS_COOLING, False if new_device else False),
+            default=d.get(CONF_SUPPORTS_COOLING, False),
         ): selector.BooleanSelector(),
-        vol.Optional(
-            CONF_ENTITY_COOL_CONTROL,
-            default=d.get(CONF_ENTITY_COOL_CONTROL, ""),
-        ): selector.EntitySelector(
+        # EntitySelector rejects "" — use _entity_field so the default
+        # is omitted entirely when no cooling entity is stored. Without
+        # this, saving the form with cooling left off raised
+        # "Entity is neither a valid entity ID nor a valid UUID".
+        _entity_field(CONF_ENTITY_COOL_CONTROL, d): selector.EntitySelector(
             selector.EntitySelectorConfig(
                 domain=["select", "input_select", "switch", "input_boolean", "climate"]
             )
@@ -668,7 +665,6 @@ def _build_device_record(
         CONF_ENTITY_SOC: entity_input.get(CONF_ENTITY_SOC, ""),
         CONF_ENTITY_VEHICLE_STATUS: entity_input.get(CONF_ENTITY_VEHICLE_STATUS, ""),
         CONF_ENTITY_CURRENT_TEMP: entity_input.get(CONF_ENTITY_CURRENT_TEMP, ""),
-        CONF_ENTITY_TARGET_TEMP: entity_input.get(CONF_ENTITY_TARGET_TEMP, ""),
         CONF_ENTITY_ENERGY_TOTAL: entity_input.get(CONF_ENTITY_ENERGY_TOTAL, ""),
         CONF_ENTITY_ENERGY_DISCHARGED_TOTAL: entity_input.get(
             CONF_ENTITY_ENERGY_DISCHARGED_TOTAL, ""

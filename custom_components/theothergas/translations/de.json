@@ -67,7 +67,6 @@
               "entity_soc_percent": "Ladezustand-Sensor",
               "entity_vehicle_status": "Fahrzeugstatus-Sensor",
               "entity_current_temp_c": "Ist-Temperatur-Sensor",
-              "entity_target_temp_c": "Soll-Temperatur-Sensor",
               "entity_energy_total": "Gesamtenergie-Zähler (kWh, kumulativ)",
               "entity_energy_discharged_total": "Abfluss-Energiezähler (kWh, kumulativ) — Batterie / Netz"
             },
@@ -76,7 +75,6 @@
               "entity_soc_percent": "Aktueller Ladezustand in % (0–100). Pflichtfeld für Batterie und Wallbox — daraus errechnet die App den Ladestand und die spätere Smart-Steuerung respektiert deinen erlaubten Bereich (Min/Max in der App).",
               "entity_vehicle_status": "Sensor- oder Binary-Sensor-Entität, die meldet, ob ein Auto an der Wallbox steckt (typische Werte: connected, charging, idle). Wallbox-Pflichtfeld — Crowdergy startet eine Crowdergize-Session erst wenn ein Auto da ist und beendet sie automatisch beim Abstöpseln.",
               "entity_current_temp_c": "Aktuelle Temperatur in °C — z. B. die Vorlauftemperatur einer Wärmepumpe oder die Innentemperatur eines Brauchwasser-Boilers. Wird in der App neben dem Wärmepumpen-Tile angezeigt.",
-              "entity_target_temp_c": "Aktuelle Soll-/Zieltemperatur in °C. Optional — wenn leer, zeigt die App nur die Ist-Temperatur. Wichtig: Crowdergy schreibt diese Entität nicht; die Soll-Temperatur regelst du wie gewohnt über deine HA-Heizungsintegration. Crowdergy nutzt den Wert später nur, um Heizphasen besser einzuplanen.",
               "entity_energy_total": "Lebensdauer-Energiezähler in kWh (HA-Attribut state_class: total_increasing). Crowdergy speichert den Rohwert und berechnet daraus Tages-/Monats-/Jahresverbrauch via Delta. Optional — Geräte ohne diesen Sensor zeigen weiterhin nur kW. Niemals aus power_kw integrieren, der Drift summiert sich monatlich auf zweistellige Prozent.",
               "entity_energy_discharged_total": "Optionaler zweiter total_increasing-kWh-Zähler für die GEGEN-Richtung. Batterie: Entlade-Zähler (oben steht der Lade-Zähler). Netz: Einspeise-Zähler (oben steht der Bezugs-Zähler). Wenn beide gesetzt, speichert Crowdergy den signed Netto-Wert — die App zeigt dann pro Slot einen Balken (Verbrauch/Bezug vs. Einspeisung/Entladung). Leer lassen, wenn dein Wechselrichter nur einen vorzeichenbehafteten Sensor liefert — der einzelne Wert wird dann direkt übernommen."
             }
@@ -255,7 +253,6 @@
               "entity_soc_percent": "Ladezustand-Sensor",
               "entity_vehicle_status": "Fahrzeugstatus-Sensor",
               "entity_current_temp_c": "Ist-Temperatur-Sensor",
-              "entity_target_temp_c": "Soll-Temperatur-Sensor",
               "entity_energy_total": "Gesamtenergie-Zähler (kWh, kumulativ)",
               "entity_energy_discharged_total": "Abfluss-Energiezähler (kWh, kumulativ) — Batterie / Netz"
             },
@@ -264,7 +261,6 @@
               "entity_soc_percent": "Aktueller Ladezustand in % (0–100). Pflicht für Batterie und Wallbox — App-Ladestand und Smart-Grenzen Min/Max basieren darauf.",
               "entity_vehicle_status": "Sensor- oder Binary-Sensor, der Auto-an-Wallbox erkennt (typische Werte: connected, charging, idle). Wallbox-Pflichtfeld — Crowdergize startet erst beim Anstecken und endet beim Abstecken automatisch.",
               "entity_current_temp_c": "Aktuelle Temperatur in °C — z. B. Vorlauf einer Wärmepumpe oder Innentemperatur eines Brauchwasser-Boilers. Erscheint neben dem WP-Tile in der App.",
-              "entity_target_temp_c": "Aktuelle Soll-/Zieltemperatur in °C. Optional. Crowdergy schreibt diese Entität nicht — du regelst die Soll-Temperatur wie gewohnt selbst, Crowdergy nutzt den Wert später für die Heiz-Planung.",
               "entity_energy_total": "Lebensdauer-Energiezähler in kWh (HA-Attribut state_class: total_increasing). Crowdergy speichert den Rohwert und berechnet daraus Tages-/Monats-/Jahresverbrauch via Delta. Optional — Geräte ohne diesen Sensor zeigen weiterhin nur kW. Niemals aus power_kw integrieren, der Drift summiert sich monatlich auf zweistellige Prozent.",
               "entity_energy_discharged_total": "Optionaler zweiter total_increasing-kWh-Zähler für die GEGEN-Richtung. Batterie: Entlade-Zähler (oben steht der Lade-Zähler). Netz: Einspeise-Zähler (oben steht der Bezugs-Zähler). Wenn beide gesetzt, speichert Crowdergy den signed Netto-Wert — die App zeigt dann pro Slot einen Balken (Verbrauch/Bezug vs. Einspeisung/Entladung). Leer lassen, wenn dein Wechselrichter nur einen vorzeichenbehafteten Sensor liefert — der einzelne Wert wird dann direkt übernommen."
             }
@@ -409,7 +405,6 @@
               "entity_soc_percent": "Ladezustand-Sensor",
               "entity_vehicle_status": "Fahrzeugstatus-Sensor",
               "entity_current_temp_c": "Ist-Temperatur-Sensor",
-              "entity_target_temp_c": "Soll-Temperatur-Sensor",
               "entity_energy_total": "Gesamtenergie-Zähler (kWh, kumulativ)",
               "entity_energy_discharged_total": "Abfluss-Energiezähler (kWh, kumulativ) — Batterie / Netz"
             },
@@ -418,7 +413,6 @@
               "entity_soc_percent": "Ladezustand in % (0–100). Pflicht für Batterie und Wallbox.",
               "entity_vehicle_status": "Sensor oder Binary-Sensor, der Auto-an-Wallbox erkennt. Wallbox-Pflichtfeld — Crowdergize startet/endet automatisch beim An-/Abstecken.",
               "entity_current_temp_c": "Aktuelle Temperatur in °C — Wärmepumpe oder Boiler. Wird neben dem WP-Tile angezeigt.",
-              "entity_target_temp_c": "Soll-/Zieltemperatur in °C. Optional. Crowdergy schreibt diese Entität nicht.",
               "entity_energy_total": "Lebensdauer-Energiezähler in kWh (HA-Attribut state_class: total_increasing). Crowdergy speichert den Rohwert und berechnet daraus Tages-/Monats-/Jahresverbrauch via Delta. Optional — Geräte ohne diesen Sensor zeigen weiterhin nur kW. Niemals aus power_kw integrieren, der Drift summiert sich monatlich auf zweistellige Prozent.",
               "entity_energy_discharged_total": "Optionaler zweiter total_increasing-kWh-Zähler für die GEGEN-Richtung. Batterie: Entlade-Zähler (oben steht der Lade-Zähler). Netz: Einspeise-Zähler (oben steht der Bezugs-Zähler). Wenn beide gesetzt, speichert Crowdergy den signed Netto-Wert — die App zeigt dann pro Slot einen Balken (Verbrauch/Bezug vs. Einspeisung/Entladung). Leer lassen, wenn dein Wechselrichter nur einen vorzeichenbehafteten Sensor liefert — der einzelne Wert wird dann direkt übernommen."
             }
