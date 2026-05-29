@@ -30,6 +30,7 @@ from .const import (
     CONF_ENTITY_CURRENT_TEMP,
     CONF_ENTITY_ENERGY_TOTAL,
     CONF_ENTITY_ENERGY_DISCHARGED_TOTAL,
+    CONF_INVERT_POWER_SIGN,
     CONF_PASSWORD,
     CONF_REFRESH_TOKEN,
     CONF_REGION,
@@ -238,15 +239,27 @@ def _entities_schema(
     read_fields = _READ_FIELDS.get(device_type, [CONF_ENTITY_POWER])
     schema_dict: dict[Any, Any] = {}
 
+    # "Vorzeichen umkehren"-Toggle für die Power-Entität. Crowdergy-
+    # Konvention: positiv = Bezug / Verbrauch / Lade. HA-Sensoren die
+    # umgekehrt liegen (manche Modbus-Wirkleistungen, manche Goe-
+    # Charger-Templates) kann der User mit einem Haken statt einem
+    # HA-Template kompensieren.
+    invert_field = vol.Optional(
+        CONF_INVERT_POWER_SIGN,
+        default=bool(d.get(CONF_INVERT_POWER_SIGN, False)),
+    )
     if len(read_fields) == 1 and device_type not in _CONTROLLABLE_TYPES:
         # Single-purpose read-only types (solar/grid/haushalt): no
         # section wrapping — looks silly with one field.
         for key in read_fields:
             schema_dict[_entity_field(key, d)] = _ENTITY_SELECTORS[key]
+        schema_dict[invert_field] = selector.BooleanSelector()
     else:
-        read_schema = vol.Schema(
-            {_entity_field(key, d): _ENTITY_SELECTORS[key] for key in read_fields}
-        )
+        read_schema_fields: dict[Any, Any] = {
+            _entity_field(key, d): _ENTITY_SELECTORS[key] for key in read_fields
+        }
+        read_schema_fields[invert_field] = selector.BooleanSelector()
+        read_schema = vol.Schema(read_schema_fields)
         schema_dict[vol.Required("read_section")] = section(
             read_schema, {"collapsed": False}
         )
@@ -662,6 +675,7 @@ def _build_device_record(
         CONF_DEVICE_NAME: device_name,
         CONF_DEVICE_TYPE: device_type,
         CONF_ENTITY_POWER: entity_input.get(CONF_ENTITY_POWER, ""),
+        CONF_INVERT_POWER_SIGN: bool(entity_input.get(CONF_INVERT_POWER_SIGN, False)),
         CONF_ENTITY_SOC: entity_input.get(CONF_ENTITY_SOC, ""),
         CONF_ENTITY_VEHICLE_STATUS: entity_input.get(CONF_ENTITY_VEHICLE_STATUS, ""),
         CONF_ENTITY_CURRENT_TEMP: entity_input.get(CONF_ENTITY_CURRENT_TEMP, ""),

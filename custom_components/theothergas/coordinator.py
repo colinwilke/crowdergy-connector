@@ -29,6 +29,7 @@ from .const import (
     CONF_ENTITY_VEHICLE_STATUS,
     CONF_ENTITY_CURRENT_TEMP,
     CONF_ENTITY_ENERGY_TOTAL,
+    CONF_INVERT_POWER_SIGN,
     CONF_ENTITY_ENERGY_DISCHARGED_TOTAL,
     CONF_ENTITY_OUTDOOR_TEMP,
     CONF_REFRESH_TOKEN,
@@ -679,6 +680,11 @@ class CrowdergyCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
             )
 
             current_power = self._read_power_kw(entity_power)
+            # Optional per-device sign flip — for HA sensors that
+            # expose Wirkleistung with the opposite-of-Crowdergy
+            # convention (positive when exporting / discharging).
+            if current_power is not None and dev.get(CONF_INVERT_POWER_SIGN):
+                current_power = -current_power
             soc_percent = self._read_entity_state(entity_soc)
             # Vehicle-status: v2.0 normalises the raw HA state to one
             # of 'plugged' / 'unplugged' / 'error' using the per-device

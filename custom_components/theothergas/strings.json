@@ -63,6 +63,7 @@
             "description": "These entities are only read by Crowdergy.",
             "data": {
               "entity_current_power_kw": "Current power entity",
+              "invert_power_sign": "Invert sign",
               "entity_soc_percent": "State-of-charge entity",
               "entity_vehicle_status": "Vehicle status entity",
               "entity_current_temp_c": "Current-temperature entity",
@@ -71,6 +72,7 @@
             },
             "data_description": {
               "entity_current_power_kw": "Sensor providing current power in W or kW.",
+              "invert_power_sign": "Enable when the HA entity uses the opposite convention to Crowdergy (positive = consumption / charge by default). Crowdergy multiplies the sensor value by -1 before sending.",
               "entity_soc_percent": "Sensor providing current state of charge in percent.",
               "entity_vehicle_status": "Sensor or binary-sensor entity for vehicle status (e.g. \"connected\", \"charging\").",
               "entity_current_temp_c": "Current temperature in °C — e.g. flow temperature of a heat pump or the inside temperature of a DHW tank. Shown next to the heat-pump tile in the app.",
@@ -253,6 +255,7 @@
             "description": "These entities are only read by Crowdergy.",
             "data": {
               "entity_current_power_kw": "Current power entity",
+              "invert_power_sign": "Invert sign",
               "entity_soc_percent": "State-of-charge entity",
               "entity_vehicle_status": "Vehicle status entity",
               "entity_current_temp_c": "Current-temperature entity",
@@ -261,6 +264,7 @@
             },
             "data_description": {
               "entity_current_power_kw": "Sensor providing current power in W or kW.",
+              "invert_power_sign": "Enable when the HA entity uses the opposite convention to Crowdergy (positive = consumption / charge by default). Crowdergy multiplies the sensor value by -1 before sending.",
               "entity_soc_percent": "Sensor providing current state of charge in percent.",
               "entity_vehicle_status": "Sensor or binary-sensor entity for vehicle status (e.g. \"connected\", \"charging\").",
               "entity_current_temp_c": "Current temperature in °C — e.g. flow temperature of a heat pump or the inside temperature of a DHW tank. Shown next to the heat-pump tile in the app.",
@@ -420,6 +424,7 @@
             "description": "These entities are only read by Crowdergy.",
             "data": {
               "entity_current_power_kw": "Current power entity",
+              "invert_power_sign": "Invert sign",
               "entity_soc_percent": "State-of-charge entity",
               "entity_vehicle_status": "Vehicle status entity",
               "entity_current_temp_c": "Current-temperature entity",
@@ -428,6 +433,7 @@
             },
             "data_description": {
               "entity_current_power_kw": "Sensor providing current power in W or kW.",
+              "invert_power_sign": "Enable when the HA entity uses the opposite convention to Crowdergy (positive = consumption / charge by default). Crowdergy multiplies the sensor value by -1 before sending.",
               "entity_soc_percent": "Sensor providing current state of charge in percent.",
               "entity_vehicle_status": "Sensor or binary-sensor entity for vehicle status (e.g. \"connected\", \"charging\").",
               "entity_current_temp_c": "Current temperature in °C — e.g. flow temperature of a heat pump or the inside temperature of a DHW tank. Shown next to the heat-pump tile in the app.",

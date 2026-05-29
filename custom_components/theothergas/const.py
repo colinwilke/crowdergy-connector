@@ -46,6 +46,13 @@ CONF_REGION = "region"
 # falls back to Open-Meteo for the user's location every 15 min.
 CONF_ENTITY_OUTDOOR_TEMP = "entity_outdoor_temp_c"
 CONF_ENTITY_POWER = "entity_current_power_kw"
+# Wenn True: power_kw vor dem PATCH ans Backend mit -1 multiplizieren.
+# Crowdergy-Konvention: positiv = Bezug / Verbrauch / Lade, negativ =
+# Einspeisung / Abgabe / Entlade. Manche Wechselrichter exposen ihre
+# Wirkleistung umgekehrt (positiv beim Einspeisen). Dieser Toggle
+# erspart dem User ein HA-Template — er muss nur die existierende
+# Sensor-Entity wählen + diesen Haken setzen.
+CONF_INVERT_POWER_SIGN = "invert_power_sign"
 CONF_ENTITY_SOC = "entity_soc_percent"
 # Wallbox-only read-only field.
 CONF_ENTITY_VEHICLE_STATUS = "entity_vehicle_status"

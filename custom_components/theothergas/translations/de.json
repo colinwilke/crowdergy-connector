@@ -64,6 +64,7 @@
             "description": "Diese Entitäten werden nur ausgelesen — die App zeigt damit den Live-Status deiner Geräte, und die Crowdergy-Plattform misst daraus deinen Flex-Beitrag. Es wird hier nichts geschrieben.",
             "data": {
               "entity_current_power_kw": "Leistungs-Sensor",
+              "invert_power_sign": "Vorzeichen umkehren",
               "entity_soc_percent": "Ladezustand-Sensor",
               "entity_vehicle_status": "Fahrzeugstatus-Sensor",
               "entity_current_temp_c": "Ist-Temperatur-Sensor",
@@ -72,6 +73,7 @@
             },
             "data_description": {
               "entity_current_power_kw": "Aktuelle Leistung in W oder kW (Sensor-Entität). Pflichtfeld — daraus berechnen wir die Live-Anzeige und beim Kalibrieren deinen Flex-Beitrag (kW). Bei Batterie/Netz: positive Werte = Bezug, negative = Abgabe.",
+              "invert_power_sign": "Setzen, wenn die HA-Entität umgekehrt zur Crowdergy-Konvention liegt (z. B. Wechselrichter, der die Einspeisung positiv und den Bezug negativ angibt). Crowdergy multipliziert dann den Sensor-Wert mit −1 vor dem Senden.",
               "entity_soc_percent": "Aktueller Ladezustand in % (0–100). Pflichtfeld für Batterie und Wallbox — daraus errechnet die App den Ladestand und die spätere Smart-Steuerung respektiert deinen erlaubten Bereich (Min/Max in der App).",
               "entity_vehicle_status": "Sensor- oder Binary-Sensor-Entität, die meldet, ob ein Auto an der Wallbox steckt (typische Werte: connected, charging, idle). Wallbox-Pflichtfeld — Crowdergy startet eine Crowdergize-Session erst wenn ein Auto da ist und beendet sie automatisch beim Abstöpseln.",
               "entity_current_temp_c": "Aktuelle Temperatur in °C — z. B. die Vorlauftemperatur einer Wärmepumpe oder die Innentemperatur eines Brauchwasser-Boilers. Wird in der App neben dem Wärmepumpen-Tile angezeigt.",
@@ -250,6 +252,7 @@
             "description": "Diese Entitäten werden nur ausgelesen — die App zeigt damit den Live-Status, und die Crowdergy-Plattform misst daraus deinen Flex-Beitrag.",
             "data": {
               "entity_current_power_kw": "Leistungs-Sensor",
+              "invert_power_sign": "Vorzeichen umkehren",
               "entity_soc_percent": "Ladezustand-Sensor",
               "entity_vehicle_status": "Fahrzeugstatus-Sensor",
               "entity_current_temp_c": "Ist-Temperatur-Sensor",
@@ -258,6 +261,7 @@
             },
             "data_description": {
               "entity_current_power_kw": "Aktuelle Leistung in W oder kW. Pflichtfeld — daraus berechnen wir Live-Anzeige + Flex-Beitrag bei Kalibrierung. Bei Batterie/Netz: positive Werte = Bezug, negative = Abgabe.",
+              "invert_power_sign": "Setzen, wenn die HA-Entität umgekehrt zur Crowdergy-Konvention liegt (z. B. Wechselrichter, der die Einspeisung positiv und den Bezug negativ angibt). Crowdergy multipliziert dann den Sensor-Wert mit −1 vor dem Senden.",
               "entity_soc_percent": "Aktueller Ladezustand in % (0–100). Pflicht für Batterie und Wallbox — App-Ladestand und Smart-Grenzen Min/Max basieren darauf.",
               "entity_vehicle_status": "Sensor- oder Binary-Sensor, der Auto-an-Wallbox erkennt (typische Werte: connected, charging, idle). Wallbox-Pflichtfeld — Crowdergize startet erst beim Anstecken und endet beim Abstecken automatisch.",
               "entity_current_temp_c": "Aktuelle Temperatur in °C — z. B. Vorlauf einer Wärmepumpe oder Innentemperatur eines Brauchwasser-Boilers. Erscheint neben dem WP-Tile in der App.",
@@ -402,6 +406,7 @@
             "description": "Diese Entitäten werden nur ausgelesen — App-Status + Flex-Beitrag.",
             "data": {
               "entity_current_power_kw": "Leistungs-Sensor",
+              "invert_power_sign": "Vorzeichen umkehren",
               "entity_soc_percent": "Ladezustand-Sensor",
               "entity_vehicle_status": "Fahrzeugstatus-Sensor",
               "entity_current_temp_c": "Ist-Temperatur-Sensor",
