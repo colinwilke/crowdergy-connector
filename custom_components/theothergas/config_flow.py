@@ -85,17 +85,14 @@ _CONTROLLABLE_TYPES = {"battery", "wallbox", "heating", "warmwater", "generic"}
 # meter itself, battery is bidirectional storage, haushalt is the
 # residual we're computing.
 _HAUSHALT_FLAG_TYPES = {
-    "heating", "warmwater", "heatpump", "wallbox", "generic",
+    "heating", "warmwater", "wallbox", "generic",
 }
 
-# v2.5: device types where the cooling-capable step makes sense.
-# Heating-family only — solar / battery / grid / wallbox / haushalt /
-# generic / warmwater are explicitly excluded:
-#   * warmwater never cools; the DHW tank is monotonic-heat by design
-#   * wallbox / battery have their own mode controls
-#   * solar / grid / haushalt are read-only
-#   * generic is a catch-all toggle, no thermal model behind it
-_COOLING_CAPABLE_TYPES = {"heating", "heatpump"}
+# Device-Typen die einen Kühl-Modus konfigurieren können — heating-
+# family only. Warmwater nie (DHW-Tank ist monotonic-heat), wallbox /
+# battery haben eigene Mode-Controls, solar / grid / haushalt sind
+# read-only, generic ist Catch-all ohne Thermo-Modell.
+_COOLING_CAPABLE_TYPES = {"heating"}
 
 # Entity domains where on/off is implicit (turn_on / turn_off services) —
 # no value_on / value_off needs to be typed by the user.
@@ -225,15 +222,13 @@ def _entity_field(key: str, defaults: dict[str, Any]) -> Any:
 def _entities_schema(
     device_type: str, defaults: dict[str, Any] | None = None
 ) -> vol.Schema:
-    """Step 2: entity-selector schema customised for the chosen device type.
+    """Step 2: typ-abhängiges Entity-Schema.
 
-    Layout:
-      - Read-side telemetry fields at top (power, soc, vehicle_status as
-        applicable) — always present at least with `entity_current_power_kw`.
-      - For controllable types (battery / wallbox / heatpump / generic) a
-        "Steuerung (Crowdergize)" section with the entity_control + value_on
-        + value_off trio. The user picks any settable HA entity and the two
-        string values Crowdergy should write to it for "Gerät an" / "Gerät aus".
+    Layout: read-side Sensoren oben (immer mindestens
+    entity_current_power_kw). Für controllable types eine
+    Steuerungs-Section mit entity_control bzw. entity_charge_mode.
+    Werte (value_on/off bzw. Lademodus-Mapping) folgen im nächsten
+    Step typ-bewusst aus dem chosen entity_control hergeleitet.
     """
     d = defaults or {}
     read_fields = _READ_FIELDS.get(device_type, [CONF_ENTITY_POWER])
@@ -298,9 +293,8 @@ def _entities_schema(
             control_schema, {"collapsed": False}
         )
     elif device_type in _CONTROLLABLE_TYPES:
-        # Other controllable types (heatpump / generic): universal
-        # entity_control here, value_on/off in the follow-up step
-        # where the schema can adapt to the entity domain.
+        # heating / warmwater / generic: universal entity_control.
+        # value_on/off im Follow-up-Step typ-bewusst.
         control_schema = vol.Schema({
             _entity_field(CONF_ENTITY_CONTROL, d): _ENTITY_SELECTORS[CONF_ENTITY_CONTROL],
         })
@@ -753,9 +747,8 @@ def _build_device_record(
         CONF_INCLUDED_IN_HAUSHALT: bool(
             entity_input.get(CONF_INCLUDED_IN_HAUSHALT, False)
         ),
-        # v2.5: cooling-capable extension. False / blank on non-
-        # heating-family types — the backend solver ignores them
-        # anywhere except heating/heatpump devices.
+        # Cooling-Capability: False / blank für non-heating types — der
+        # Backend-Solver ignoriert die Felder dort.
         CONF_SUPPORTS_COOLING: bool(
             entity_input.get(CONF_SUPPORTS_COOLING, False)
         ),
@@ -814,21 +807,16 @@ async def _register_device(
             value = entity_input.get(key, "")
             if value:
                 device_config[api_field] = value
-    # v2.4: classic-consumer haushalt flag. Sent only for the types
-    # where it has semantics — solar / grid / battery / haushalt
-    # itself don't carry it, and the backend ignores it for those
-    # types regardless. Form pre-selects Ja for new devices so the
-    # POST always carries a value for classic consumers.
+    # Classic-consumer haushalt-Flag — nur für die Typen wo's Sinn
+    # macht. Solar / Grid / Battery / Haushalt selbst kennen's nicht.
     if device_type in {
-        "heating", "warmwater", "heatpump", "wallbox", "generic",
+        "heating", "warmwater", "wallbox", "generic",
     }:
         device_config["included_in_haushalt"] = bool(
             entity_input.get(CONF_INCLUDED_IN_HAUSHALT, False)
         )
-    # v2.5: cooling-capable extension. POST only when the device type
-    # supports cooling at all; backend silently ignores the fields on
-    # other types but this saves a round-trip of empty strings.
-    if device_type in {"heating", "heatpump"}:
+    # Cooling-Capability — nur für heating POSTen.
+    if device_type == "heating":
         device_config["supports_cooling"] = bool(
             entity_input.get(CONF_SUPPORTS_COOLING, False)
         )
@@ -888,16 +876,14 @@ async def _update_device_backend(
     if (
         entity_input is not None
         and device_type in {
-            "heating", "warmwater", "heatpump", "wallbox", "generic",
+            "heating", "warmwater", "wallbox", "generic",
         }
     ):
         payload["included_in_haushalt"] = bool(
             entity_input.get(CONF_INCLUDED_IN_HAUSHALT, False)
         )
-    # v2.5: cooling-capable extension. Mirror the edit-flow selection
-    # so re-saving the form propagates the cooling configuration to
-    # the backend (and from there to the solver + iOS).
-    if entity_input is not None and device_type in {"heating", "heatpump"}:
+    # Cooling-Capability — Edit-Flow spiegelt die Auswahl.
+    if entity_input is not None and device_type == "heating":
         payload["supports_cooling"] = bool(
             entity_input.get(CONF_SUPPORTS_COOLING, False)
         )

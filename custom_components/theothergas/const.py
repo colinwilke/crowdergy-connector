@@ -23,12 +23,10 @@ CONF_REFRESH_TOKEN = "refresh_token"
 CONF_USER_ID = "user_id"
 CONF_DEVICES = "devices"
 CONF_DEVICE_ID = "device_id"
-# Connector v2.0 splits the legacy 'heatpump' type into 'heating' +
-# 'warmwater'. Each has its own thermal model in the joint MPC; a
-# warmwater device can declare it shares a compressor with a heating
-# device via CONF_SHARES_HARDWARE_WITH (joint-power constraint server-
-# side). Existing 'heatpump' config entries from v1.x are no longer
-# recognised — the user must delete and re-add as heating + warmwater.
+# Heating + Warmwater haben jeweils ein eigenes thermisches Modell im
+# joint MPC. Ein warmwater-Gerät kann via CONF_SHARES_HARDWARE_WITH
+# erklären, dass es einen Verdichter mit einem heating-Gerät teilt
+# (joint-power-constraint serverseitig).
 DEVICE_TYPES = [
     "solar", "battery", "wallbox", "grid",
     "heating", "warmwater",
@@ -172,21 +170,18 @@ CONF_ENTITY_CONTROL_HOLD = "entity_control_hold"
 ENTITY_CONTROL_HOLD_ALWAYS = "always"
 ENTITY_CONTROL_HOLD_NEVER = "never"
 
-# v2.4: classic-consumer flag for the haushalt double-counting fix.
-# When True, the device's draw is already counted by the user's
-# haushalt-sensor — the backend subtracts the device from the
-# haushalt's reading on every snapshot fetch. Shown only for
-# heating / warmwater / heatpump / wallbox / generic; solar / grid /
-# battery / haushalt itself never carry it.
+# Classic-consumer Flag für den Haushalt-Doppelzähl-Fix. Wenn True,
+# zählt das Gerät bereits in den Haushalts-Sensor — das Backend zieht
+# es bei jeder Snapshot-Berechnung ab. Nur für heating / warmwater /
+# wallbox / generic; solar / grid / battery / haushalt selbst tragen
+# es nie.
 CONF_INCLUDED_IN_HAUSHALT = "included_in_haushalt"
 
-# v2.5: cooling-capable extension for heating-family devices
-# (heating / warmwater / heatpump). Capability flag + entity / value
-# mappings for the cooling side. When supports_cooling is True the
-# backend solver layers in a dual-mode MILP; the connector dispatches
-# the cool decision to entity_cool_control OR — for native
-# `climate.*` HA entities — calls `climate.set_hvac_mode('cool')`
-# against the same entity_control with no separate cool-side fields.
+# Cooling-Capability für heating-family. Capability-Flag + entity /
+# value mappings für die Kühl-Seite. supports_cooling=True →
+# Solver-Layout schaltet auf Dual-Mode MILP; Connector dispatcht die
+# Kühl-Entscheidung an entity_cool_control ODER ruft bei nativen
+# climate.* Entities `set_hvac_mode('cool')` gegen entity_control auf.
 CONF_SUPPORTS_COOLING = "supports_cooling"
 CONF_ENTITY_COOL_CONTROL = "entity_cool_control"
 CONF_VALUE_COOL_ON = "value_cool_on"

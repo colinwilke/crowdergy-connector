@@ -12,10 +12,6 @@ DEVICE_TYPE_MODELS = {
     "battery": "Battery Storage",
     "wallbox": "EV Wallbox",
     "grid": "Grid Connection",
-    # 2026-05 split heatpump → heating + warmwater; keep the legacy
-    # key so old config entries that still carry type='heatpump'
-    # still get a sensible model label.
-    "heatpump": "Heat Pump",
     "heating": "Heat Pump (Heating)",
     "warmwater": "Heat Pump (DHW)",
     "generic": "Generic Energy Device",

@@ -135,7 +135,7 @@
         "data_description": {
           "vehicle_status_value_plugged": "Werte, die dein Sensor meldet sobald ein Auto an der Wallbox hängt — kommasepariert wenn mehrere (z. B. \"connected, charging, paused\").",
           "vehicle_status_value_unplugged": "Werte für \"keine Verbindung\" — z. B. \"idle, disconnected, ready\".",
-          "vehicle_status_value_error": "Werte für Fehler-/Stör-Zustände — z. B. \"error, fault\". Optional. Werte, die zu keiner der drei Listen passen, werden unverändert weitergegeben (kein Auto-Fehler mehr ab v2.2)."
+          "vehicle_status_value_error": "Werte für Fehler-/Stör-Zustände — z. B. \"error, fault\". Optional. Werte, die zu keiner der drei Listen passen, werden unverändert weitergegeben."
         }
       },
       "device_shares_hardware": {
@@ -323,7 +323,7 @@
         "data_description": {
           "vehicle_status_value_plugged": "Werte, die dein Sensor meldet sobald ein Auto an der Wallbox hängt — kommasepariert wenn mehrere (z. B. \"connected, charging, paused\").",
           "vehicle_status_value_unplugged": "Werte für \"keine Verbindung\" — z. B. \"idle, disconnected, ready\".",
-          "vehicle_status_value_error": "Werte für Fehler-/Stör-Zustände — z. B. \"error, fault\". Optional. Werte, die zu keiner der drei Listen passen, werden unverändert weitergegeben (kein Auto-Fehler mehr ab v2.2)."
+          "vehicle_status_value_error": "Werte für Fehler-/Stör-Zustände — z. B. \"error, fault\". Optional. Werte, die zu keiner der drei Listen passen, werden unverändert weitergegeben."
         }
       },
       "add_device_shares_hardware": {

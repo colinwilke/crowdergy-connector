@@ -717,10 +717,9 @@ class CrowdergyCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
             # ONLY after a successful PATCH below.
             # Per-tick `energy_kwh_delta`. Sign convention matches the
             # underlying power_kw convention for the device type:
-            #   * heatpump / wallbox / generic / haushalt / solar
-            #     (one entity mapped) → POSITIVE consumption Δ,
-            #     unchanged from pre-v1.24.
-            #   * battery / grid (two entities mapped, v1.24+)
+            #   * heating / warmwater / wallbox / generic / haushalt /
+            #     solar (eine Entity gemapped) → POSITIVE consumption Δ
+            #   * battery / grid (zwei Entities gemapped)
             #     → signed net `delivered − consumed`. Positive
             #     when the device delivered net energy back to the
             #     home (battery discharge, grid import). Matches the
@@ -1013,14 +1012,12 @@ class CrowdergyCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
                     self._on_state[device_id] = new_on
                     self._sync_field_into_data(device_id, "is_on", new_on)
                     await self._apply_device_state(device_id, new_on)
-            # v2.5: cooling-side mirror. The worker emits cool_on
-            # transitions for cooling-capable heatpump-family devices.
-            # The heat/cool mutex is enforced upstream by the solver
-            # — we trust the incoming pair and write through to the
-            # configured cooling entity (or fall back to climate.
-            # set_hvac_mode when the cooling side shares the
-            # heating-side `entity_control` and it's a `climate.*`
-            # entity).
+            # Cooling-side mirror. Worker emittiert cool_on-Transitions
+            # für cooling-fähige heating devices. Heat/cool-Mutex ist
+            # upstream im Solver enforced — wir vertrauen dem Paar und
+            # schreiben durch auf die konfigurierte Kühl-Entity (oder
+            # Fallback auf climate.set_hvac_mode wenn die Kühl-Seite
+            # sich entity_control teilt + climate.* ist).
             if "cool_on" in payload:
                 new_cool = bool(payload["cool_on"])
                 if self._cool_state.get(device_id) != new_cool:
@@ -1351,8 +1348,8 @@ class CrowdergyCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
         self._start_hold(device_id, entity_id, raw_value, domain, on)
 
     async def _apply_cool_state(self, device_id: str, cool_on: bool) -> None:
-        """v2.5: write the cooling-side state for a heatpump-family
-        device. Three dispatch patterns, in priority order:
+        """Schreibt den Kühl-State für ein heating-Device. Drei
+        Dispatch-Patterns nach Priorität:
 
           1. Dedicated `entity_cool_control` configured → write
              `value_cool_on` / `value_cool_off` against it (mirror of

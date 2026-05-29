@@ -17,9 +17,11 @@ from .device_registry import get_device_info
 
 _LOGGER = logging.getLogger(__name__)
 
-# Crowdergize only makes sense for device types Crowdergy can actually
-# control. Mirrors `_CONTROLLABLE_TYPES` in config_flow.py.
-_CROWDERGIZE_TYPES = {"battery", "wallbox", "heatpump", "generic"}
+# Crowdergize-Switch nur für controllable Typen. Mirrors
+# `_CONTROLLABLE_TYPES` in config_flow.py.
+_CROWDERGIZE_TYPES = {
+    "battery", "wallbox", "heating", "warmwater", "generic"
+}
 
 
 async def async_setup_entry(
