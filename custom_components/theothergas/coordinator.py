@@ -1069,48 +1069,61 @@ class CrowdergyCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
                 action, device_id, value,
             )
             if action == "set_charge_mode" and device_id:
-                # `value is None` is the explicit "passive" signal —
-                # the backend deliberately suppresses the write so the
-                # inverter's native PV-priority kicks in. Log it for
-                # visibility but do nothing else (no HA write).
+                # `value is None` ist das "passive" Signal — Backend
+                # unterdrückt den Write damit die Inverter-native PV-
+                # Priorität kickt. Hold-Loop ALWAYS canceln; ob wir
+                # zusätzlich idle pre-writen hängt vom current state ab.
                 if value is None:
                     mode_tag = data.get("mode") or "passive"
                     _LOGGER.info(
-                        "set_charge_mode passive on %s (mode=%s) — "
-                        "writing idle/off and stopping the hold so the "
-                        "input_select doesn't stay stuck on the prior "
-                        "active mode.",
+                        "set_charge_mode passive on %s (mode=%s)",
                         device_id, mode_tag,
                     )
-                    # 2026-05-29 hotfix (v2.5.2): cancelling the hold
-                    # alone is not enough. The user's HA automation
-                    # (state-trigger + time_pattern that translates
-                    # input_select → Modbus register) keeps writing
-                    # whichever value the input_select still carries
-                    # — typically the last active mode (e.g. "Laden").
-                    # Result: a "passive" decision after a charge
-                    # session kept the inverter charging from grid
-                    # until 100 % SoC overnight. Writing the idle /
-                    # off value FIRST and then cancelling the hold
-                    # gives HA-side automations a clean neutral state
-                    # to translate.
+                    self._cancel_charge_mode_hold(device_id)
+                    # Pre-write idle nur dann wenn current state der
+                    # aktive CHARGE-Wert ist — ohne das hatten wir die
+                    # v2.5.2-Regression: nach einer Charge-Session
+                    # blieb die input_select bei "Laden" hängen und
+                    # der Inverter zog nachts vom Netz weiter. Wenn
+                    # current bereits idle ist (Crowdergy hat's eben
+                    # neutral) oder die input_select gerade auf
+                    # DISCHARGE steht (typisch eine User-seitige HA-
+                    # Automation, z.B. Modbus-Discharge-Schreiber),
+                    # NICHT überschreiben — passive heißt "Crowdergy
+                    # lässt los, du kannst regeln".
                     dev = next(
                         (d for d in self.devices
                          if d.get(CONF_DEVICE_ID) == device_id),
                         None,
                     )
                     if dev is not None:
-                        idle_value = (
-                            dev.get(CONF_BATTERY_VALUE_IDLE)
-                            or dev.get(CONF_VALUE_OFF)
-                            or ""
+                        entity_id = dev.get(CONF_ENTITY_CHARGE_MODE, "")
+                        current = (
+                            self._read_string(entity_id)
+                            if entity_id else ""
                         )
-                        if idle_value:
-                            await self._apply_charge_mode(
-                                device_id, str(idle_value),
-                                schedule_hold=False,
+                        charge_value = dev.get(
+                            CONF_BATTERY_VALUE_CHARGE, ""
+                        )
+                        if (
+                            charge_value
+                            and str(current).strip() == str(charge_value).strip()
+                        ):
+                            idle_value = (
+                                dev.get(CONF_BATTERY_VALUE_IDLE)
+                                or dev.get(CONF_VALUE_OFF)
+                                or ""
                             )
-                    self._cancel_charge_mode_hold(device_id)
+                            if idle_value:
+                                _LOGGER.info(
+                                    "passive: clearing stuck CHARGE "
+                                    "(%s → %s) on %s",
+                                    current, idle_value, entity_id,
+                                )
+                                await self._apply_charge_mode(
+                                    device_id, str(idle_value),
+                                    schedule_hold=False,
+                                )
                 else:
                     await self._apply_charge_mode(device_id, str(value))
 
