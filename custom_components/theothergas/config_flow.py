@@ -1522,6 +1522,11 @@ class CrowdergyConfigFlow(ConfigFlow, domain=DOMAIN):
             return self.async_show_form(
                 step_id="device_entities",
                 data_schema=_entities_schema(device_type),
+                description_placeholders={
+                    "device_number": str(len(self._devices) + 1),
+                    "device_type": DEVICE_TYPE_LABELS_DE.get(device_type, device_type),
+                    "device_name": device_name,
+                },
                 errors=errors,
             )
 
@@ -1953,6 +1958,10 @@ class CrowdergyOptionsFlow(OptionsFlow):
             return self.async_show_form(
                 step_id="add_device_entities",
                 data_schema=_entities_schema(device_type),
+                description_placeholders={
+                    "device_type": DEVICE_TYPE_LABELS_DE.get(device_type, device_type),
+                    "device_name": device_name,
+                },
                 errors=errors,
             )
 
@@ -2456,6 +2465,10 @@ class CrowdergyOptionsFlow(OptionsFlow):
             return self.async_show_form(
                 step_id="edit_device_entities",
                 data_schema=_entities_schema(device_type, defaults=target),
+                description_placeholders={
+                    "device_type": DEVICE_TYPE_LABELS_DE.get(device_type, device_type),
+                    "device_name": device_name,
+                },
                 errors=errors,
             )
 
