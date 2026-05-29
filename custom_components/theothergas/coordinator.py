@@ -36,6 +36,9 @@ from .const import (
     CONF_USER_ID,
     CONF_VALUE_OFF,
     CONF_VALUE_ON,
+    CONF_ENTITY_COOL_CONTROL,
+    CONF_VALUE_COOL_ON,
+    CONF_VALUE_COOL_OFF,
     CONF_VEHICLE_STATUS_VALUE_ERROR,
     CONF_VEHICLE_STATUS_VALUE_PLUGGED,
     CONF_VEHICLE_STATUS_VALUE_UNPLUGGED,
@@ -138,6 +141,13 @@ class CrowdergyCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
         # Per-device on/off state — what the backend says the device
         # should currently be set to. Updated via SSE telemetry mirror.
         self._on_state: dict[str, bool] = {}
+        # v2.5: per-device cooling state mirror. Decoupled from
+        # `_on_state` even though the solver enforces a mutex —
+        # tracking them separately lets the connector dispatch the
+        # heating-side and cooling-side writes independently when
+        # they live on different HA entities. {True, False} only;
+        # missing keys are treated as False.
+        self._cool_state: dict[str, bool] = {}
         # Hold-loops: one asyncio.Task per device, keyed by device_id.
         # Started after each `_apply_device_state` if the device's
         # configured hold mode is anything but 'never'. Cancelled on
@@ -914,6 +924,20 @@ class CrowdergyCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
                     self._on_state[device_id] = new_on
                     self._sync_field_into_data(device_id, "is_on", new_on)
                     await self._apply_device_state(device_id, new_on)
+            # v2.5: cooling-side mirror. The worker emits cool_on
+            # transitions for cooling-capable heatpump-family devices.
+            # The heat/cool mutex is enforced upstream by the solver
+            # — we trust the incoming pair and write through to the
+            # configured cooling entity (or fall back to climate.
+            # set_hvac_mode when the cooling side shares the
+            # heating-side `entity_control` and it's a `climate.*`
+            # entity).
+            if "cool_on" in payload:
+                new_cool = bool(payload["cool_on"])
+                if self._cool_state.get(device_id) != new_cool:
+                    self._cool_state[device_id] = new_cool
+                    self._sync_field_into_data(device_id, "cool_on", new_cool)
+                    await self._apply_cool_state(device_id, new_cool)
             return
 
         # `command` frames are mostly handled via the telemetry mirror
@@ -1209,6 +1233,62 @@ class CrowdergyCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
         # back to a default — Kostal-style auto-reset Modbus registers,
         # some OCPP-wallbox transaction timeouts, etc.
         self._start_hold(device_id, entity_id, raw_value, domain, on)
+
+    async def _apply_cool_state(self, device_id: str, cool_on: bool) -> None:
+        """v2.5: write the cooling-side state for a heatpump-family
+        device. Three dispatch patterns, in priority order:
+
+          1. Dedicated `entity_cool_control` configured → write
+             `value_cool_on` / `value_cool_off` against it (mirror of
+             the heating-side _apply_device_state path).
+          2. No `entity_cool_control` AND the heating-side
+             `entity_control` is a `climate.*` entity → call
+             `climate.set_hvac_mode("cool")` or `"off"` against it
+             (single HA entity handles both modes).
+          3. Otherwise: skip — the device isn't actually wired for
+             cooling at the HA layer, log debug and move on.
+        """
+        dev = next(
+            (d for d in self.devices if d.get(CONF_DEVICE_ID) == device_id),
+            None,
+        )
+        if dev is None:
+            return
+        cool_entity = dev.get(CONF_ENTITY_COOL_CONTROL, "") or ""
+        if cool_entity:
+            domain = cool_entity.split(".", 1)[0]
+            raw_value = dev.get(
+                CONF_VALUE_COOL_ON if cool_on else CONF_VALUE_COOL_OFF, ""
+            )
+            await self._write_entity_control(
+                cool_entity, domain, raw_value, cool_on, verbose=True,
+            )
+            return
+        # Climate-domain single-entity fallback: heating and cooling
+        # share the same `entity_control`, and the connector
+        # translates the mode via `climate.set_hvac_mode`.
+        heat_entity = dev.get(CONF_ENTITY_CONTROL, "") or ""
+        if heat_entity.startswith("climate."):
+            mode = "cool" if cool_on else "off"
+            _LOGGER.warning(
+                "set_hvac_mode: %s → %s (cool side)", heat_entity, mode,
+            )
+            try:
+                await self.hass.services.async_call(
+                    "climate", "set_hvac_mode",
+                    {"entity_id": heat_entity, "hvac_mode": mode},
+                    blocking=True,
+                )
+            except Exception as err:  # noqa: BLE001
+                _LOGGER.exception(
+                    "set_hvac_mode failed for %s: %s", heat_entity, err,
+                )
+            return
+        _LOGGER.debug(
+            "Device %s flipped cool_on but has no cooling entity "
+            "(entity_cool_control empty, entity_control not climate.*)",
+            device_id,
+        )
 
     async def _write_entity_control(
         self,
