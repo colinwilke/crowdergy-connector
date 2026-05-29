@@ -104,8 +104,8 @@ SEND_THRESHOLDS: dict[str, float] = {
     "current_temp_c": 0.3,    # 0.3 °C
 }
 
-WS_RECONNECT_INITIAL = 1
-WS_RECONNECT_MAX = 60
+SSE_RECONNECT_INITIAL = 1
+SSE_RECONNECT_MAX = 60
 
 
 def _load_manifest_version() -> str:
@@ -143,7 +143,7 @@ class CrowdergyCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
         self._client = httpx.AsyncClient(base_url=self.api_url, timeout=15.0)
         self._unsub_listeners: list[Any] = []
         self._entity_to_devices: dict[str, list[str]] = {}
-        self._ws_task: asyncio.Task | None = None
+        self._sse_task: asyncio.Task | None = None
         # v2.5.4: dedicated liveness ping. Decoupled from the
         # per-device telemetry stream so a fully idle home no longer
         # has to PATCH N devices every 30 s purely to keep iOS's
@@ -269,16 +269,16 @@ class CrowdergyCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
             async_track_state_change_event(self.hass, entity_ids, _on_state_change)
         )
 
-    def start_ws_listener(self) -> None:
+    def start_sse_listener(self) -> None:
         """Open a WS connection to the backend and react to inbound command frames."""
         if not self._user_id:
             _LOGGER.warning("No user_id stored — skipping WS listener setup")
             return
-        if self._ws_task and not self._ws_task.done():
+        if self._sse_task and not self._sse_task.done():
             return
-        self._ws_task = self.hass.async_create_background_task(
-            self._run_ws_loop(),
-            name=f"{DOMAIN}_ws_listener",
+        self._sse_task = self.hass.async_create_background_task(
+            self._run_sse_loop(),
+            name=f"{DOMAIN}_sse_listener",
         )
 
     def start_heartbeat(self) -> None:
@@ -365,10 +365,10 @@ class CrowdergyCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
         for unsub in self._unsub_listeners:
             unsub()
         self._unsub_listeners.clear()
-        if self._ws_task and not self._ws_task.done():
-            self._ws_task.cancel()
+        if self._sse_task and not self._sse_task.done():
+            self._sse_task.cancel()
             try:
-                await self._ws_task
+                await self._sse_task
             except (asyncio.CancelledError, Exception):  # noqa: BLE001
                 pass
         if self._heartbeat_task and not self._heartbeat_task.done():
@@ -872,7 +872,7 @@ class CrowdergyCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
     def _sse_url(self) -> str:
         return f"{self.api_url}/api/v1/stream"
 
-    async def _run_ws_loop(self) -> None:
+    async def _run_sse_loop(self) -> None:
         """Reconnecting SSE listener for inbound commands from the backend.
 
         Auth: `Authorization: Bearer …` (not `?token=…`). The query-param
@@ -881,7 +881,7 @@ class CrowdergyCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
         on streamed GETs cleanly so we get the same SSE semantics with
         proper authentication.
         """
-        delay = WS_RECONNECT_INITIAL
+        delay = SSE_RECONNECT_INITIAL
         session = aiohttp_client.async_get_clientsession(self.hass)
         while True:
             try:
@@ -902,8 +902,8 @@ class CrowdergyCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
                             resp.status, delay,
                         )
                         raise aiohttp.ClientError(f"status {resp.status}")
-                    delay = WS_RECONNECT_INITIAL
-                    _LOGGER.warning("Crowdergy SSE connected to %s/api/v1/stream", self.api_url)
+                    delay = SSE_RECONNECT_INITIAL
+                    _LOGGER.info("Crowdergy SSE connected to %s/api/v1/stream", self.api_url)
                     async for raw in resp.content:
                         line = raw.decode("utf-8", errors="replace").rstrip("\r\n")
                         if not line.startswith("data: "):
@@ -921,7 +921,7 @@ class CrowdergyCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
                 _LOGGER.exception("Unexpected SSE error: %s", err)
 
             await asyncio.sleep(delay)
-            delay = min(delay * 2, WS_RECONNECT_MAX)
+            delay = min(delay * 2, SSE_RECONNECT_MAX)
 
     async def _handle_ws_message(self, data: dict[str, Any]) -> None:
         # Update liveness clock for the charge-mode hold-loop kill

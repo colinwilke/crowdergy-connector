@@ -5,14 +5,19 @@ from typing import Any
 
 from homeassistant.helpers.device_registry import DeviceInfo
 
-from .const import CONF_DEVICE_ID, CONF_DEVICE_NAME, CONF_DEVICE_TYPE, DOMAIN
+from .const import CONF_DEVICE_ID, CONF_DEVICE_NAME, CONF_DEVICE_TYPE, DOMAIN, VERSION
 
 DEVICE_TYPE_MODELS = {
     "solar": "Solar Inverter",
     "battery": "Battery Storage",
     "wallbox": "EV Wallbox",
     "grid": "Grid Connection",
+    # 2026-05 split heatpump → heating + warmwater; keep the legacy
+    # key so old config entries that still carry type='heatpump'
+    # still get a sensible model label.
     "heatpump": "Heat Pump",
+    "heating": "Heat Pump (Heating)",
+    "warmwater": "Heat Pump (DHW)",
     "generic": "Generic Energy Device",
     "haushalt": "Household Consumption",
 }
@@ -34,5 +39,5 @@ def get_device_info(device: dict[str, Any]) -> DeviceInfo:
         name=f"Crowdergy_{device_name}",
         manufacturer="Crowdergy",
         model=DEVICE_TYPE_MODELS.get(device_type, "Generic Energy Device"),
-        sw_version="1.0.0",
+        sw_version=VERSION,
     )
