@@ -49,6 +49,10 @@ from .const import (
     CONF_BATTERY_VALUE_DISCHARGE,
     CONF_SHARES_HARDWARE_WITH,
     CONF_INCLUDED_IN_HAUSHALT,
+    CONF_SUPPORTS_COOLING,
+    CONF_ENTITY_COOL_CONTROL,
+    CONF_VALUE_COOL_ON,
+    CONF_VALUE_COOL_OFF,
     ENTITY_CONTROL_HOLD_ALWAYS,
     DEFAULT_API_URL,
     DEVICE_TYPES,
@@ -83,6 +87,15 @@ _CONTROLLABLE_TYPES = {"battery", "wallbox", "heating", "warmwater", "generic"}
 _HAUSHALT_FLAG_TYPES = {
     "heating", "warmwater", "heatpump", "wallbox", "generic",
 }
+
+# v2.5: device types where the cooling-capable step makes sense.
+# Heating-family only — solar / battery / grid / wallbox / haushalt /
+# generic / warmwater are explicitly excluded:
+#   * warmwater never cools; the DHW tank is monotonic-heat by design
+#   * wallbox / battery have their own mode controls
+#   * solar / grid / haushalt are read-only
+#   * generic is a catch-all toggle, no thermal model behind it
+_COOLING_CAPABLE_TYPES = {"heating", "heatpump"}
 
 # Entity domains where on/off is implicit (turn_on / turn_off services) —
 # no value_on / value_off needs to be typed by the user.
@@ -567,6 +580,52 @@ def _shares_hardware_schema(
     })
 
 
+def _cooling_schema(
+    hass: Any,
+    entity_control: str,
+    defaults: dict[str, Any] | None = None,
+    *,
+    new_device: bool,
+) -> vol.Schema:
+    """v2.5 form for the cooling-capable extension.
+
+    Three fields, all optional:
+      * `supports_cooling` — Boolean capability flag. Default off for
+        new devices (most heat-pumps are heating-only); the edit-flow
+        defaults to the stored value.
+      * `entity_cool_control` — Optional separate cooling-side
+        control entity. Leave blank for SG-Ready WPs where heating
+        and cooling share the same select/relay (the connector then
+        relies on heating-side `entity_control` only, or, for
+        `climate.*` entities, calls `set_hvac_mode("cool")` against
+        the existing entity_control).
+      * `value_cool_on` / `value_cool_off` — the values to write
+        when `entity_cool_control` is set. Mirror the heating-side
+        `value_on` / `value_off` pattern.
+    """
+    d = defaults or {}
+    return vol.Schema({
+        vol.Optional(
+            CONF_SUPPORTS_COOLING,
+            default=d.get(CONF_SUPPORTS_COOLING, False if new_device else False),
+        ): selector.BooleanSelector(),
+        vol.Optional(
+            CONF_ENTITY_COOL_CONTROL,
+            default=d.get(CONF_ENTITY_COOL_CONTROL, ""),
+        ): selector.EntitySelector(
+            selector.EntitySelectorConfig(
+                domain=["select", "input_select", "switch", "input_boolean", "climate"]
+            )
+        ),
+        vol.Optional(
+            CONF_VALUE_COOL_ON, default=d.get(CONF_VALUE_COOL_ON, "")
+        ): selector.TextSelector(),
+        vol.Optional(
+            CONF_VALUE_COOL_OFF, default=d.get(CONF_VALUE_COOL_OFF, "")
+        ): selector.TextSelector(),
+    })
+
+
 def _included_in_haushalt_schema(
     defaults: dict[str, Any] | None = None,
     *,
@@ -672,6 +731,17 @@ def _build_device_record(
         CONF_INCLUDED_IN_HAUSHALT: bool(
             entity_input.get(CONF_INCLUDED_IN_HAUSHALT, False)
         ),
+        # v2.5: cooling-capable extension. False / blank on non-
+        # heating-family types — the backend solver ignores them
+        # anywhere except heating/heatpump devices.
+        CONF_SUPPORTS_COOLING: bool(
+            entity_input.get(CONF_SUPPORTS_COOLING, False)
+        ),
+        CONF_ENTITY_COOL_CONTROL: entity_input.get(
+            CONF_ENTITY_COOL_CONTROL, ""
+        ),
+        CONF_VALUE_COOL_ON: entity_input.get(CONF_VALUE_COOL_ON, ""),
+        CONF_VALUE_COOL_OFF: entity_input.get(CONF_VALUE_COOL_OFF, ""),
     }
 
 
@@ -733,6 +803,22 @@ async def _register_device(
         device_config["included_in_haushalt"] = bool(
             entity_input.get(CONF_INCLUDED_IN_HAUSHALT, False)
         )
+    # v2.5: cooling-capable extension. POST only when the device type
+    # supports cooling at all; backend silently ignores the fields on
+    # other types but this saves a round-trip of empty strings.
+    if device_type in {"heating", "heatpump"}:
+        device_config["supports_cooling"] = bool(
+            entity_input.get(CONF_SUPPORTS_COOLING, False)
+        )
+        cool_entity = entity_input.get(CONF_ENTITY_COOL_CONTROL, "")
+        if cool_entity:
+            device_config["entity_cool_control"] = cool_entity
+        cool_on = entity_input.get(CONF_VALUE_COOL_ON, "")
+        if cool_on:
+            device_config["value_cool_on"] = cool_on
+        cool_off = entity_input.get(CONF_VALUE_COOL_OFF, "")
+        if cool_off:
+            device_config["value_cool_off"] = cool_off
     async with httpx.AsyncClient(timeout=15.0) as client:
         response = await client.post(
             f"{api_url}/api/v1/devices",
@@ -786,6 +872,18 @@ async def _update_device_backend(
         payload["included_in_haushalt"] = bool(
             entity_input.get(CONF_INCLUDED_IN_HAUSHALT, False)
         )
+    # v2.5: cooling-capable extension. Mirror the edit-flow selection
+    # so re-saving the form propagates the cooling configuration to
+    # the backend (and from there to the solver + iOS).
+    if entity_input is not None and device_type in {"heating", "heatpump"}:
+        payload["supports_cooling"] = bool(
+            entity_input.get(CONF_SUPPORTS_COOLING, False)
+        )
+        payload["entity_cool_control"] = entity_input.get(
+            CONF_ENTITY_COOL_CONTROL, ""
+        )
+        payload["value_cool_on"] = entity_input.get(CONF_VALUE_COOL_ON, "")
+        payload["value_cool_off"] = entity_input.get(CONF_VALUE_COOL_OFF, "")
     async with httpx.AsyncClient(timeout=15.0) as client:
         response = await client.put(
             f"{api_url}/api/v1/devices/{device_id}",
@@ -1160,6 +1258,13 @@ class CrowdergyConfigFlow(ConfigFlow, domain=DOMAIN):
             self._pending_entity_input = entity_input
             return await self.async_step_device_included_in_haushalt()
 
+        if (
+            device_type in _COOLING_CAPABLE_TYPES
+            and CONF_SUPPORTS_COOLING not in entity_input
+        ):
+            self._pending_entity_input = entity_input
+            return await self.async_step_device_cooling()
+
         return await self._register_with_entities(entity_input)
 
     async def async_step_device_charge_mode_values(
@@ -1295,6 +1400,44 @@ class CrowdergyConfigFlow(ConfigFlow, domain=DOMAIN):
         return self.async_show_form(
             step_id="device_shares_hardware",
             data_schema=_shares_hardware_schema(heating_devices, {}),
+            description_placeholders={
+                "device_type": DEVICE_TYPE_LABELS_DE.get(device_type, device_type),
+                "device_name": device_name,
+            },
+        )
+
+    async def async_step_device_cooling(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """v2.5 step: cooling-capable extension for heating-family
+        devices (reversible WPs, split-ACs). All fields optional —
+        leave supports_cooling off and the rest blank for a
+        heating-only WP. For SG-Ready WPs that gain a cooling mode
+        via the SAME entity_control, leave entity_cool_control blank
+        and the connector falls back to the heating-side mapping."""
+        device_type = self._pending_type or "generic"
+        device_name = self._pending_name or ""
+        entity_input = dict(self._pending_entity_input or {})
+        entity_control = entity_input.get(CONF_ENTITY_CONTROL, "")
+
+        if user_input is not None:
+            entity_input[CONF_SUPPORTS_COOLING] = bool(
+                user_input.get(CONF_SUPPORTS_COOLING, False)
+            )
+            entity_input[CONF_ENTITY_COOL_CONTROL] = user_input.get(
+                CONF_ENTITY_COOL_CONTROL, ""
+            )
+            entity_input[CONF_VALUE_COOL_ON] = user_input.get(
+                CONF_VALUE_COOL_ON, ""
+            )
+            entity_input[CONF_VALUE_COOL_OFF] = user_input.get(
+                CONF_VALUE_COOL_OFF, ""
+            )
+            return await self._dispatch_post_entities(entity_input)
+
+        return self.async_show_form(
+            step_id="device_cooling",
+            data_schema=_cooling_schema(self.hass, entity_control, {}, new_device=True),
             description_placeholders={
                 "device_type": DEVICE_TYPE_LABELS_DE.get(device_type, device_type),
                 "device_name": device_name,
@@ -1562,6 +1705,13 @@ class CrowdergyOptionsFlow(OptionsFlow):
             self._pending_entity_input = entity_input
             return await self.async_step_add_device_included_in_haushalt()
 
+        if (
+            device_type in _COOLING_CAPABLE_TYPES
+            and CONF_SUPPORTS_COOLING not in entity_input
+        ):
+            self._pending_entity_input = entity_input
+            return await self.async_step_add_device_cooling()
+
         return await self._options_register(entity_input)
 
     async def async_step_add_device_charge_mode_values(
@@ -1688,6 +1838,39 @@ class CrowdergyOptionsFlow(OptionsFlow):
         return self.async_show_form(
             step_id="add_device_shares_hardware",
             data_schema=_shares_hardware_schema(heating_devices, {}),
+            description_placeholders={
+                "device_type": DEVICE_TYPE_LABELS_DE.get(device_type, device_type),
+                "device_name": device_name,
+            },
+        )
+
+    async def async_step_add_device_cooling(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Options-flow variant of the v2.5 cooling-capable step."""
+        device_type = self._pending_type or "generic"
+        device_name = self._pending_name or ""
+        entity_input = dict(self._pending_entity_input or {})
+        entity_control = entity_input.get(CONF_ENTITY_CONTROL, "")
+
+        if user_input is not None:
+            entity_input[CONF_SUPPORTS_COOLING] = bool(
+                user_input.get(CONF_SUPPORTS_COOLING, False)
+            )
+            entity_input[CONF_ENTITY_COOL_CONTROL] = user_input.get(
+                CONF_ENTITY_COOL_CONTROL, ""
+            )
+            entity_input[CONF_VALUE_COOL_ON] = user_input.get(
+                CONF_VALUE_COOL_ON, ""
+            )
+            entity_input[CONF_VALUE_COOL_OFF] = user_input.get(
+                CONF_VALUE_COOL_OFF, ""
+            )
+            return await self._dispatch_add_post_entities(entity_input)
+
+        return self.async_show_form(
+            step_id="add_device_cooling",
+            data_schema=_cooling_schema(self.hass, entity_control, {}, new_device=True),
             description_placeholders={
                 "device_type": DEVICE_TYPE_LABELS_DE.get(device_type, device_type),
                 "device_name": device_name,
@@ -1948,6 +2131,13 @@ class CrowdergyOptionsFlow(OptionsFlow):
             self._edit_pending_entity_input = entity_input
             return await self.async_step_edit_device_included_in_haushalt()
 
+        if (
+            device_type in _COOLING_CAPABLE_TYPES
+            and CONF_SUPPORTS_COOLING not in entity_input
+        ):
+            self._edit_pending_entity_input = entity_input
+            return await self.async_step_edit_device_cooling()
+
         return await self._edit_save(target, entity_input)
 
     async def async_step_edit_device_charge_mode_values(
@@ -2066,6 +2256,47 @@ class CrowdergyOptionsFlow(OptionsFlow):
                 "device_type": DEVICE_TYPE_LABELS_DE.get(device_type, device_type),
                 "device_name": device_name,
                 "entity_vehicle_status": entity_vehicle_status,
+            },
+        )
+
+    async def async_step_edit_device_cooling(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Edit-flow variant of the v2.5 cooling-capable step.
+        Pre-fills the stored values so re-saving without touching
+        anything is a true no-op."""
+        target = next(
+            (d for d in self._devices if d.get(CONF_DEVICE_ID) == self._edit_target_id),
+            None,
+        )
+        if target is None:
+            return await self.async_step_init()
+        device_type = self._edit_pending_type or target[CONF_DEVICE_TYPE]
+        device_name = self._edit_pending_name or target[CONF_DEVICE_NAME]
+        entity_input = dict(self._edit_pending_entity_input or {})
+        entity_control = entity_input.get(CONF_ENTITY_CONTROL, "")
+
+        if user_input is not None:
+            entity_input[CONF_SUPPORTS_COOLING] = bool(
+                user_input.get(CONF_SUPPORTS_COOLING, False)
+            )
+            entity_input[CONF_ENTITY_COOL_CONTROL] = user_input.get(
+                CONF_ENTITY_COOL_CONTROL, ""
+            )
+            entity_input[CONF_VALUE_COOL_ON] = user_input.get(
+                CONF_VALUE_COOL_ON, ""
+            )
+            entity_input[CONF_VALUE_COOL_OFF] = user_input.get(
+                CONF_VALUE_COOL_OFF, ""
+            )
+            return await self._dispatch_edit_post_entities(target, entity_input)
+
+        return self.async_show_form(
+            step_id="edit_device_cooling",
+            data_schema=_cooling_schema(self.hass, entity_control, target, new_device=False),
+            description_placeholders={
+                "device_type": DEVICE_TYPE_LABELS_DE.get(device_type, device_type),
+                "device_name": device_name,
             },
         )
 

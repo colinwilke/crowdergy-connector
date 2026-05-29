@@ -171,6 +171,18 @@ ENTITY_CONTROL_HOLD_NEVER = "never"
 # battery / haushalt itself never carry it.
 CONF_INCLUDED_IN_HAUSHALT = "included_in_haushalt"
 
+# v2.5: cooling-capable extension for heating-family devices
+# (heating / warmwater / heatpump). Capability flag + entity / value
+# mappings for the cooling side. When supports_cooling is True the
+# backend solver layers in a dual-mode MILP; the connector dispatches
+# the cool decision to entity_cool_control OR — for native
+# `climate.*` HA entities — calls `climate.set_hvac_mode('cool')`
+# against the same entity_control with no separate cool-side fields.
+CONF_SUPPORTS_COOLING = "supports_cooling"
+CONF_ENTITY_COOL_CONTROL = "entity_cool_control"
+CONF_VALUE_COOL_ON = "value_cool_on"
+CONF_VALUE_COOL_OFF = "value_cool_off"
+
 # Hold loop timing. Initial 10 s lets the apply call's effect
 # propagate before the first rewrite. 30 s catches most auto-revert
 # cycles (Kostal's is 60 s).

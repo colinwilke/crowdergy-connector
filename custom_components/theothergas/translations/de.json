@@ -149,6 +149,23 @@
           "shares_hardware_with_device_id": "Wähle die Heizungs-WP, an die diese WW-Bereitung gekoppelt ist. Standalone-Brauchwasser-Wärmepumpe auf eigenem Gerät? Einfach \"keine Kopplung\" lassen."
         }
       },
+      "device_cooling": {
+        "title": "{device_name} ({device_type}) — Kühlfunktion",
+        "description": "Reversible Wärmepumpe oder Split-Klimagerät, das AUCH kühlen kann? Schalt's an und die Crowdergy-MPC entscheidet pro Zeitslot zwischen Heizen und Kühlen — beachtet dann untere UND obere Komfortgrenze. Reine Heiz-WPs (auch SG-Ready) lassen das aus, dann läuft alles unverändert. Wenn Kühlen auf einer SEPARATEN Schalt-/Select-Entity hängt, unten ausfüllen; bei climate.*-Entities oder SG-Ready (selbe Steuerentity) Felder leer lassen.",
+        "submit": "Weiter",
+        "data": {
+          "supports_cooling": "Kann kühlen",
+          "entity_cool_control": "Kühl-Steuerentity (optional)",
+          "value_cool_on": "Wert für: Kühlen an",
+          "value_cool_off": "Wert für: Kühlen aus"
+        },
+        "data_description": {
+          "supports_cooling": "An für reversible WPs und Split-Klimas die den Raum physisch kühlen.",
+          "entity_cool_control": "Nur ausfüllen wenn das Kühlen auf einer separaten HA-Entity hängt. Bei SG-Ready oder climate.*-Setups leer lassen.",
+          "value_cool_on": "Wert, der beim Kühl-Befehl auf die Entity geschrieben wird.",
+          "value_cool_off": "Wert, der beim Stopp-Kühlen geschrieben wird."
+        }
+      },
       "device_included_in_haushalt": {
         "title": "{device_name} ({device_type}) — im Haushaltsverbrauch enthalten?",
         "description": "Ist der Stromverbrauch dieses Geräts bereits in deinem Haushalts-Sensor enthalten (häufiger Fall, wenn beide am selben Hauszähler hängen)? Crowdergy zieht das Gerät dann automatisch vom Haushalts-Wert ab, damit kW und kWh nicht doppelt gezählt werden.",
@@ -320,6 +337,23 @@
           "shares_hardware_with_device_id": "Wähle die Heizungs-WP, an die diese WW-Bereitung gekoppelt ist. Standalone-Brauchwasser-Wärmepumpe auf eigenem Gerät? Einfach \"keine Kopplung\" lassen."
         }
       },
+      "add_device_cooling": {
+        "title": "{device_name} ({device_type}) — Kühlfunktion",
+        "description": "Reversible WP oder Split-Klimagerät, das kühlen kann? Schalt's an und Crowdergy entscheidet pro Slot zwischen Heizen und Kühlen.",
+        "submit": "Weiter",
+        "data": {
+          "supports_cooling": "Kann kühlen",
+          "entity_cool_control": "Kühl-Steuerentity (optional)",
+          "value_cool_on": "Wert für: Kühlen an",
+          "value_cool_off": "Wert für: Kühlen aus"
+        },
+        "data_description": {
+          "supports_cooling": "An für reversible WPs und Split-Klimas.",
+          "entity_cool_control": "Nur ausfüllen wenn Kühlen auf einer separaten HA-Entity hängt.",
+          "value_cool_on": "Wert beim Kühl-Befehl.",
+          "value_cool_off": "Wert beim Stopp-Kühlen."
+        }
+      },
       "add_device_included_in_haushalt": {
         "title": "{device_name} ({device_type}) — im Haushaltsverbrauch enthalten?",
         "description": "Ist der Stromverbrauch dieses Geräts bereits in deinem Haushalts-Sensor enthalten (häufiger Fall, wenn beide am selben Hauszähler hängen)? Crowdergy zieht das Gerät dann automatisch vom Haushalts-Wert ab, damit kW und kWh nicht doppelt gezählt werden.",
@@ -442,6 +476,23 @@
         },
         "data_description": {
           "shares_hardware_with_device_id": "Wähle die Heizungs-WP, an die diese WW-Bereitung gekoppelt ist. \"keine Kopplung\" für eigenständige Brauchwasser-WP."
+        }
+      },
+      "edit_device_cooling": {
+        "title": "{device_name} ({device_type}) — Kühlfunktion",
+        "description": "Kann das Gerät kühlen? Die Felder sind mit den gespeicherten Werten vorbelegt.",
+        "submit": "Speichern",
+        "data": {
+          "supports_cooling": "Kann kühlen",
+          "entity_cool_control": "Kühl-Steuerentity (optional)",
+          "value_cool_on": "Wert für: Kühlen an",
+          "value_cool_off": "Wert für: Kühlen aus"
+        },
+        "data_description": {
+          "supports_cooling": "An für reversible WPs und Split-Klimas.",
+          "entity_cool_control": "Separate Kühl-Entity; bei SG-Ready / climate.* leer lassen.",
+          "value_cool_on": "Wert beim Kühl-Befehl.",
+          "value_cool_off": "Wert beim Stopp-Kühlen."
         }
       },
       "edit_device_included_in_haushalt": {
