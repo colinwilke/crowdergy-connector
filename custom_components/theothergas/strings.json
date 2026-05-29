@@ -82,15 +82,15 @@
           },
           "control_section": {
             "name": "Control",
-            "description": "Heating / Warmwater: pick a climate.* entity → control + current temp + modes are derived automatically. Otherwise pick a classic control entity. Wallbox + Battery: just the charge-mode entity.",
+            "description": "Heating / Warmwater: EITHER a climate.* entity (recommended) OR a classic control entity. Wallbox + Battery: just the charge-mode entity.",
             "data": {
               "entity_climate": "Climate entity (recommended)",
-              "entity_control": "Control entity",
+              "entity_control": "Control entity (alternative, classic)",
               "entity_charge_mode": "Charge-mode entity (Wallbox / Battery)"
             },
             "data_description": {
-              "entity_climate": "A climate.* entity from your heat pump — Crowdergy uses set_hvac_mode and reads current_temperature from its attribute. When set, control + current-temp fields below are overwritten automatically.",
-              "entity_control": "Classic path: any writable HA entity (switch, number, select, input helper). Examples: SG-Ready select for heat pumps, charge-pause switch or current-limit number for wallboxes, charge/discharge select for batteries. Solar/Grid/Haushalt: leave blank.",
+              "entity_climate": "A climate.* entity from your heat pump — Crowdergy uses set_hvac_mode + reads current_temperature from its attribute. When set, the 'Control entity' field below is NOT needed.",
+              "entity_control": "Alternative to the climate entity: any writable HA entity (switch, number, select, input helper). Examples: SG-Ready select for heat pumps, charge-pause switch or current-limit number for wallboxes, charge/discharge select for batteries. Solar/Grid/Haushalt: leave blank.",
               "entity_charge_mode": "Select entity offering the app's charge modes (e.g. \"Power Mode\" / \"Lock Mode\" / \"Solar Pure Mode\") as options."
             }
           }
@@ -276,15 +276,15 @@
           },
           "control_section": {
             "name": "Control",
-            "description": "Heating / Warmwater: pick a climate.* entity → control + current temp + modes are derived automatically. Otherwise pick a classic control entity. Wallbox + Battery: just the charge-mode entity.",
+            "description": "Heating / Warmwater: EITHER a climate.* entity (recommended) OR a classic control entity. Wallbox + Battery: just the charge-mode entity.",
             "data": {
               "entity_climate": "Climate entity (recommended)",
-              "entity_control": "Control entity",
+              "entity_control": "Control entity (alternative, classic)",
               "entity_charge_mode": "Charge-mode entity (Wallbox / Battery)"
             },
             "data_description": {
-              "entity_climate": "A climate.* entity from your heat pump — Crowdergy uses set_hvac_mode and reads current_temperature from its attribute. When set, control + current-temp fields below are overwritten automatically.",
-              "entity_control": "Classic path: any writable HA entity (switch, number, select, input helper). Examples: SG-Ready select for heat pumps, charge-pause switch or current-limit number for wallboxes, charge/discharge select for batteries. Solar/Grid/Haushalt: leave blank.",
+              "entity_climate": "A climate.* entity from your heat pump — Crowdergy uses set_hvac_mode + reads current_temperature from its attribute. When set, the 'Control entity' field below is NOT needed.",
+              "entity_control": "Alternative to the climate entity: any writable HA entity (switch, number, select, input helper). Examples: SG-Ready select for heat pumps, charge-pause switch or current-limit number for wallboxes, charge/discharge select for batteries. Solar/Grid/Haushalt: leave blank.",
               "entity_charge_mode": "Select entity offering the app's charge modes (e.g. \"Power Mode\" / \"Lock Mode\" / \"Solar Pure Mode\") as options."
             }
           }
@@ -447,15 +447,15 @@
           },
           "control_section": {
             "name": "Control",
-            "description": "Heating / Warmwater: pick a climate.* entity → control + current temp + modes are derived automatically. Otherwise pick a classic control entity. Wallbox + Battery: just the charge-mode entity.",
+            "description": "Heating / Warmwater: EITHER a climate.* entity (recommended) OR a classic control entity. Wallbox + Battery: just the charge-mode entity.",
             "data": {
               "entity_climate": "Climate entity (recommended)",
-              "entity_control": "Control entity",
+              "entity_control": "Control entity (alternative, classic)",
               "entity_charge_mode": "Charge-mode entity (Wallbox / Battery)"
             },
             "data_description": {
-              "entity_climate": "A climate.* entity from your heat pump — Crowdergy uses set_hvac_mode and reads current_temperature from its attribute. When set, control + current-temp fields below are overwritten automatically.",
-              "entity_control": "Classic path: any writable HA entity (switch, number, select, input helper). Examples: SG-Ready select for heat pumps, charge-pause switch or current-limit number for wallboxes, charge/discharge select for batteries. Solar/Grid/Haushalt: leave blank.",
+              "entity_climate": "A climate.* entity from your heat pump — Crowdergy uses set_hvac_mode + reads current_temperature from its attribute. When set, the 'Control entity' field below is NOT needed.",
+              "entity_control": "Alternative to the climate entity: any writable HA entity (switch, number, select, input helper). Examples: SG-Ready select for heat pumps, charge-pause switch or current-limit number for wallboxes, charge/discharge select for batteries. Solar/Grid/Haushalt: leave blank.",
               "entity_charge_mode": "Select entity offering the app's charge modes (e.g. \"Power Mode\" / \"Lock Mode\" / \"Solar Pure Mode\") as options."
             }
           }

@@ -146,7 +146,11 @@ _ENTITY_SELECTORS: dict[str, selector.EntitySelector] = {
         selector.EntitySelectorConfig(domain=["sensor", "binary_sensor"])
     ),
     CONF_ENTITY_CURRENT_TEMP: selector.EntitySelector(
-        selector.EntitySelectorConfig(domain="sensor")
+        # sensor = klassischer Pfad; climate ist nötig, weil
+        # _apply_climate_first die climate-Entity in das Feld
+        # kopiert und der Selector beim Edit-Reload sonst die
+        # Validierung verweigert.
+        selector.EntitySelectorConfig(domain=["sensor", "climate"])
     ),
     # Climate-first Pick für heating/warmwater. Aus dem climate-State
     # leitet der Connector Steuerung (set_hvac_mode), Ist-Temperatur
