@@ -82,14 +82,16 @@
             }
           },
           "control_section": {
-            "name": "Schreibende Steuerung (Crowdergize)",
-            "description": "Crowdergy schaltet jedes Gerät über genau eine schreibbare Entität deiner Wahl — egal ob es im Hintergrund ein Switch, ein Number-Slider, ein Climate-Mode oder ein Select-Picker ist. Du verknüpfst hier die Entität; im nächsten Schritt sagst du uns, welcher Wert dem An- und welcher dem Aus-Zustand entspricht. So bleibt die Integration mit jedem HA-Setup kompatibel.\n\nFür Wallboxen kommt zusätzlich der Lademodus-Picker dazu, damit du in der App direkt z. B. zwischen Power Mode und Lock Mode wählen kannst.",
+            "name": "Steuerung",
+            "description": "Bei Heizung/Warmwasser: wenn deine WP eine climate.* Entity in HA hat, einfach diese wählen — Crowdergy leitet Ist-Temp + An/Aus-Modi automatisch ab. Sonst die klassische Steuer-Entität wählen. Bei Wallbox + Batterie nur die Lademodus-Entity.",
             "data": {
+              "entity_climate": "Climate-Entität (empfohlen)",
               "entity_control": "Steuer-Entität (Crowdergize An/Aus)",
               "entity_charge_mode": "Lademodus-Entität (Wallbox / Batterie)"
             },
             "data_description": {
-              "entity_control": "Eine schreibbare HA-Entität — beliebig: Switch, Input-Boolean, Number, Input-Number, Select, Input-Select, Climate, Light, Fan. Beispiele:\n• Wärmepumpe: ein SG-Ready-Select (Optionen Sperre / Normal / Erhöht) oder ein simpler Boost-Schalter.\n• Wallbox: die Lade-Pause-Entität (oft ein Switch) oder ein Strom-Limit-Number-Helper (0 A = Pause, 16 A = Laden).\n• Batterie: meist Lade-/Entlade-Steuer-Select oder Power-Limit-Number.\n• Gerät (Klima, Pool, Boiler): der zugehörige Switch.\n• Solar / Netz / Haushalt: hier nicht relevant — leer lassen.\nWICHTIG: Crowdergy schreibt nur, wenn du in der App Crowdergize aktiv schaltest. Solange das Toggle aus ist, fasst der Connector deine HA-Entitäten nicht an.",
+              "entity_climate": "Eine climate.* Entität deiner WP — Crowdergy nutzt set_hvac_mode für Heizen/Kühlen und liest die Ist-Temperatur aus dem Attribut current_temperature. Bei Auswahl wird die Steuer-Entität + Ist-Temp-Sensor unten automatisch überschrieben. Leer lassen für den klassischen Pfad (separate Steuer-Entität).",
+              "entity_control": "Klassischer Pfad: eine schreibbare HA-Entität — Switch, Input-Boolean, Number, Input-Number, Select, Input-Select, Light, Fan. Beispiele: SG-Ready-Select bei Wärmepumpen, Lade-Pause-Switch oder Strom-Limit-Number bei Wallboxen, Lade-/Entlade-Select bei Batterien, Switch bei sonstigen Geräten. Solar/Netz/Haushalt nicht relevant — leer lassen.",
               "entity_charge_mode": "Wallbox: Select-Entität mit Lademodus-Optionen (Lock Mode / Power Mode / Solar Pure Mode). Batterie: schreibbare Entität (typisch Number) mit den drei Steuer-Werten +max / 0 / -max W, die Crowdergy für Laden / Aus / Entladen schreibt. Werte mappt der nächste Schritt."
             }
           }
@@ -270,15 +272,17 @@
             }
           },
           "control_section": {
-            "name": "Schreibende Steuerung (Crowdergize)",
-            "description": "Crowdergy schaltet Geräte über GENAU EINE schreibbare Entität deiner Wahl — universell, egal ob Switch, Number, Select oder Climate. Die zwei Werte (an / aus) trägst du im nächsten Schritt ein. Bei Wallboxen optional zusätzlich die Lademodus-Select für den App-Picker.",
+            "name": "Steuerung",
+            "description": "Bei Heizung/Warmwasser: climate.* Entity wählen → Steuerung + Ist-Temp + Modi automatisch. Sonst die klassische Steuer-Entität. Wallbox + Batterie: nur die Lademodus-Entity.",
             "data": {
+              "entity_climate": "Climate-Entität (empfohlen)",
               "entity_control": "Steuer-Entität (Crowdergize An/Aus)",
               "entity_charge_mode": "Lademodus-Entität (Wallbox / Batterie)"
             },
             "data_description": {
-              "entity_control": "Eine schreibbare HA-Entität: Switch, Input-Boolean, Number, Input-Number, Select, Input-Select, Climate, Light, Fan. Beispiele: SG-Ready-Select (Wärmepumpe), Lade-Pause-Switch oder Strom-Limit-Number (Wallbox), Lade-/Entlade-Select (Batterie), normaler Switch (sonstiges Gerät). Solar/Netz/Haushalt: leer lassen. Crowdergy schreibt nur wenn Crowdergize aktiv geschaltet ist.",
-              "entity_charge_mode": "Wallbox: Select-Entität für den App-Lademodus-Picker. Batterie: schreibbare Steuer-Entität (typisch Number, +max / 0 / -max W). Werte mappt der nächste Schritt."
+              "entity_climate": "Eine climate.* Entität deiner WP — Crowdergy nutzt set_hvac_mode für Heizen/Kühlen und liest Ist-Temperatur aus dem Attribut current_temperature. Bei Auswahl wird die Steuer-Entität + Ist-Temp-Sensor automatisch überschrieben.",
+              "entity_control": "Klassischer Pfad: schreibbare HA-Entität (Switch, Number, Select, Input-Helper). Beispiele: SG-Ready (WP), Lade-Pause oder Strom-Limit (Wallbox), Lade-/Entlade-Select (Batterie). Solar/Netz/Haushalt: leer lassen.",
+              "entity_charge_mode": "Wallbox: Select-Entität für den App-Lademodus-Picker. Batterie: schreibbare Steuer-Entität (typisch Number)."
             }
           }
         }
@@ -423,14 +427,16 @@
             }
           },
           "control_section": {
-            "name": "Schreibende Steuerung (Crowdergize)",
-            "description": "Eine schreibbare HA-Entität deiner Wahl + zwei Werte (an / aus) im nächsten Schritt. Bei Wallboxen optional zusätzlich die Lademodus-Select für den App-Picker.",
+            "name": "Steuerung",
+            "description": "Bei Heizung/Warmwasser: climate.* Entity wählen → Steuerung + Ist-Temp + Modi automatisch. Sonst die klassische Steuer-Entität. Wallbox + Batterie: nur die Lademodus-Entity.",
             "data": {
+              "entity_climate": "Climate-Entität (empfohlen)",
               "entity_control": "Steuer-Entität (Crowdergize An/Aus)",
               "entity_charge_mode": "Lademodus-Entität (Wallbox / Batterie)"
             },
             "data_description": {
-              "entity_control": "Schreibbare HA-Entität: Switch, Number, Select, Climate, Light, Fan oder Input-Helper. Beispiele: SG-Ready (WP), Lade-Pause oder Strom-Limit (Wallbox), Lade-/Entlade-Select (Batterie), Switch (Gerät). Solar/Netz/Haushalt: leer lassen. Crowdergy schreibt nur wenn Crowdergize aktiv ist.",
+              "entity_climate": "Eine climate.* Entität deiner WP — Crowdergy nutzt set_hvac_mode für Heizen/Kühlen und liest Ist-Temperatur aus dem Attribut current_temperature. Bei Auswahl wird Steuer-Entität + Ist-Temp-Sensor automatisch überschrieben.",
+              "entity_control": "Klassischer Pfad: schreibbare HA-Entität (Switch, Number, Select, Input-Helper). Beispiele: SG-Ready (WP), Lade-Pause oder Strom-Limit (Wallbox), Lade-/Entlade-Select (Batterie). Solar/Netz/Haushalt: leer lassen.",
               "entity_charge_mode": "Wallbox: Select-Entität für den App-Lademodus-Picker. Batterie: schreibbare Steuer-Entität (typisch Number)."
             }
           }

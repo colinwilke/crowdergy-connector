@@ -81,14 +81,16 @@
             }
           },
           "control_section": {
-            "name": "Control (Crowdergize)",
-            "description": "Which HA entities may Crowdergy control? Wallbox: just the Lademodus select (Lock / Solar / Power are mapped in the next step). Other types: the control entity + the on/off values in the follow-up step.",
+            "name": "Control",
+            "description": "Heating / Warmwater: pick a climate.* entity → control + current temp + modes are derived automatically. Otherwise pick a classic control entity. Wallbox + Battery: just the charge-mode entity.",
             "data": {
-              "entity_control": "Control entity (smart on/off)",
+              "entity_climate": "Climate entity (recommended)",
+              "entity_control": "Control entity",
               "entity_charge_mode": "Charge-mode entity (Wallbox / Battery)"
             },
             "data_description": {
-              "entity_control": "Any writable HA entity: switch, number, select, input helper, climate, light, fan. Toggled automatically by Crowdergy whenever Crowdergize is on (smart logic comes later).",
+              "entity_climate": "A climate.* entity from your heat pump — Crowdergy uses set_hvac_mode and reads current_temperature from its attribute. When set, control + current-temp fields below are overwritten automatically.",
+              "entity_control": "Classic path: any writable HA entity (switch, number, select, input helper). Examples: SG-Ready select for heat pumps, charge-pause switch or current-limit number for wallboxes, charge/discharge select for batteries. Solar/Grid/Haushalt: leave blank.",
               "entity_charge_mode": "Select entity offering the app's charge modes (e.g. \"Power Mode\" / \"Lock Mode\" / \"Solar Pure Mode\") as options."
             }
           }
@@ -273,14 +275,16 @@
             }
           },
           "control_section": {
-            "name": "Control (Crowdergize)",
-            "description": "Which HA entities may Crowdergy control? Wallbox: just the Lademodus select (Lock / Solar / Power are mapped in the next step). Other types: the control entity + the on/off values in the follow-up step.",
+            "name": "Control",
+            "description": "Heating / Warmwater: pick a climate.* entity → control + current temp + modes are derived automatically. Otherwise pick a classic control entity. Wallbox + Battery: just the charge-mode entity.",
             "data": {
-              "entity_control": "Control entity (smart on/off)",
+              "entity_climate": "Climate entity (recommended)",
+              "entity_control": "Control entity",
               "entity_charge_mode": "Charge-mode entity (Wallbox / Battery)"
             },
             "data_description": {
-              "entity_control": "Any writable HA entity: switch, number, select, input helper, climate, light, fan. Toggled automatically by Crowdergy whenever Crowdergize is on (smart logic comes later).",
+              "entity_climate": "A climate.* entity from your heat pump — Crowdergy uses set_hvac_mode and reads current_temperature from its attribute. When set, control + current-temp fields below are overwritten automatically.",
+              "entity_control": "Classic path: any writable HA entity (switch, number, select, input helper). Examples: SG-Ready select for heat pumps, charge-pause switch or current-limit number for wallboxes, charge/discharge select for batteries. Solar/Grid/Haushalt: leave blank.",
               "entity_charge_mode": "Select entity offering the app's charge modes (e.g. \"Power Mode\" / \"Lock Mode\" / \"Solar Pure Mode\") as options."
             }
           }
@@ -442,14 +446,16 @@
             }
           },
           "control_section": {
-            "name": "Control (Crowdergize)",
-            "description": "Which HA entities may Crowdergy control? Wallbox: just the Lademodus select (Lock / Solar / Power are mapped in the next step). Other types: the control entity + the on/off values in the follow-up step.",
+            "name": "Control",
+            "description": "Heating / Warmwater: pick a climate.* entity → control + current temp + modes are derived automatically. Otherwise pick a classic control entity. Wallbox + Battery: just the charge-mode entity.",
             "data": {
-              "entity_control": "Control entity (smart on/off)",
+              "entity_climate": "Climate entity (recommended)",
+              "entity_control": "Control entity",
               "entity_charge_mode": "Charge-mode entity (Wallbox / Battery)"
             },
             "data_description": {
-              "entity_control": "Any writable HA entity: switch, number, select, input helper, climate, light, fan. Toggled automatically by Crowdergy whenever Crowdergize is on (smart logic comes later).",
+              "entity_climate": "A climate.* entity from your heat pump — Crowdergy uses set_hvac_mode and reads current_temperature from its attribute. When set, control + current-temp fields below are overwritten automatically.",
+              "entity_control": "Classic path: any writable HA entity (switch, number, select, input helper). Examples: SG-Ready select for heat pumps, charge-pause switch or current-limit number for wallboxes, charge/discharge select for batteries. Solar/Grid/Haushalt: leave blank.",
               "entity_charge_mode": "Select entity offering the app's charge modes (e.g. \"Power Mode\" / \"Lock Mode\" / \"Solar Pure Mode\") as options."
             }
           }

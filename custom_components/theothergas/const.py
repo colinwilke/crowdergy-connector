@@ -90,6 +90,16 @@ CONF_ENTITY_CONTROL = "entity_control"
 CONF_VALUE_ON = "value_on"
 CONF_VALUE_OFF = "value_off"
 
+# Climate-first Onboarding für heating + warmwater (v2.6.0+). Wenn der
+# User eine climate.* Entity wählt, leitet der Connector daraus
+# automatisch ab: Steuerung (set_hvac_mode), Ist-Temperatur (Attribut
+# current_temperature), Heiz/Kühl-Modi (hvac_modes). Form-only Feld —
+# beim Speichern kopieren wir den Wert auf entity_control +
+# entity_current_temp_c, sodass die Coordinator/Backend-Pipeline
+# unverändert bleibt. Leer = klassischer Pfad mit separater Steuer-
+# und Ist-Temperatur-Entity.
+CONF_ENTITY_CLIMATE = "entity_climate"
+
 # Wallbox-only: separate write-target for the Lademodus picker in the iOS
 # app. Settable HA select entity (typically with "Lock Mode" / "Power Mode" /
 # "Solar Pure Mode" — or any other options the user has configured on their

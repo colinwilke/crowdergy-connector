@@ -23,6 +23,7 @@ from .const import (
     CONF_ENTITY_OUTDOOR_TEMP,
     CONF_EMAIL,
     CONF_ENTITY_CHARGE_MODE,
+    CONF_ENTITY_CLIMATE,
     CONF_ENTITY_CONTROL,
     CONF_ENTITY_POWER,
     CONF_ENTITY_SOC,
@@ -146,6 +147,12 @@ _ENTITY_SELECTORS: dict[str, selector.EntitySelector] = {
     ),
     CONF_ENTITY_CURRENT_TEMP: selector.EntitySelector(
         selector.EntitySelectorConfig(domain="sensor")
+    ),
+    # Climate-first Pick für heating/warmwater. Aus dem climate-State
+    # leitet der Connector Steuerung (set_hvac_mode), Ist-Temperatur
+    # (Attribut current_temperature) und Modi-Liste (hvac_modes) ab.
+    CONF_ENTITY_CLIMATE: selector.EntitySelector(
+        selector.EntitySelectorConfig(domain="climate")
     ),
     # Any settable HA entity — connector adapts the service call to the
     # entity's domain at runtime (switch.turn_on/off, number.set_value,
@@ -292,9 +299,25 @@ def _entities_schema(
         schema_dict[vol.Required("control_section")] = section(
             control_schema, {"collapsed": False}
         )
+    elif device_type in {"heating", "warmwater"}:
+        # Climate-first: User wählt EITHER eine climate.* Entity (dann
+        # leiten wir Steuerung + Ist-Temp + Modi automatisch ab) ODER
+        # einzeln entity_current_temp_c + entity_control. Im Submit-
+        # Dispatcher kopieren wir entity_climate auf beide Felder
+        # falls gesetzt, sodass die downstream-Pipeline unverändert
+        # bleibt.
+        control_schema = vol.Schema({
+            _entity_field(CONF_ENTITY_CLIMATE, d):
+                _ENTITY_SELECTORS[CONF_ENTITY_CLIMATE],
+            _entity_field(CONF_ENTITY_CONTROL, d):
+                _ENTITY_SELECTORS[CONF_ENTITY_CONTROL],
+        })
+        schema_dict[vol.Required("control_section")] = section(
+            control_schema, {"collapsed": False}
+        )
     elif device_type in _CONTROLLABLE_TYPES:
-        # heating / warmwater / generic: universal entity_control.
-        # value_on/off im Follow-up-Step typ-bewusst.
+        # generic: universeller entity_control. value_on/off im
+        # Follow-up typ-bewusst.
         control_schema = vol.Schema({
             _entity_field(CONF_ENTITY_CONTROL, d): _ENTITY_SELECTORS[CONF_ENTITY_CONTROL],
         })
@@ -318,6 +341,22 @@ def _flatten_sections(user_input: dict[str, Any]) -> dict[str, Any]:
         else:
             flat[key] = value
     return flat
+
+
+def _apply_climate_first(entity_input: dict[str, Any]) -> dict[str, Any]:
+    """Climate-first: wenn entity_climate gesetzt, kopieren wir den
+    Wert auf entity_control + entity_current_temp_c. Damit kommen
+    Steuer-Dispatch + Telemetry-Read im Coordinator mit derselben
+    climate.* Entity klar — Service-Call-Adapter weiß für `climate.*`
+    set_hvac_mode zu verwenden, Telemetry-Read schaut auf das Attribut
+    `current_temperature` statt den State.
+    Mutiert das Dict in-place und gibt es zurück (chainable).
+    """
+    climate = entity_input.get(CONF_ENTITY_CLIMATE, "")
+    if climate:
+        entity_input[CONF_ENTITY_CONTROL] = climate
+        entity_input[CONF_ENTITY_CURRENT_TEMP] = climate
+    return entity_input
 
 
 # ── Step 3 (Crowdergize-fähig): value_on / value_off, typ-bewusst ──────────
@@ -684,6 +723,7 @@ def _build_device_record(
         CONF_INVERT_POWER_SIGN: bool(entity_input.get(CONF_INVERT_POWER_SIGN, False)),
         CONF_ENTITY_SOC: entity_input.get(CONF_ENTITY_SOC, ""),
         CONF_ENTITY_VEHICLE_STATUS: entity_input.get(CONF_ENTITY_VEHICLE_STATUS, ""),
+        CONF_ENTITY_CLIMATE: entity_input.get(CONF_ENTITY_CLIMATE, ""),
         CONF_ENTITY_CURRENT_TEMP: entity_input.get(CONF_ENTITY_CURRENT_TEMP, ""),
         CONF_ENTITY_ENERGY_TOTAL: entity_input.get(CONF_ENTITY_ENERGY_TOTAL, ""),
         CONF_ENTITY_ENERGY_DISCHARGED_TOTAL: entity_input.get(
@@ -1177,7 +1217,9 @@ class CrowdergyConfigFlow(ConfigFlow, domain=DOMAIN):
         device_name = self._pending_name or ""
 
         if user_input is not None:
-            entity_input = _flatten_sections(user_input)
+            entity_input = _apply_climate_first(
+                _flatten_sections(user_input)
+            )
             return await self._dispatch_post_entities(entity_input)
 
         return self.async_show_form(
@@ -1648,7 +1690,9 @@ class CrowdergyOptionsFlow(OptionsFlow):
         device_name = self._pending_name or ""
 
         if user_input is not None:
-            entity_input = _flatten_sections(user_input)
+            entity_input = _apply_climate_first(
+                _flatten_sections(user_input)
+            )
             return await self._dispatch_add_post_entities(entity_input)
 
         return self.async_show_form(
@@ -2055,7 +2099,9 @@ class CrowdergyOptionsFlow(OptionsFlow):
         device_name = self._edit_pending_name or target[CONF_DEVICE_NAME]
 
         if user_input is not None:
-            entity_input = _flatten_sections(user_input)
+            entity_input = _apply_climate_first(
+                _flatten_sections(user_input)
+            )
             # Hold-mode is invisible in the user-facing flow (every
             # device gets `always` since v1.20.0). Carry it forward
             # so dispatch never reasons about it.

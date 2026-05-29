@@ -417,6 +417,27 @@ class CrowdergyCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
         except (ValueError, TypeError):
             return state.state
 
+    def _read_temp_c(self, entity_id: str) -> Any:
+        """Ist-Temperatur lesen. Bei climate.* steht im state der
+        hvac_mode (z.B. 'heat'), die echte Temperatur sitzt im Attribut
+        `current_temperature`. Für sensor-/number-Entities Fallback auf
+        den State.
+        """
+        if not entity_id:
+            return None
+        if entity_id.split(".", 1)[0] == "climate":
+            state = self.hass.states.get(entity_id)
+            if state is None:
+                return None
+            attr = state.attributes.get("current_temperature")
+            if attr is None:
+                return None
+            try:
+                return float(attr)
+            except (ValueError, TypeError):
+                return None
+        return self._read_entity_state(entity_id)
+
     def _should_send(self, device_id: str, payload: dict[str, Any]) -> bool:
         """Decide whether the just-computed payload differs enough
         from the last sent one to be worth a new telemetry row.
@@ -702,7 +723,7 @@ class CrowdergyCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
             # iOS showing a stale value whenever the wallbox or HA
             # changed it on its own.
             charge_mode = self._read_string(entity_charge_mode)
-            current_temp_c = self._read_entity_state(entity_current_temp)
+            current_temp_c = self._read_temp_c(entity_current_temp)
             # Lifetime cumulative energy in kWh (unit-normalised from
             # the HA `unit_of_measurement` attribute). We still send
             # the raw cumulative for debugging, but the iOS chart
