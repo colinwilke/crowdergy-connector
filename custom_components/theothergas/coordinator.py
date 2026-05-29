@@ -68,14 +68,17 @@ previous one, skip it. The scheduled 30 s heartbeat will catch
 anything missed. Prevents storms when a power sensor updates every
 sub-second."""
 
-PER_DEVICE_HEARTBEAT_INTERVAL = 300.0
+PER_DEVICE_HEARTBEAT_INTERVAL = 90.0
 """Floor for the per-device "send something even when nothing changed"
-gate. Raised 30 s → 300 s in v2.5.4 once the dedicated
-`_heartbeat_loop` started pinging `/me/heartbeat` separately for
-freshness. Effect on a quiet device: 1 telemetry row / 5 min
-instead of 1 / 30 s (~10× reduction, ~90 % HTTP cut on idle homes).
-Categorical / numeric state-changes still PATCH within the same
-tick — this only applies when literally nothing crossed a threshold.
+gate. Tuned via 30 s (pre-v2.5.4) → 300 s (v2.5.4 — too long,
+broke iOS DeviceTile freshness) → 90 s (v2.5.5).
+
+90 s is the right balance: iOS's 120-s tile-freshness threshold has
+30 s of slack, AND we still get a ~3× row reduction vs the old
+30 s cadence on quiet devices. The dedicated `_heartbeat_loop`
+keeps the user-level connector_state ping at 25 s independent of
+this — that one only stamps `connector_last_seen`, no Telemetry
+row written.
 
 Why not zero: an occasional row keeps the iOS-side
 `latest_telemetry` cache up-to-date and lets the backend's near-
