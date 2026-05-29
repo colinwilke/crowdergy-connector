@@ -66,8 +66,8 @@
               "entity_soc_percent": "State-of-charge entity",
               "entity_vehicle_status": "Vehicle status entity",
               "entity_current_temp_c": "Current-temperature entity",
-              "entity_energy_total": "Total energy entity (kWh, cumulative)",
-              "entity_energy_discharged_total": "Out-flow energy entity (kWh, cumulative) — battery / grid"
+              "entity_energy_total": "Import / consumption / charge counter (kWh, cumulative)",
+              "entity_energy_discharged_total": "Export / discharge counter (kWh, cumulative) — grid / battery"
             },
             "data_description": {
               "entity_current_power_kw": "Sensor providing current power in W or kW.",
@@ -256,8 +256,8 @@
               "entity_soc_percent": "State-of-charge entity",
               "entity_vehicle_status": "Vehicle status entity",
               "entity_current_temp_c": "Current-temperature entity",
-              "entity_energy_total": "Total energy entity (kWh, cumulative)",
-              "entity_energy_discharged_total": "Out-flow energy entity (kWh, cumulative) — battery / grid"
+              "entity_energy_total": "Import / consumption / charge counter (kWh, cumulative)",
+              "entity_energy_discharged_total": "Export / discharge counter (kWh, cumulative) — grid / battery"
             },
             "data_description": {
               "entity_current_power_kw": "Sensor providing current power in W or kW.",
@@ -423,8 +423,8 @@
               "entity_soc_percent": "State-of-charge entity",
               "entity_vehicle_status": "Vehicle status entity",
               "entity_current_temp_c": "Current-temperature entity",
-              "entity_energy_total": "Total energy entity (kWh, cumulative)",
-              "entity_energy_discharged_total": "Out-flow energy entity (kWh, cumulative) — battery / grid"
+              "entity_energy_total": "Import / consumption / charge counter (kWh, cumulative)",
+              "entity_energy_discharged_total": "Export / discharge counter (kWh, cumulative) — grid / battery"
             },
             "data_description": {
               "entity_current_power_kw": "Sensor providing current power in W or kW.",
