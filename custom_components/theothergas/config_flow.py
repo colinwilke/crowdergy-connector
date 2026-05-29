@@ -611,8 +611,24 @@ def _cooling_schema(
       * `value_cool_on` / `value_cool_off` — the values to write
         when `entity_cool_control` is set. Mirror the heating-side
         `value_on` / `value_off` pattern.
+
+    Value-Felder werden typ-bewusst gerendert: ist die referenzierte
+    Steuer-Entity ein `select` / `input_select` / `climate`, kommen
+    die Optionen als Dropdown statt freiem Textfeld. Prio:
+    `entity_cool_control` (separate Kühl-Entity) → `entity_control`
+    (SG-Ready: gleiche Entity für Heizen+Kühlen) → Plain-Text.
     """
     d = defaults or {}
+    cool_entity = d.get(CONF_ENTITY_COOL_CONTROL, "") or entity_control
+    value_sel = _value_selector(hass, cool_entity)
+    field_type: Any = value_sel if value_sel is not None else selector.TextSelector()
+
+    def _value_field(key: str) -> Any:
+        default = d.get(key, "")
+        if default == "":
+            return vol.Optional(key)
+        return vol.Optional(key, default=str(default))
+
     return vol.Schema({
         vol.Optional(
             CONF_SUPPORTS_COOLING,
@@ -627,12 +643,8 @@ def _cooling_schema(
                 domain=["select", "input_select", "switch", "input_boolean", "climate"]
             )
         ),
-        vol.Optional(
-            CONF_VALUE_COOL_ON, default=d.get(CONF_VALUE_COOL_ON, "")
-        ): selector.TextSelector(),
-        vol.Optional(
-            CONF_VALUE_COOL_OFF, default=d.get(CONF_VALUE_COOL_OFF, "")
-        ): selector.TextSelector(),
+        _value_field(CONF_VALUE_COOL_ON): field_type,
+        _value_field(CONF_VALUE_COOL_OFF): field_type,
     })
 
 
