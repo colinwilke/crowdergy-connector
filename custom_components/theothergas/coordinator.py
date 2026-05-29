@@ -301,8 +301,16 @@ class CrowdergyCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
         expected) and the loop continues. A sustained outage just
         means iOS will mark the connector offline after 70 s —
         identical to pre-v2.5.4 behaviour.
+
+        Exponential backoff on consecutive failures: 25 s → 50 s →
+        ... → cap at 120 s. Resets to the base interval on the next
+        successful ping. Without this the ping kept hammering a
+        down backend at 25 s indefinitely.
         """
+        _HEARTBEAT_BACKOFF_MAX_S = 120.0
+        consecutive_failures = 0
         while True:
+            failed = False
             try:
                 response = await self._authenticated_request(
                     "POST", "/api/v1/users/me/heartbeat"
@@ -312,11 +320,22 @@ class CrowdergyCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
                         "heartbeat ping returned %s: %s",
                         response.status_code, response.text,
                     )
+                    failed = True
             except asyncio.CancelledError:
                 raise
             except Exception as err:  # noqa: BLE001
                 _LOGGER.debug("heartbeat ping failed: %s", err)
-            await asyncio.sleep(HEARTBEAT_PING_INTERVAL)
+                failed = True
+            if failed:
+                consecutive_failures += 1
+                sleep_for = min(
+                    HEARTBEAT_PING_INTERVAL * (2 ** (consecutive_failures - 1)),
+                    _HEARTBEAT_BACKOFF_MAX_S,
+                )
+            else:
+                consecutive_failures = 0
+                sleep_for = HEARTBEAT_PING_INTERVAL
+            await asyncio.sleep(sleep_for)
 
     def _auth_headers(self) -> dict[str, str]:
         return {
@@ -902,9 +921,16 @@ class CrowdergyCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
                             resp.status, delay,
                         )
                         raise aiohttp.ClientError(f"status {resp.status}")
-                    delay = SSE_RECONNECT_INITIAL
                     _LOGGER.info("Crowdergy SSE connected to %s/api/v1/stream", self.api_url)
+                    # Reset the back-off only after we've actually
+                    # received data on the body stream. A handshake-
+                    # OK / immediate-disconnect cycle would otherwise
+                    # spin at the 1-s floor and hammer a down backend.
+                    saw_body = False
                     async for raw in resp.content:
+                        if not saw_body:
+                            saw_body = True
+                            delay = SSE_RECONNECT_INITIAL
                         line = raw.decode("utf-8", errors="replace").rstrip("\r\n")
                         if not line.startswith("data: "):
                             continue
