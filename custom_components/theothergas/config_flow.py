@@ -114,13 +114,15 @@ _READ_FIELDS: dict[str, list[str]] = {
         CONF_ENTITY_POWER, CONF_ENTITY_ENERGY_TOTAL,
         CONF_ENTITY_ENERGY_DISCHARGED_TOTAL,
     ],
+    # heating + warmwater: Ist-Temperatur-Sensor lebt in der control
+    # Section gleich beim Climate-Entity Feld — wer climate wählt
+    # braucht den separaten Sensor nicht (current_temperature kommt
+    # aus dem Attribut).
     "heating":   [
-        CONF_ENTITY_POWER, CONF_ENTITY_CURRENT_TEMP,
-        CONF_ENTITY_ENERGY_TOTAL,
+        CONF_ENTITY_POWER, CONF_ENTITY_ENERGY_TOTAL,
     ],
     "warmwater": [
-        CONF_ENTITY_POWER, CONF_ENTITY_CURRENT_TEMP,
-        CONF_ENTITY_ENERGY_TOTAL,
+        CONF_ENTITY_POWER, CONF_ENTITY_ENERGY_TOTAL,
     ],
     "haushalt":  [CONF_ENTITY_POWER, CONF_ENTITY_ENERGY_TOTAL],
     "battery":   [
@@ -304,17 +306,17 @@ def _entities_schema(
             control_schema, {"collapsed": False}
         )
     elif device_type in {"heating", "warmwater"}:
-        # Climate-first: User wählt EITHER eine climate.* Entity (dann
-        # leiten wir Steuerung + Ist-Temp + Modi automatisch ab) ODER
-        # einzeln entity_current_temp_c + entity_control. Im Submit-
-        # Dispatcher kopieren wir entity_climate auf beide Felder
-        # falls gesetzt, sodass die downstream-Pipeline unverändert
-        # bleibt.
+        # Climate-first: oben das Climate-Feld (empfohlen), darunter
+        # der klassische Pfad mit separatem Steuer- + Ist-Temp-Sensor.
+        # Submit-Dispatcher kopiert entity_climate auf beide Felder
+        # falls gesetzt — downstream-Pipeline bleibt unverändert.
         control_schema = vol.Schema({
             _entity_field(CONF_ENTITY_CLIMATE, d):
                 _ENTITY_SELECTORS[CONF_ENTITY_CLIMATE],
             _entity_field(CONF_ENTITY_CONTROL, d):
                 _ENTITY_SELECTORS[CONF_ENTITY_CONTROL],
+            _entity_field(CONF_ENTITY_CURRENT_TEMP, d):
+                _ENTITY_SELECTORS[CONF_ENTITY_CURRENT_TEMP],
         })
         schema_dict[vol.Required("control_section")] = section(
             control_schema, {"collapsed": False}

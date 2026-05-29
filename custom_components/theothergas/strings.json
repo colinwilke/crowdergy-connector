@@ -86,11 +86,13 @@
             "data": {
               "entity_climate": "Climate entity (recommended)",
               "entity_control": "Control entity (alternative, classic)",
+              "entity_current_temp_c": "Current-temperature sensor (alternative, when no climate entity)",
               "entity_charge_mode": "Charge-mode entity (Wallbox / Battery)"
             },
             "data_description": {
               "entity_climate": "A climate.* entity from your heat pump — Crowdergy uses set_hvac_mode + reads current_temperature from its attribute. When set, the 'Control entity' field below is NOT needed.",
               "entity_control": "Alternative to the climate entity: any writable HA entity (switch, number, select, input helper). Examples: SG-Ready select for heat pumps, charge-pause switch or current-limit number for wallboxes, charge/discharge select for batteries. Solar/Grid/Haushalt: leave blank.",
+              "entity_current_temp_c": "Sensor with current flow / room / tank temperature in °C. Only fill when NO climate entity is picked above — otherwise the temperature is derived from the current_temperature attribute of the climate entity.",
               "entity_charge_mode": "Select entity offering the app's charge modes (e.g. \"Power Mode\" / \"Lock Mode\" / \"Solar Pure Mode\") as options."
             }
           }
@@ -280,11 +282,13 @@
             "data": {
               "entity_climate": "Climate entity (recommended)",
               "entity_control": "Control entity (alternative, classic)",
+              "entity_current_temp_c": "Current-temperature sensor (alternative, when no climate entity)",
               "entity_charge_mode": "Charge-mode entity (Wallbox / Battery)"
             },
             "data_description": {
               "entity_climate": "A climate.* entity from your heat pump — Crowdergy uses set_hvac_mode + reads current_temperature from its attribute. When set, the 'Control entity' field below is NOT needed.",
               "entity_control": "Alternative to the climate entity: any writable HA entity (switch, number, select, input helper). Examples: SG-Ready select for heat pumps, charge-pause switch or current-limit number for wallboxes, charge/discharge select for batteries. Solar/Grid/Haushalt: leave blank.",
+              "entity_current_temp_c": "Sensor with current flow / room / tank temperature in °C. Only fill when NO climate entity is picked above — otherwise the temperature is derived from the current_temperature attribute of the climate entity.",
               "entity_charge_mode": "Select entity offering the app's charge modes (e.g. \"Power Mode\" / \"Lock Mode\" / \"Solar Pure Mode\") as options."
             }
           }
@@ -451,11 +455,13 @@
             "data": {
               "entity_climate": "Climate entity (recommended)",
               "entity_control": "Control entity (alternative, classic)",
+              "entity_current_temp_c": "Current-temperature sensor (alternative, when no climate entity)",
               "entity_charge_mode": "Charge-mode entity (Wallbox / Battery)"
             },
             "data_description": {
               "entity_climate": "A climate.* entity from your heat pump — Crowdergy uses set_hvac_mode + reads current_temperature from its attribute. When set, the 'Control entity' field below is NOT needed.",
               "entity_control": "Alternative to the climate entity: any writable HA entity (switch, number, select, input helper). Examples: SG-Ready select for heat pumps, charge-pause switch or current-limit number for wallboxes, charge/discharge select for batteries. Solar/Grid/Haushalt: leave blank.",
+              "entity_current_temp_c": "Sensor with current flow / room / tank temperature in °C. Only fill when NO climate entity is picked above — otherwise the temperature is derived from the current_temperature attribute of the climate entity.",
               "entity_charge_mode": "Select entity offering the app's charge modes (e.g. \"Power Mode\" / \"Lock Mode\" / \"Solar Pure Mode\") as options."
             }
           }

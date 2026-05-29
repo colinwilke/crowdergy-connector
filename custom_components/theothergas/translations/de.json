@@ -87,6 +87,7 @@
             "data": {
               "entity_climate": "Climate-Entität (empfohlen)",
               "entity_control": "Steuer-Entität (alternativ, klassisch)",
+              "entity_current_temp_c": "Ist-Temperatur-Sensor (alternativ, wenn keine Climate-Entität)",
               "entity_charge_mode": "Lademodus-Entität (Wallbox / Batterie)"
             },
             "data_description": {
@@ -277,11 +278,13 @@
             "data": {
               "entity_climate": "Climate-Entität (empfohlen)",
               "entity_control": "Steuer-Entität (alternativ, klassisch)",
+              "entity_current_temp_c": "Ist-Temperatur-Sensor (alternativ, wenn keine Climate-Entität)",
               "entity_charge_mode": "Lademodus-Entität (Wallbox / Batterie)"
             },
             "data_description": {
               "entity_climate": "Eine climate.* Entität deiner WP — Crowdergy nutzt set_hvac_mode + liest Ist-Temperatur aus dem Attribut current_temperature. Wenn ausgefüllt, ist 'Steuer-Entität' darunter NICHT nötig.",
               "entity_control": "Alternative zur Climate-Entität: schreibbare HA-Entität (Switch, Number, Select, Input-Helper). Beispiele: SG-Ready (WP), Lade-Pause oder Strom-Limit (Wallbox), Lade-/Entlade-Select (Batterie). Solar/Netz/Haushalt: leer lassen.",
+              "entity_current_temp_c": "Sensor mit aktueller Vorlauf-/Raum-/Tank-Temperatur in °C. Nur ausfüllen wenn oben KEINE Climate-Entität gewählt ist — sonst kommt die Temperatur automatisch aus dem Attribut current_temperature der Climate-Entität.",
               "entity_charge_mode": "Wallbox: Select-Entität für den App-Lademodus-Picker. Batterie: schreibbare Steuer-Entität (typisch Number)."
             }
           }
@@ -432,11 +435,13 @@
             "data": {
               "entity_climate": "Climate-Entität (empfohlen)",
               "entity_control": "Steuer-Entität (alternativ, klassisch)",
+              "entity_current_temp_c": "Ist-Temperatur-Sensor (alternativ, wenn keine Climate-Entität)",
               "entity_charge_mode": "Lademodus-Entität (Wallbox / Batterie)"
             },
             "data_description": {
               "entity_climate": "Eine climate.* Entität deiner WP — Crowdergy nutzt set_hvac_mode + liest Ist-Temperatur aus dem Attribut current_temperature. Wenn ausgefüllt, ist 'Steuer-Entität' darunter NICHT nötig.",
               "entity_control": "Alternative zur Climate-Entität: schreibbare HA-Entität (Switch, Number, Select, Input-Helper). Beispiele: SG-Ready (WP), Lade-Pause oder Strom-Limit (Wallbox), Lade-/Entlade-Select (Batterie). Solar/Netz/Haushalt: leer lassen.",
+              "entity_current_temp_c": "Sensor mit aktueller Vorlauf-/Raum-/Tank-Temperatur in °C. Nur ausfüllen wenn oben KEINE Climate-Entität gewählt ist — sonst kommt die Temperatur automatisch aus dem Attribut current_temperature der Climate-Entität.",
               "entity_charge_mode": "Wallbox: Select-Entität für den App-Lademodus-Picker. Batterie: schreibbare Steuer-Entität (typisch Number)."
             }
           }
