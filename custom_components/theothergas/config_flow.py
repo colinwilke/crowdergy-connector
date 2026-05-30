@@ -55,6 +55,7 @@ from .const import (
     CONF_VALUE_COOL_ON,
     CONF_VALUE_COOL_OFF,
     ENTITY_CONTROL_HOLD_ALWAYS,
+    ENTITY_CONTROL_HOLD_NEVER,
     DEFAULT_API_URL,
     DEVICE_TYPES,
     DOMAIN,
@@ -444,17 +445,35 @@ def _values_schema(
 
     field_type: Any = value_sel if value_sel is not None else str
 
-    # Hold-mode is no longer exposed in the config flow (v1.20.0+).
-    # All entity_control writes are kept fresh via the 30 s "always"
-    # rewrite loop in the coordinator — the harmless extra HA write
-    # rescues devices with hysteresis from getting stuck on first
-    # apply (Warmwasser-WP with 7.5 °C hysteresis was the trigger).
-    # Existing config entries still carry CONF_ENTITY_CONTROL_HOLD;
-    # the coordinator treats `auto` the same as `always` so legacy
-    # values keep working without a config-flow re-run.
+    # Hold-mode 2026-05-30 zurückgebracht: User-Klimaanlage piept bei
+    # jedem 30s-Rewrite. Picker mit zwei klaren Optionen statt der
+    # alten 'always'/'never' Tokens, sodass jeder User entscheiden
+    # kann ob der Hold-Loop für sein Gerät passt.
+    hold_default = (
+        defaults.get(CONF_ENTITY_CONTROL_HOLD)
+        or ENTITY_CONTROL_HOLD_ALWAYS
+    )
+    hold_selector = selector.SelectSelector(
+        selector.SelectSelectorConfig(
+            options=[
+                selector.SelectOptionDict(
+                    value=ENTITY_CONTROL_HOLD_ALWAYS,
+                    label="Alle 30 s nachschreiben (empfohlen)",
+                ),
+                selector.SelectOptionDict(
+                    value=ENTITY_CONTROL_HOLD_NEVER,
+                    label="Nur einmal schreiben (für Geräte die bei jedem Schreiben piepen / Aktion auslösen)",
+                ),
+            ],
+            mode=selector.SelectSelectorMode.DROPDOWN,
+        )
+    )
     return vol.Schema({
         _field(CONF_VALUE_ON): field_type,
         _field(CONF_VALUE_OFF): field_type,
+        vol.Optional(
+            CONF_ENTITY_CONTROL_HOLD, default=hold_default
+        ): hold_selector,
     })
 
 
@@ -1539,11 +1558,9 @@ class CrowdergyConfigFlow(ConfigFlow, domain=DOMAIN):
         if user_input is not None:
             entity_input[CONF_VALUE_ON] = user_input.get(CONF_VALUE_ON, "")
             entity_input[CONF_VALUE_OFF] = user_input.get(CONF_VALUE_OFF, "")
-            # Hold-mode picker is no longer in the form (v1.20.0+) —
-            # every device gets `always` so hysteresis-laden hardware
-            # gets nudged every 30 s. Legacy entries with `auto` keep
-            # working: the coordinator collapses both to `always`.
-            entity_input[CONF_ENTITY_CONTROL_HOLD] = ENTITY_CONTROL_HOLD_ALWAYS
+            entity_input[CONF_ENTITY_CONTROL_HOLD] = user_input.get(
+                CONF_ENTITY_CONTROL_HOLD, ENTITY_CONTROL_HOLD_ALWAYS
+            )
             return await self._dispatch_post_entities(entity_input)
 
         return self.async_show_form(
@@ -1977,11 +1994,9 @@ class CrowdergyOptionsFlow(OptionsFlow):
         if user_input is not None:
             entity_input[CONF_VALUE_ON] = user_input.get(CONF_VALUE_ON, "")
             entity_input[CONF_VALUE_OFF] = user_input.get(CONF_VALUE_OFF, "")
-            # Hold-mode picker is no longer in the form (v1.20.0+) —
-            # every device gets `always` so hysteresis-laden hardware
-            # gets nudged every 30 s. Legacy entries with `auto` keep
-            # working: the coordinator collapses both to `always`.
-            entity_input[CONF_ENTITY_CONTROL_HOLD] = ENTITY_CONTROL_HOLD_ALWAYS
+            entity_input[CONF_ENTITY_CONTROL_HOLD] = user_input.get(
+                CONF_ENTITY_CONTROL_HOLD, ENTITY_CONTROL_HOLD_ALWAYS
+            )
             return await self._dispatch_add_post_entities(entity_input)
 
         return self.async_show_form(
@@ -2471,11 +2486,10 @@ class CrowdergyOptionsFlow(OptionsFlow):
                 user_input.get(CONF_VALUE_OFF)
                 or target.get(CONF_VALUE_OFF, "")
             )
-            # Hold-mode picker is no longer in the form (v1.20.0+) —
-            # every device gets `always` so hysteresis-laden hardware
-            # gets nudged every 30 s. Legacy entries with `auto` keep
-            # working: the coordinator collapses both to `always`.
-            entity_input[CONF_ENTITY_CONTROL_HOLD] = ENTITY_CONTROL_HOLD_ALWAYS
+            entity_input[CONF_ENTITY_CONTROL_HOLD] = user_input.get(
+                CONF_ENTITY_CONTROL_HOLD,
+                target.get(CONF_ENTITY_CONTROL_HOLD, ENTITY_CONTROL_HOLD_ALWAYS),
+            )
             return await self._dispatch_edit_post_entities(target, entity_input)
 
         # Pre-fill from `target` (the stored device record) so the

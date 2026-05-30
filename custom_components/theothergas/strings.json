@@ -104,11 +104,13 @@
         "description": "Which values should Crowdergy write to \"{entity_control}\" when the device turns on or off? For select/number/climate entities the picker is filled automatically.",
         "data": {
           "value_on": "Value for \"device on\"",
-          "value_off": "Value for \"device off\""
+          "value_off": "Value for \"device off\"",
+          "entity_control_hold": "Re-write the value periodically?"
         },
         "data_description": {
           "value_on": "e.g. \"Power Mode\", 16, \"on\", \"heat\".",
-          "value_off": "e.g. \"Lock Mode\", 0, \"off\"."
+          "value_off": "e.g. \"Lock Mode\", 0, \"off\".",
+          "entity_control_hold": "\"Every 30 s\" (default) rescues devices with hysteresis; \"Write once\" for devices that beep, trigger an action or wake a display on every write."
         },
         "submit": "Next"
       },
@@ -300,11 +302,13 @@
         "description": "Which values should Crowdergy write to \"{entity_control}\" when the device turns on or off? For select/number/climate entities the picker is filled automatically.",
         "data": {
           "value_on": "Value for \"device on\"",
-          "value_off": "Value for \"device off\""
+          "value_off": "Value for \"device off\"",
+          "entity_control_hold": "Re-write the value periodically?"
         },
         "data_description": {
           "value_on": "e.g. \"Power Mode\", 16, \"on\", \"heat\".",
-          "value_off": "e.g. \"Lock Mode\", 0, \"off\"."
+          "value_off": "e.g. \"Lock Mode\", 0, \"off\".",
+          "entity_control_hold": "\"Every 30 s\" (default) rescues devices with hysteresis; \"Write once\" for devices that beep, trigger an action or wake a display on every write."
         },
         "submit": "OK"
       },
@@ -557,11 +561,13 @@
         "description": "Which values should Crowdergy write to \"{entity_control}\" when the device turns on or off? For select/number/climate entities the picker is filled automatically.",
         "data": {
           "value_on": "Value for \"device on\"",
-          "value_off": "Value for \"device off\""
+          "value_off": "Value for \"device off\"",
+          "entity_control_hold": "Re-write the value periodically?"
         },
         "data_description": {
           "value_on": "e.g. \"Power Mode\", 16, \"on\", \"heat\".",
-          "value_off": "e.g. \"Lock Mode\", 0, \"off\"."
+          "value_off": "e.g. \"Lock Mode\", 0, \"off\".",
+          "entity_control_hold": "\"Every 30 s\" (default) rescues devices with hysteresis; \"Write once\" for devices that beep, trigger an action or wake a display on every write."
         },
         "submit": "OK"
       },
