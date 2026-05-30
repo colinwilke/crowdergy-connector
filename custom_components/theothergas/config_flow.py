@@ -53,6 +53,7 @@ from .const import (
     CONF_BATTERY_VALUE_CHARGE,
     CONF_BATTERY_VALUE_IDLE,
     CONF_BATTERY_VALUE_DISCHARGE,
+    CONF_BATTERY_VALUE_PASSIVE,
     CONF_SHARES_HARDWARE_WITH,
     CONF_INCLUDED_IN_HAUSHALT,
     CONF_SUPPORTS_COOLING,
@@ -784,6 +785,7 @@ def _battery_values_schema(
         _field(CONF_BATTERY_VALUE_CHARGE): field_type,
         _field(CONF_BATTERY_VALUE_IDLE): field_type,
         _field(CONF_BATTERY_VALUE_DISCHARGE): field_type,
+        _field(CONF_BATTERY_VALUE_PASSIVE): field_type,
         _hold_mode_field(d): _hold_mode_selector(),
     })
 
@@ -904,6 +906,9 @@ def _build_device_record(
         CONF_BATTERY_VALUE_DISCHARGE: entity_input.get(
             CONF_BATTERY_VALUE_DISCHARGE, ""
         ),
+        CONF_BATTERY_VALUE_PASSIVE: entity_input.get(
+            CONF_BATTERY_VALUE_PASSIVE, ""
+        ),
         # v2.0: warmwater-only. The backend device-id of the heating
         # device sharing this compressor. Coordinator does nothing
         # with this — it's POSTed once at device-register time so the
@@ -977,6 +982,7 @@ async def _register_device(
             (CONF_BATTERY_VALUE_CHARGE, "battery_value_charge"),
             (CONF_BATTERY_VALUE_IDLE, "battery_value_idle"),
             (CONF_BATTERY_VALUE_DISCHARGE, "battery_value_discharge"),
+            (CONF_BATTERY_VALUE_PASSIVE, "battery_value_passive"),
         ):
             value = entity_input.get(key, "")
             if value:
@@ -1050,6 +1056,7 @@ async def _update_device_backend(
             (CONF_BATTERY_VALUE_CHARGE, "battery_value_charge"),
             (CONF_BATTERY_VALUE_IDLE, "battery_value_idle"),
             (CONF_BATTERY_VALUE_DISCHARGE, "battery_value_discharge"),
+            (CONF_BATTERY_VALUE_PASSIVE, "battery_value_passive"),
         ):
             payload[api_field] = entity_input.get(key, "")
     # v2.4: classic-consumer haushalt flag — mirror the edit flow
@@ -1560,6 +1567,9 @@ class CrowdergyConfigFlow(ConfigFlow, domain=DOMAIN):
             entity_input[CONF_BATTERY_VALUE_DISCHARGE] = user_input.get(
                 CONF_BATTERY_VALUE_DISCHARGE, ""
             )
+            entity_input[CONF_BATTERY_VALUE_PASSIVE] = user_input.get(
+                CONF_BATTERY_VALUE_PASSIVE, ""
+            )
             entity_input[CONF_ENTITY_CONTROL_HOLD] = user_input.get(
                 CONF_ENTITY_CONTROL_HOLD, ENTITY_CONTROL_HOLD_AUTO
             )
@@ -1981,6 +1991,9 @@ class CrowdergyOptionsFlow(OptionsFlow):
             entity_input[CONF_BATTERY_VALUE_DISCHARGE] = user_input.get(
                 CONF_BATTERY_VALUE_DISCHARGE, ""
             )
+            entity_input[CONF_BATTERY_VALUE_PASSIVE] = user_input.get(
+                CONF_BATTERY_VALUE_PASSIVE, ""
+            )
             entity_input[CONF_ENTITY_CONTROL_HOLD] = user_input.get(
                 CONF_ENTITY_CONTROL_HOLD, ENTITY_CONTROL_HOLD_AUTO
             )
@@ -2376,6 +2389,9 @@ class CrowdergyOptionsFlow(OptionsFlow):
             )
             entity_input[CONF_BATTERY_VALUE_DISCHARGE] = user_input.get(
                 CONF_BATTERY_VALUE_DISCHARGE, ""
+            )
+            entity_input[CONF_BATTERY_VALUE_PASSIVE] = user_input.get(
+                CONF_BATTERY_VALUE_PASSIVE, ""
             )
             entity_input[CONF_ENTITY_CONTROL_HOLD] = user_input.get(
                 CONF_ENTITY_CONTROL_HOLD, ENTITY_CONTROL_HOLD_AUTO

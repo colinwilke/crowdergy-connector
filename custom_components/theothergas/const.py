@@ -166,6 +166,11 @@ CONF_CHARGE_MODE_VALUE_SOLAR = "charge_mode_value_solar"
 CONF_BATTERY_VALUE_CHARGE = "battery_value_charge"
 CONF_BATTERY_VALUE_IDLE = "battery_value_idle"
 CONF_BATTERY_VALUE_DISCHARGE = "battery_value_discharge"
+# v3.0.8 (2026-05-30): optionaler vierter Mode für Inverter die
+# explizit auf passive umgeschaltet werden müssen. Leer = wie bisher
+# (worker skipt den Write, Inverter macht selbst); gesetzt = worker
+# schreibt diesen Wert beim Übergang in passive.
+CONF_BATTERY_VALUE_PASSIVE = "battery_value_passive"
 
 # Wallbox-only ternary mapping for the vehicle-status sensor (v2.0+).
 # Pre-v2.0 the connector forwarded the raw HA state string and the

@@ -153,13 +153,15 @@
           "battery_value_charge": "Charge",
           "battery_value_idle": "Hold SOC",
           "battery_value_discharge": "Discharge",
-          "entity_control_hold": "Hold mode"
+          "entity_control_hold": "Hold mode",
+          "battery_value_passive": "Passive (hand over)"
         },
         "data_description": {
           "battery_value_charge": "Value for force-charging at max power.",
           "battery_value_idle": "Value for freezing SOC (stops the inverter's PV self-consumption).",
           "battery_value_discharge": "Value for force-discharging at max power.",
-          "entity_control_hold": "Auto/Always: rewrite every 30 s. Once: write only once."
+          "entity_control_hold": "Auto/Always: rewrite every 30 s. Once: write only once.",
+          "battery_value_passive": "Value for 'Passive Mode' — written when the solver wants the inverter to take over battery control (native PV self-consumption). Blank = no write, inverter does its thing."
         },
         "submit": "Next"
       },
@@ -368,13 +370,15 @@
           "battery_value_charge": "Charge",
           "battery_value_idle": "Hold SOC",
           "battery_value_discharge": "Discharge",
-          "entity_control_hold": "Hold mode"
+          "entity_control_hold": "Hold mode",
+          "battery_value_passive": "Passive (hand over)"
         },
         "data_description": {
           "battery_value_charge": "Value for force-charging.",
           "battery_value_idle": "Value for freezing SOC.",
           "battery_value_discharge": "Value for force-discharging.",
-          "entity_control_hold": "Auto/Always: rewrite every 30 s. Once: write only once."
+          "entity_control_hold": "Auto/Always: rewrite every 30 s. Once: write only once.",
+          "battery_value_passive": "Value for 'Passive Mode' — written when the solver wants the inverter to take over battery control (native PV self-consumption). Blank = no write, inverter does its thing."
         },
         "submit": "Next"
       },
@@ -517,13 +521,15 @@
           "battery_value_charge": "Charge",
           "battery_value_idle": "Hold SOC",
           "battery_value_discharge": "Discharge",
-          "entity_control_hold": "Hold mode"
+          "entity_control_hold": "Hold mode",
+          "battery_value_passive": "Passive (hand over)"
         },
         "data_description": {
           "battery_value_charge": "Value for force-charging.",
           "battery_value_idle": "Value for freezing SOC.",
           "battery_value_discharge": "Value for force-discharging.",
-          "entity_control_hold": "Auto/Always: rewrite every 30 s. Once: write only once."
+          "entity_control_hold": "Auto/Always: rewrite every 30 s. Once: write only once.",
+          "battery_value_passive": "Value for 'Passive Mode' — written when the solver wants the inverter to take over battery control (native PV self-consumption). Blank = no write, inverter does its thing."
         }
       },
       "edit_device_vehicle_status": {

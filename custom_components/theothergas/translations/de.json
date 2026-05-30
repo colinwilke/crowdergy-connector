@@ -154,13 +154,15 @@
           "battery_value_charge": "Laden",
           "battery_value_idle": "SOC halten",
           "battery_value_discharge": "Entladen",
-          "entity_control_hold": "Hold-Modus"
+          "entity_control_hold": "Hold-Modus",
+          "battery_value_passive": "Passiv (an WR)"
         },
         "data_description": {
           "battery_value_charge": "Wert für „Force-Laden mit Max-Leistung“ (z. B. aus dem Netz für Tibber-Niedrigtarif).",
           "battery_value_idle": "Wert für „SOC einfrieren“ (Wechselrichter stoppt die PV-Eigenverbrauchs-Ladung).",
           "battery_value_discharge": "Wert für „Force-Entladen mit Max-Leistung“ (z. B. in den Haushalt bei teuren Tarif-Stunden).",
-          "entity_control_hold": "Auto/Immer: alle 30 s nachschreiben. Einmalig: nur einmal schreiben."
+          "entity_control_hold": "Auto/Immer: alle 30 s nachschreiben. Einmalig: nur einmal schreiben.",
+          "battery_value_passive": "Wert für 'Passive Mode' — wenn der Solver die Batterie-Steuerung an den Wechselrichter abgeben soll (native PV-Eigenverbrauch). Leer = kein Schreiben, Inverter macht selbst."
         }
       },
       "device_vehicle_status": {
@@ -369,13 +371,15 @@
           "battery_value_charge": "Laden",
           "battery_value_idle": "SOC halten",
           "battery_value_discharge": "Entladen",
-          "entity_control_hold": "Hold-Modus"
+          "entity_control_hold": "Hold-Modus",
+          "battery_value_passive": "Passiv (an WR)"
         },
         "data_description": {
           "battery_value_charge": "Wert für „Force-Laden mit Max-Leistung“.",
           "battery_value_idle": "Wert für „SOC einfrieren“ (Wechselrichter stoppt die PV-Eigenverbrauchs-Ladung).",
           "battery_value_discharge": "Wert für „Force-Entladen mit Max-Leistung“.",
-          "entity_control_hold": "Auto/Immer: alle 30 s nachschreiben. Einmalig: nur einmal schreiben."
+          "entity_control_hold": "Auto/Immer: alle 30 s nachschreiben. Einmalig: nur einmal schreiben.",
+          "battery_value_passive": "Wert für 'Passive Mode' — wenn der Solver die Batterie-Steuerung an den Wechselrichter abgeben soll (native PV-Eigenverbrauch). Leer = kein Schreiben, Inverter macht selbst."
         }
       },
       "add_device_vehicle_status": {
@@ -517,13 +521,15 @@
           "battery_value_charge": "Laden",
           "battery_value_idle": "SOC halten",
           "battery_value_discharge": "Entladen",
-          "entity_control_hold": "Hold-Modus"
+          "entity_control_hold": "Hold-Modus",
+          "battery_value_passive": "Passiv (an WR)"
         },
         "data_description": {
           "battery_value_charge": "Wert für „Force-Laden mit Max-Leistung“.",
           "battery_value_idle": "Wert für „SOC einfrieren“.",
           "battery_value_discharge": "Wert für „Force-Entladen mit Max-Leistung“.",
-          "entity_control_hold": "Auto/Immer: alle 30 s nachschreiben. Einmalig: nur einmal schreiben."
+          "entity_control_hold": "Auto/Immer: alle 30 s nachschreiben. Einmalig: nur einmal schreiben.",
+          "battery_value_passive": "Wert für 'Passive Mode' — wenn der Solver die Batterie-Steuerung an den Wechselrichter abgeben soll (native PV-Eigenverbrauch). Leer = kein Schreiben, Inverter macht selbst."
         }
       },
       "edit_device_vehicle_status": {
