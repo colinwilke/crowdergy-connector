@@ -783,6 +783,19 @@ class CrowdergyCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
                 # Single-entity consumption (or production) device →
                 # positive Δ as before.
                 energy_kwh_delta = in_delta
+            # invert_power_sign muss SOWOHL power_kw ALS AUCH
+            # energy_kwh_delta umkehren — sonst entsteht ein
+            # Sign-Mismatch bei Inverter-Setups die beide
+            # Konventionen entgegengesetzt zu Crowdergy haben (z.B.
+            # Wechselrichter die Einspeisung positiv exposen + die
+            # Einspeise-Zähl-Entity als entity_energy_total mapped).
+            # Vor 2026-05-30 wurde nur power_kw invertiert →
+            # kWh-Bezug/Einspeisung kamen vertauscht beim Backend an.
+            if (
+                energy_kwh_delta is not None
+                and dev.get(CONF_INVERT_POWER_SIGN)
+            ):
+                energy_kwh_delta = -energy_kwh_delta
             # Derive is_on from the live HA state of entity_control so a
             # user-driven HA-side toggle propagates up to the backend
             # (and from there to iOS via SSE). Returns None when we
