@@ -1489,21 +1489,11 @@ class CrowdergyConfigFlow(ConfigFlow, domain=DOMAIN):
             self._pending_entity_input = entity_input
             return await self.async_step_device_shares_hardware()
 
-        if (
-            device_type in _HAUSHALT_FLAG_TYPES
-            and CONF_INCLUDED_IN_HAUSHALT not in entity_input
-        ):
-            self._pending_entity_input = entity_input
-            return await self.async_step_device_included_in_haushalt()
-
-        if (
-            device_type in _COOLING_CAPABLE_TYPES
-            and CONF_SUPPORTS_COOLING not in entity_input
-            and CONF_VALUE_COOL_ON not in entity_input
-        ):
-            self._pending_entity_input = entity_input
-            return await self.async_step_device_cooling()
-
+        # v3.0: legacy included_in_haushalt + cooling steps werden nicht
+        # mehr dispatched — beide Felder werden inline im device_entities
+        # bzw. device_values Step erfasst. Wenn die Schlüssel nicht in
+        # entity_input liegen, ist das v3.0-konformes "kein cooling" /
+        # "default-haushalt-flag" — nicht Anlass für einen extra Step.
         return await self._register_with_entities(entity_input)
 
     async def async_step_device_charge_mode_values(
@@ -1993,21 +1983,8 @@ class CrowdergyOptionsFlow(OptionsFlow):
             self._pending_entity_input = entity_input
             return await self.async_step_add_device_shares_hardware()
 
-        if (
-            device_type in _HAUSHALT_FLAG_TYPES
-            and CONF_INCLUDED_IN_HAUSHALT not in entity_input
-        ):
-            self._pending_entity_input = entity_input
-            return await self.async_step_add_device_included_in_haushalt()
-
-        if (
-            device_type in _COOLING_CAPABLE_TYPES
-            and CONF_SUPPORTS_COOLING not in entity_input
-            and CONF_VALUE_COOL_ON not in entity_input
-        ):
-            self._pending_entity_input = entity_input
-            return await self.async_step_add_device_cooling()
-
+        # v3.0: legacy included_in_haushalt + cooling steps entfernt —
+        # beide Felder werden inline erfasst (siehe initial-Setup-Flow).
         return await self._options_register(entity_input)
 
     async def async_step_add_device_charge_mode_values(
@@ -2468,21 +2445,8 @@ class CrowdergyOptionsFlow(OptionsFlow):
             self._edit_pending_entity_input = entity_input
             return await self.async_step_edit_device_shares_hardware()
 
-        if (
-            device_type in _HAUSHALT_FLAG_TYPES
-            and CONF_INCLUDED_IN_HAUSHALT not in entity_input
-        ):
-            self._edit_pending_entity_input = entity_input
-            return await self.async_step_edit_device_included_in_haushalt()
-
-        if (
-            device_type in _COOLING_CAPABLE_TYPES
-            and CONF_SUPPORTS_COOLING not in entity_input
-            and CONF_VALUE_COOL_ON not in entity_input
-        ):
-            self._edit_pending_entity_input = entity_input
-            return await self.async_step_edit_device_cooling()
-
+        # v3.0: legacy included_in_haushalt + cooling steps entfernt —
+        # beide Felder werden inline erfasst.
         return await self._edit_save(target, entity_input)
 
     async def async_step_edit_device_charge_mode_values(
