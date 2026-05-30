@@ -19,7 +19,9 @@ from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 from .const import (
     CONF_ACCESS_TOKEN,
     CONF_API_URL,
+    CONF_BATTERY_VALUE_PASSIVE,
     CONF_DEVICE_ID,
+    CONF_DEVICE_TYPE,
     CONF_DEVICES,
     CONF_ENTITY_CHARGE_MODE,
     CONF_ENTITY_CONTROL,
@@ -1126,8 +1128,53 @@ class CrowdergyCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
                         desired_on = bool(self._on_state.get(device_id, False))
                         await self._apply_device_state(device_id, desired_on)
                     else:
-                        # Crowdergize off → stop holding the entity_control
-                        # value. The device is the user's again.
+                        # Crowdergize off → schreibe einen sicheren
+                        # Default-State, statt den letzten AI-Zustand
+                        # hängen zu lassen. User-Erwartung 2026-05-30:
+                        # SG-Ready bleibt nicht auf „Erhöht", Batterie
+                        # nicht auf force-charge. Wallbox-Spezialpfad
+                        # (snapshot/restore) lief schon oben.
+                        dev = next(
+                            (d for d in self.devices
+                             if d.get(CONF_DEVICE_ID) == device_id),
+                            None,
+                        )
+                        dev_type = (dev or {}).get(CONF_DEVICE_TYPE, "")
+                        if dev_type == "battery":
+                            # Falls battery_value_passive konfiguriert →
+                            # Inverter explizit auf passive (sonst skip,
+                            # weil ältere Setups das nicht haben).
+                            passive_val = (
+                                (dev or {}).get(CONF_BATTERY_VALUE_PASSIVE, "")
+                                or ""
+                            )
+                            if passive_val:
+                                await self._apply_charge_mode(
+                                    device_id, passive_val
+                                )
+                        elif dev_type in ("heating", "warmwater", "generic"):
+                            # entity_control auf value_off — sorgt
+                            # dafür dass das Gerät definitiv stoppt.
+                            # _apply_device_state startet danach den
+                            # hold-loop; den wollen wir hier NICHT
+                            # → direkt nach dem write die hold-loop
+                            # canceln (siehe unten).
+                            await self._apply_device_state(device_id, False)
+                            # Cooling-side auf off bringen falls cool_on
+                            # war (SG-Ready / climate / dedizierter
+                            # Kühl-Switch — alle drei Pfade über
+                            # _apply_cool_state).
+                            try:
+                                await self._apply_cool_state(device_id, False)
+                            except Exception:
+                                # Cool-state ist optional; nicht
+                                # blockieren wenn Helper bei diesem
+                                # device nichts schreiben kann.
+                                pass
+                        # Cancel hold-loop NACH dem explicit write,
+                        # sodass der letzte write das Letzte ist was
+                        # wir auf das entity_control schreiben — danach
+                        # ist das Gerät dem User überlassen.
                         self._cancel_hold(device_id)
             if "is_on" in payload:
                 new_on = bool(payload["is_on"])
