@@ -268,12 +268,14 @@
         "data": {
           "entity_current_power_kw": "Leistungs-Sensor",
           "read_section": "Lesende Werte (Status)",
-          "control_section": "Schreibende Steuerung (Crowdergize)"
+          "control_section": "Schreibende Steuerung (Crowdergize)",
+          "included_in_haushalt": "Im Haushaltsstrom enthalten?"
         },
         "data_description": {
           "entity_current_power_kw": "Sensor mit aktueller Leistung in W oder kW.",
           "read_section": "Diese Entitäten werden ausschließlich gelesen.",
-          "control_section": "Eine Entität schreibbar, zwei Werte (an / aus) — den definierst du im nächsten Schritt."
+          "control_section": "Eine Entität schreibbar, zwei Werte (an / aus) — den definierst du im nächsten Schritt.",
+          "included_in_haushalt": "An, wenn dein Haushalts-Sensor diesen Verbraucher schon mitmisst (häufig: ein Hauszähler). Crowdergy zieht ihn dann ab, damit nichts doppelt zählt."
         },
         "sections": {
           "read_section": {
@@ -430,12 +432,14 @@
         "data": {
           "entity_current_power_kw": "Leistungs-Sensor",
           "read_section": "Lesende Werte (Status)",
-          "control_section": "Schreibende Steuerung (Crowdergize)"
+          "control_section": "Schreibende Steuerung (Crowdergize)",
+          "included_in_haushalt": "Im Haushaltsstrom enthalten?"
         },
         "data_description": {
           "entity_current_power_kw": "Sensor mit aktueller Leistung in W oder kW.",
           "read_section": "Diese Entitäten werden ausschließlich gelesen.",
-          "control_section": "Eine Entität schreibbar, zwei Werte (an / aus) im nächsten Schritt."
+          "control_section": "Eine Entität schreibbar, zwei Werte (an / aus) im nächsten Schritt.",
+          "included_in_haushalt": "An, wenn dein Haushalts-Sensor diesen Verbraucher schon mitmisst (häufig: ein Hauszähler). Crowdergy zieht ihn dann ab, damit nichts doppelt zählt."
         },
         "sections": {
           "read_section": {
