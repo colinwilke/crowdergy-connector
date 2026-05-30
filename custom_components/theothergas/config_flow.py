@@ -29,6 +29,7 @@ from .const import (
     CONF_ENTITY_CLIMATE,
     CONF_ENTITY_CONTROL,
     CONF_ENTITY_POWER,
+    CONF_ENTITY_POWER_2,
     CONF_ENTITY_SOC,
     CONF_ENTITY_VEHICLE_STATUS,
     CONF_ENTITY_CURRENT_TEMP,
@@ -115,14 +116,13 @@ def _is_binary_entity(entity_id: str) -> bool:
 # value_on + value_off) rendered as a separate section.
 _READ_FIELDS: dict[str, list[str]] = {
     "solar":     [CONF_ENTITY_POWER, CONF_ENTITY_ENERGY_TOTAL],
+    # v3.0 bidirektional: zweites Power-Sensor-Feld neben dem zweiten
+    # Energie-Zähler. power_1 = Bezug (Energie raus aus Netz, ins Haus),
+    # power_2 = Einspeisung. Coordinator computet signed power_1 - power_2.
     "grid":      [
         CONF_ENTITY_POWER, CONF_ENTITY_ENERGY_TOTAL,
-        CONF_ENTITY_ENERGY_DISCHARGED_TOTAL,
+        CONF_ENTITY_POWER_2, CONF_ENTITY_ENERGY_DISCHARGED_TOTAL,
     ],
-    # heating + warmwater: Ist-Temperatur-Sensor lebt in der control
-    # Section gleich beim Climate-Entity Feld — wer climate wählt
-    # braucht den separaten Sensor nicht (current_temperature kommt
-    # aus dem Attribut).
     "heating":   [
         CONF_ENTITY_POWER, CONF_ENTITY_ENERGY_TOTAL,
     ],
@@ -130,20 +130,36 @@ _READ_FIELDS: dict[str, list[str]] = {
         CONF_ENTITY_POWER, CONF_ENTITY_ENERGY_TOTAL,
     ],
     "haushalt":  [CONF_ENTITY_POWER, CONF_ENTITY_ENERGY_TOTAL],
+    # Batterie: power_1 = Entladung, power_2 = Ladung, energy_1 +
+    # energy_2 die zugehörigen kWh-Zähler. SoC zwischen den Power-
+    # Paaren damit visuell zusammengehört.
     "battery":   [
-        CONF_ENTITY_POWER, CONF_ENTITY_SOC,
-        CONF_ENTITY_ENERGY_TOTAL, CONF_ENTITY_ENERGY_DISCHARGED_TOTAL,
+        CONF_ENTITY_POWER, CONF_ENTITY_ENERGY_TOTAL,
+        CONF_ENTITY_POWER_2, CONF_ENTITY_ENERGY_DISCHARGED_TOTAL,
+        CONF_ENTITY_SOC,
     ],
+    # Wallbox V2G "kommt später" — heute nur unidirektional.
     "wallbox":   [
-        CONF_ENTITY_POWER, CONF_ENTITY_SOC, CONF_ENTITY_VEHICLE_STATUS,
-        CONF_ENTITY_ENERGY_TOTAL,
+        CONF_ENTITY_POWER, CONF_ENTITY_ENERGY_TOTAL,
+        CONF_ENTITY_SOC, CONF_ENTITY_VEHICLE_STATUS,
     ],
     "generic":   [CONF_ENTITY_POWER, CONF_ENTITY_ENERGY_TOTAL],
 }
 
+# Bidirektionale Typen: zwei Power-Sensoren + zwei Energie-Zähler,
+# Coordinator computet signed-Werte aus dem Differenzpaar. Unidirek-
+# tionale Typen mit nur Power_1 + invert_power_sign-Fallback wenn der
+# Sensor in der "falschen" Richtung sigt.
+_BIDIRECTIONAL_TYPES = {"grid", "battery"}
+
 # Entity-selector configs keyed by the CONF_ENTITY_* name.
 _ENTITY_SELECTORS: dict[str, selector.EntitySelector] = {
     CONF_ENTITY_POWER: selector.EntitySelector(
+        selector.EntitySelectorConfig(domain="sensor")
+    ),
+    # v3.0 zweites Power-Sensor-Feld (bidirektional) — selber
+    # Selector-Typ wie CONF_ENTITY_POWER.
+    CONF_ENTITY_POWER_2: selector.EntitySelector(
         selector.EntitySelectorConfig(domain="sensor")
     ),
     CONF_ENTITY_SOC: selector.EntitySelector(
@@ -308,6 +324,17 @@ def _entities_schema(
         schema_dict[vol.Required("read_section")] = section(
             read_schema, {"collapsed": False}
         )
+
+    # v3.0: Haushalt-Toggle für Verbraucher direkt hier statt eigener
+    # Step am Ende. Default True für neue Geräte (häufigster Fall:
+    # Hauszähler sieht alles), Edit-Flow zieht stored value.
+    if device_type in _HAUSHALT_FLAG_TYPES:
+        haushalt_default = d.get(CONF_INCLUDED_IN_HAUSHALT, True)
+        schema_dict[
+            vol.Optional(
+                CONF_INCLUDED_IN_HAUSHALT, default=haushalt_default
+            )
+        ] = selector.BooleanSelector()
 
     if device_type == "wallbox":
         # Wallbox's full control surface lives behind ONE entity: a
@@ -798,6 +825,7 @@ def _build_device_record(
             CONF_DEVICE_CONFIG_MODE, CONFIG_MODE_MANUAL
         ),
         CONF_ENTITY_POWER: entity_input.get(CONF_ENTITY_POWER, ""),
+        CONF_ENTITY_POWER_2: entity_input.get(CONF_ENTITY_POWER_2, ""),
         CONF_INVERT_POWER_SIGN: bool(entity_input.get(CONF_INVERT_POWER_SIGN, False)),
         CONF_ENTITY_SOC: entity_input.get(CONF_ENTITY_SOC, ""),
         CONF_ENTITY_VEHICLE_STATUS: entity_input.get(CONF_ENTITY_VEHICLE_STATUS, ""),

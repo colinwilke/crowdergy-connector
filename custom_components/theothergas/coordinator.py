@@ -37,6 +37,7 @@ from .const import (
     CONF_VALUE_OFF,
     CONF_VALUE_ON,
     CONF_ENTITY_COOL_CONTROL,
+    CONF_ENTITY_POWER_2,
     CONF_SUPPORTS_COOLING,
     CONF_VALUE_COOL_ON,
     CONF_VALUE_COOL_OFF,
@@ -760,6 +761,7 @@ class CrowdergyCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
         for dev in self.devices:
             device_id = dev[CONF_DEVICE_ID]
             entity_power = dev.get(CONF_ENTITY_POWER, "")
+            entity_power_2 = dev.get(CONF_ENTITY_POWER_2, "")
             entity_soc = dev.get(CONF_ENTITY_SOC, "")
             entity_vehicle_status = dev.get(CONF_ENTITY_VEHICLE_STATUS, "")
             entity_charge_mode = dev.get(CONF_ENTITY_CHARGE_MODE, "")
@@ -770,10 +772,19 @@ class CrowdergyCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
             )
 
             current_power = self._read_power_kw(entity_power)
-            # Optional per-device sign flip — for HA sensors that
-            # expose Wirkleistung with the opposite-of-Crowdergy
-            # convention (positive when exporting / discharging).
-            if current_power is not None and dev.get(CONF_INVERT_POWER_SIGN):
+            # v3.0 bidirektional: zweites Power-Feld vorhanden → signed
+            # power = power_1 - power_2 (analog zur energy_kwh_delta-
+            # Berechnung). Bei nur einer Power-Entity bleibt der
+            # invert_power_sign-Pfad aktiv.
+            if entity_power_2:
+                power_2 = self._read_power_kw(entity_power_2)
+                if current_power is not None and power_2 is not None:
+                    current_power = current_power - power_2
+                elif current_power is None and power_2 is not None:
+                    current_power = -power_2
+            elif current_power is not None and dev.get(CONF_INVERT_POWER_SIGN):
+                # Sign-flip nur wenn KEIN zweites Power-Feld — sonst
+                # ist die Richtung über das Differenzpaar eindeutig.
                 current_power = -current_power
             soc_percent = self._read_entity_state(entity_soc)
             # Vehicle-status: v2.0 normalises the raw HA state to one
