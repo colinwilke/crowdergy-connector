@@ -33,92 +33,99 @@
       },
       "device_type": {
         "title": "Gerät #{device_number} — Typ & Name",
-        "description": "Wähle den Gerätetyp und einen Anzeigenamen. Der Typ steuert, welche Felder im nächsten Schritt erscheinen, und ordnet das Gerät in der App + in der Stadtteil-Aggregation richtig ein.\n\nÜbersicht der Typen:\n• Solar — PV-Anlage (nur lesend)\n• Batterie — Heimspeicher\n• Wallbox — Lademöglichkeit fürs E-Auto\n• Heizung (Wärmepumpe) — Raumheizungs-WP\n• Warmwasser (Wärmepumpe) — Brauchwasser-WP oder kombinierte WW-Bereitung. Im nächsten Schritt kannst du eine Heizungs-WP angeben, mit der derselbe Verdichter geteilt wird.\n• Netz — Hauptzähler / Netzbezug (nur lesend)\n• Haushalt — sonstige Grundlast (nur lesend)\n• Gerät — beliebiges schaltbares Gerät (Klima, Pool, IR-Heizung …)",
+        "description": "Was für ein Gerät richtest du ein?\n• Solar — PV-Anlage\n• Batterie — Heimspeicher\n• Wallbox — Lademöglichkeit fürs E-Auto\n• Heizung — Raumheizungs-Wärmepumpe\n• Warmwasser — Brauchwasser-Wärmepumpe\n• Netz — Hauptzähler\n• Haushalt — sonstige Grundlast\n• Gerät — sonstiges Schaltbares (Klima, Pool, IR-Heizung)",
         "submit": "Weiter",
         "data": {
           "device_type": "Gerätetyp",
           "device_name": "Name"
         },
         "data_description": {
-          "device_type": "Bestimmt welche Felder im nächsten Schritt gefragt werden und welchen Beitrag Crowdergy dem Gerät zutraut.",
-          "device_name": "Wird genau so in der Crowdergy-App und als Home-Assistant-Gerätename verwendet (z. B. Wallbox Hof, Wärmepumpe Keller)."
+          "device_name": "Anzeigename in der App und in Home Assistant."
         }
       },
       "device_config_mode": {
-        "title": "{device_name} ({device_type}) — Konfigurations-Modus",
-        "description": "Wie willst du deine Wärmepumpe einrichten? Manuell ist der klassische Weg für SG-Ready- und Modbus-Setups, Climate-Entity ist der schnelle Weg wenn deine WP als climate.* Entität in HA erscheint.",
+        "title": "{device_name} — Wie konfigurieren?",
+        "description": "Manuell = jeden Sensor und Schalter einzeln angeben (für SG-Ready, Modbus). Climate-Entity = eine Climate-Entität liefert Temperatur + Steuerung + Modi auf einmal (Daikin, Mitsubishi, generic_thermostat).",
         "submit": "Weiter",
         "data": {
-          "config_mode": "Konfigurations-Modus"
+          "config_mode": "Modus"
         }
       },
       "device_entities": {
-        "title": "{device_name} ({device_type}) — Entitäten verknüpfen",
-        "description": "Sage Crowdergy, welche Home-Assistant-Entitäten zu diesem Gerät gehören. Lesende Entitäten ziehen Status-Daten in die App (Leistung, Ladezustand, Temperatur …), die Steuer-Entität ist diejenige, die Crowdergy beim Crowdergize-Schalten an- bzw. ausschaltet. Felder, die für deinen Gerätetyp nicht relevant sind, einfach leer lassen.",
+        "title": "{device_name} — Sensoren & Steuerung",
+        "description": "Welche Entitäten gehören zu diesem Gerät? Nicht relevante Felder leer lassen.",
         "submit": "Weiter",
         "data": {
-          "entity_current_power_kw": "Leistungs-Sensor",
-          "read_section": "Lesende Werte (Status)",
-          "control_section": "Schreibende Steuerung (Crowdergize)"
+          "entity_current_power_kw": "Leistung",
+          "read_section": "Sensoren",
+          "control_section": "Steuerung",
+          "invert_power_sign": "Vorzeichen umkehren",
+          "included_in_haushalt": "Im Haushaltsstrom enthalten?"
         },
         "data_description": {
-          "entity_current_power_kw": "Sensor mit aktueller Leistung in W oder kW.",
-          "read_section": "Diese Entitäten werden ausschließlich gelesen — Crowdergy schreibt hier nie etwas hin.",
-          "control_section": "Crowdergy schaltet das Gerät, indem es genau eine Entität deiner Wahl auf einen von zwei Werten setzt — den definierst du im nächsten Schritt."
+          "included_in_haushalt": "An, wenn dein Haushalts-Sensor diesen Verbraucher schon mitmisst (häufig: ein Hauszähler). Crowdergy zieht ihn dann ab, damit nichts doppelt zählt.",
+          "invert_power_sign": "An, wenn dein Sensor die Stromrichtung umgekehrt zur Crowdergy-Konvention angibt (positiv = aus dem Gerät, negativ = ins Gerät)."
         },
         "sections": {
           "read_section": {
-            "name": "Lesende Werte (Status)",
-            "description": "Diese Entitäten werden nur ausgelesen — die App zeigt damit den Live-Status deiner Geräte, und die Crowdergy-Plattform misst daraus deinen Flex-Beitrag. Es wird hier nichts geschrieben.",
+            "name": "Sensoren",
+            "description": "Nur lesend — Crowdergy schreibt hier nichts hin.",
             "data": {
-              "entity_current_power_kw": "Leistungs-Sensor",
+              "entity_current_power_kw": "Leistung",
+              "entity_current_power_kw_2": "Leistung (Gegenrichtung)",
               "invert_power_sign": "Vorzeichen umkehren",
-              "entity_soc_percent": "Ladezustand-Sensor",
-              "entity_vehicle_status": "Fahrzeugstatus-Sensor",
-              "entity_current_temp_c": "Ist-Temperatur-Sensor",
-              "entity_energy_total": "Bezugs- / Verbrauchs- / Lade-Zähler (kWh, kumulativ)",
-              "entity_energy_discharged_total": "Einspeise- / Entlade-Zähler (kWh, kumulativ) — Netz / Batterie"
+              "entity_soc_percent": "Ladezustand",
+              "entity_vehicle_status": "Fahrzeugstatus",
+              "entity_current_temp_c": "Ist-Temperatur",
+              "entity_energy_total": "Energiezähler",
+              "entity_energy_discharged_total": "Energiezähler (Gegenrichtung)"
             },
             "data_description": {
-              "entity_current_power_kw": "Aktuelle Leistung in W oder kW (Sensor-Entität). Pflichtfeld — daraus berechnen wir die Live-Anzeige und beim Kalibrieren deinen Flex-Beitrag (kW). Bei Batterie/Netz: positive Werte = Bezug, negative = Abgabe.",
-              "invert_power_sign": "Setzen, wenn die HA-Entität umgekehrt zur Crowdergy-Konvention liegt (z. B. Wechselrichter, der die Einspeisung positiv und den Bezug negativ angibt). Crowdergy multipliziert dann den Sensor-Wert mit −1 vor dem Senden.",
-              "entity_soc_percent": "Aktueller Ladezustand in % (0–100). Pflichtfeld für Batterie und Wallbox — daraus errechnet die App den Ladestand und die spätere Smart-Steuerung respektiert deinen erlaubten Bereich (Min/Max in der App).",
-              "entity_vehicle_status": "Sensor- oder Binary-Sensor-Entität, die meldet, ob ein Auto an der Wallbox steckt (typische Werte: connected, charging, idle). Wallbox-Pflichtfeld — Crowdergy startet eine Crowdergize-Session erst wenn ein Auto da ist und beendet sie automatisch beim Abstöpseln.",
-              "entity_current_temp_c": "Aktuelle Temperatur in °C — z. B. die Vorlauftemperatur einer Wärmepumpe oder die Innentemperatur eines Brauchwasser-Boilers. Wird in der App neben dem Wärmepumpen-Tile angezeigt.",
-              "entity_energy_total": "Lebensdauer-Energiezähler in kWh (HA-Attribut state_class: total_increasing). Je nach Gerätetyp ist das: Netz → Bezugs-Zähler, Batterie → Lade-Zähler, alle anderen → Verbrauchs-Zähler. Crowdergy speichert den Rohwert und berechnet daraus Tages-/Monats-/Jahresverbrauch via Delta. Optional — Geräte ohne diesen Sensor zeigen weiterhin nur kW. Niemals aus power_kw integrieren, der Drift summiert sich monatlich auf zweistellige Prozent.",
-              "entity_energy_discharged_total": "Optionaler zweiter total_increasing-kWh-Zähler für die GEGEN-Richtung — bei Netz die EINSPEISUNG (oben steht der Bezug), bei Batterie die ENTLADUNG (oben steht die Ladung). Wenn beide Richtungen gesetzt sind, speichert Crowdergy den signed Netto-Wert und die App zeigt pro Slot einen Balken (Bezug vs. Einspeisung / Ladung vs. Entladung). Leer lassen, wenn dein Wechselrichter nur einen vorzeichenbehafteten Sensor liefert — der einzelne Wert wird dann direkt übernommen."
+              "entity_current_power_kw": "Sensor mit aktueller Leistung. Bei Netz/Batterie: erste Richtung (Bezug bzw. Entladung). Bei Solar/WP/Wallbox: die einzige Richtung.",
+              "entity_current_power_kw_2": "Nur bei Netz und Batterie: zweite Leistungs-Richtung (Einspeisung bzw. Ladung). Leer lassen, wenn dein Wechselrichter nur einen vorzeichenbehafteten Sensor liefert — dann unten 'Vorzeichen umkehren' setzen falls nötig.",
+              "invert_power_sign": "An, wenn dein Sensor die Stromrichtung umgekehrt zur Crowdergy-Konvention angibt. Bei zwei Richtungs-Sensoren irrelevant.",
+              "entity_soc_percent": "Aktueller Ladezustand in Prozent. Pflicht bei Batterie und Wallbox.",
+              "entity_vehicle_status": "Sensor, der meldet ob ein Auto an der Wallbox steckt.",
+              "entity_current_temp_c": "Aktuelle Temperatur in °C — Vorlauf der WP oder Innentemp des Boilers. Erscheint neben dem Geräte-Tile.",
+              "entity_energy_total": "Energie-Zähler (kWh, kumulativ). Optional; ohne den zeigt die App nur kW. Niemals aus Leistung integrieren — der Drift summiert sich.",
+              "entity_energy_discharged_total": "Nur bei Netz und Batterie: zweiter Zähler für die Gegenrichtung (Einspeisung / Ladung)."
             }
           },
           "control_section": {
             "name": "Steuerung",
-            "description": "Bei Heizung/Warmwasser: ENTWEDER eine climate.* Entity (empfohlen — Crowdergy leitet Steuerung + Ist-Temp + Modi automatisch ab) ODER eine klassische Steuer-Entität (für SG-Ready WPs etc.). Bei Wallbox + Batterie nur die Lademodus-Entity.",
+            "description": "Heizung/Warmwasser im Climate-Modus: eine climate.* Entität. Im Manuell-Modus: klassische Steuer-Entität + Ist-Temp-Sensor. Wallbox: Lademodus-Entität. Batterie: Modi-Entität.",
             "data": {
-              "entity_climate": "Climate-Entität (empfohlen)",
-              "entity_control": "Steuer-Entität (alternativ, klassisch)",
-              "entity_current_temp_c": "Ist-Temperatur-Sensor (alternativ, wenn keine Climate-Entität)",
-              "entity_charge_mode": "Lademodus-Entität (Wallbox / Batterie)"
+              "entity_climate": "Climate-Entität",
+              "entity_control": "Steuer-Entität",
+              "entity_current_temp_c": "Ist-Temperatur",
+              "entity_charge_mode": "Lademodus-Entität"
             },
             "data_description": {
-              "entity_climate": "Eine climate.* Entität deiner WP — Crowdergy nutzt set_hvac_mode für Heizen/Kühlen und liest die Ist-Temperatur aus dem Attribut current_temperature. Wenn ausgefüllt, ist das Feld 'Steuer-Entität' darunter NICHT nötig.",
-              "entity_control": "Alternative zur Climate-Entität (oben). Eine schreibbare HA-Entität: Switch, Input-Boolean, Number, Input-Number, Select, Input-Select, Light, Fan. Beispiele: SG-Ready-Select bei Wärmepumpen, Lade-Pause-Switch oder Strom-Limit-Number bei Wallboxen, Lade-/Entlade-Select bei Batterien, Switch bei sonstigen Geräten. Solar/Netz/Haushalt nicht relevant — leer lassen.",
-              "entity_charge_mode": "Wallbox: Select-Entität mit Lademodus-Optionen (Lock Mode / Power Mode / Solar Pure Mode). Batterie: schreibbare Entität (typisch Number) mit den drei Steuer-Werten +max / 0 / -max W, die Crowdergy für Laden / Aus / Entladen schreibt. Werte mappt der nächste Schritt."
+              "entity_climate": "Die climate.* Entität deiner WP — Steuerung, Modi und Ist-Temperatur kommen automatisch.",
+              "entity_control": "Schreibbare Entität (Switch, Number, Select). Beispiele: SG-Ready-Select, Boost-Switch, Strom-Limit-Number.",
+              "entity_current_temp_c": "Sensor mit der aktuellen Temperatur (Vorlauf / Innenraum / Boiler).",
+              "entity_charge_mode": "Wallbox: Lademodus-Select (Lock/Power/Solar). Batterie: Modi-Entität (typisch Number für +max / 0 / -max W)."
             }
           }
         }
       },
       "device_values": {
-        "title": "{device_name} ({device_type}) — An/Aus-Werte für die Steuer-Entität",
-        "description": "Was soll Crowdergy auf die Steuer-Entität schreiben, wenn das Gerät über Crowdergize an- bzw. ausgeschaltet werden soll? Bei Switch / Input-Boolean füllt sich das automatisch (on/off). Bei Select-, Number- und Climate-Entitäten wählst du den passenden Wert manuell aus deinen vorhandenen Optionen.",
+        "title": "{device_name} — Werte schreiben",
+        "description": "Was soll Crowdergy auf die Steuer-Entität schreiben? Bei Switch füllt sich das automatisch, bei Select/Climate/Number wählst du aus deinen Optionen.",
         "submit": "Weiter",
         "data": {
-          "value_on": "Wert für: Gerät an",
-          "value_off": "Wert für: Gerät aus",
-          "entity_control_hold": "Halten der Steuer-Entität"
+          "value_on": "Wert für An",
+          "value_off": "Wert für Aus",
+          "value_cool_on": "Wert für Kühlen an",
+          "value_cool_off": "Wert für Kühlen aus",
+          "entity_control_hold": "Hold-Modus"
         },
         "data_description": {
-          "value_on": "Was schreiben wir wenn Crowdergy Gerät an sagt? Beispiele:\n• Wallbox-Strom-Limit (Number): 16 (= 16 A laden)\n• Wallbox-Lock-Switch: off (= Lock aufheben)\n• SG-Ready-Select: Erhöht oder dein Hersteller-Äquivalent\n• Wärmepumpen-Boost-Switch: on\n• Allgemeiner Switch: on",
-          "value_off": "Was schreiben wir wenn Crowdergy Gerät aus sagt? Wichtig: meist NICHT der Standard-/Normal-Modus, sondern aktiv nicht laufen. Beispiele:\n• Wallbox-Strom-Limit (Number): 0 (= Pause)\n• Wallbox-Lock-Switch: on (= Lock setzen)\n• SG-Ready-Select: Sperre oder dein Hersteller-Äquivalent\n• Allgemeiner Switch: off",
-          "entity_control_hold": "Auto (Default): Crowdergy schreibt den Wert alle 30 s nach. Rettet hysteresebehaftete Geräte (z.B. WPs die nach einem Modus-Wechsel selbst zurückkippen). An: explizit alle 30 s nachschreiben (semantisch identisch zu Auto). Aus: nur einmal schreiben — für Geräte die bei jedem Schreiben piepen (manche Klimaanlagen), eine Aktion auslösen oder ein Display wecken."
+          "value_on": "Beispiele: SG-Ready Erhöht, Climate heat, Number 16 (Wallbox 16 A), Switch on.",
+          "value_off": "Aktiv nichts tun — meist NICHT der Standard-Modus. Beispiele: SG-Ready Sperre, Climate off, Number 0, Switch off.",
+          "value_cool_on": "Nur bei Heizung mit Kühlfunktion. Climate cool oder dein Hersteller-Äquivalent. Leer = kein Kühlen.",
+          "value_cool_off": "Climate off oder leer (gleicher Wert wie 'Wert für Aus' oben).",
+          "entity_control_hold": "Auto/An: Crowdergy schreibt den Wert alle 30 s nach (rettet Geräte mit Hysterese). Aus: nur einmal schreiben — für Geräte die bei jedem Schreiben piepen oder ein Display wecken."
         }
       },
       "device_charge_mode_values": {
@@ -235,24 +242,23 @@
         }
       },
       "add_device": {
-        "title": "Gerät hinzufügen — Typ & Name",
-        "description": "Wähle Typ und Name. Der Typ entscheidet, welche Felder im nächsten Schritt erscheinen und wie das Gerät in der App und in der Stadtteil-Aggregation eingeordnet wird.",
+        "title": "Gerät hinzufügen",
+        "description": "Was für ein Gerät richtest du ein?\n• Solar, Batterie, Wallbox, Wärmepumpe (Heizung / Warmwasser)\n• Netz, Haushalt, Gerät (sonstiges Schaltbares)",
         "submit": "Weiter",
         "data": {
           "device_type": "Gerätetyp",
           "device_name": "Name"
         },
         "data_description": {
-          "device_type": "Solar, Batterie, Wallbox, Wärmepumpe, Netz, Haushalt oder Gerät (sonstiges Schaltbares).",
-          "device_name": "Anzeigename — taucht so in der Crowdergy-App und in Home Assistant auf."
+          "device_name": "Anzeigename in der App und in Home Assistant."
         }
       },
       "add_device_config_mode": {
-        "title": "{device_name} ({device_type}) — Konfigurations-Modus",
-        "description": "Wie willst du deine Wärmepumpe einrichten? Manuell für SG-Ready- und Modbus-Setups, Climate-Entity wenn deine WP als climate.* Entität in HA erscheint.",
+        "title": "{device_name} — Wie konfigurieren?",
+        "description": "Manuell = jeden Sensor und Schalter einzeln (SG-Ready, Modbus). Climate-Entity = eine climate.* Entität liefert alles (Daikin, Mitsubishi, generic_thermostat).",
         "submit": "Weiter",
         "data": {
-          "config_mode": "Konfigurations-Modus"
+          "config_mode": "Modus"
         }
       },
       "add_device_entities": {
