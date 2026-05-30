@@ -112,6 +112,29 @@ def _is_binary_entity(entity_id: str) -> bool:
         return False
     return entity_id.split(".", 1)[0] in _BINARY_DOMAINS
 
+
+def _auto_fill_binary_vehicle_status(entity_input: dict[str, Any]) -> None:
+    """Wallbox-Fahrzeugstatus auto-mappen wenn die Entity ein
+    binary_sensor.* ist — bei Binary-Sensors ist on/off die einzige
+    sinnvolle Ausprägung, da hat der User nichts zu mappen.
+
+    Häufiger Stolperstein (2026-05-30): HA's UI zeigt für binary
+    sensors lokalisierte Labels ("Eingesteckt"/"Ausgesteckt"), aber
+    der ROHE state.state ist "on"/"off". User tippten "Eingesteckt"
+    in das Mapping-Feld → kein Match im Coordinator → iOS bekommt
+    Rohwert "on" → Status-Display verwirrend.
+
+    Auto-Fill nur wenn der User nichts eingetragen hat (er kann
+    immer noch overriden, falls ein binary_sensor exotische States
+    liefert wie "True"/"False")."""
+    entity = entity_input.get(CONF_ENTITY_VEHICLE_STATUS, "") or ""
+    if not entity.startswith("binary_sensor."):
+        return
+    if not entity_input.get(CONF_VEHICLE_STATUS_VALUE_PLUGGED, ""):
+        entity_input[CONF_VEHICLE_STATUS_VALUE_PLUGGED] = "on"
+    if not entity_input.get(CONF_VEHICLE_STATUS_VALUE_UNPLUGGED, ""):
+        entity_input[CONF_VEHICLE_STATUS_VALUE_UNPLUGGED] = "off"
+
 # Which read-side telemetry fields each device type exposes. Crowdergize-
 # capable types additionally get the control trio (entity_control +
 # value_on + value_off) rendered as a separate section.
@@ -1442,8 +1465,12 @@ class CrowdergyConfigFlow(ConfigFlow, domain=DOMAIN):
             and entity_input.get(CONF_ENTITY_VEHICLE_STATUS)
             and CONF_VEHICLE_STATUS_VALUE_PLUGGED not in entity_input
         ):
-            self._pending_entity_input = entity_input
-            return await self.async_step_device_vehicle_status()
+            # Binary-Sensor-Pfad: on/off ist die einzige sinnvolle
+            # Belegung — auto-mappen und Step skippen.
+            _auto_fill_binary_vehicle_status(entity_input)
+            if CONF_VEHICLE_STATUS_VALUE_PLUGGED not in entity_input:
+                self._pending_entity_input = entity_input
+                return await self.async_step_device_vehicle_status()
 
         entity_control = entity_input.get(CONF_ENTITY_CONTROL, "")
         if (
@@ -1871,8 +1898,10 @@ class CrowdergyOptionsFlow(OptionsFlow):
             and entity_input.get(CONF_ENTITY_VEHICLE_STATUS)
             and CONF_VEHICLE_STATUS_VALUE_PLUGGED not in entity_input
         ):
-            self._pending_entity_input = entity_input
-            return await self.async_step_add_device_vehicle_status()
+            _auto_fill_binary_vehicle_status(entity_input)
+            if CONF_VEHICLE_STATUS_VALUE_PLUGGED not in entity_input:
+                self._pending_entity_input = entity_input
+                return await self.async_step_add_device_vehicle_status()
 
         entity_control = entity_input.get(CONF_ENTITY_CONTROL, "")
         if (
@@ -2248,8 +2277,10 @@ class CrowdergyOptionsFlow(OptionsFlow):
             and entity_input.get(CONF_ENTITY_VEHICLE_STATUS)
             and CONF_VEHICLE_STATUS_VALUE_PLUGGED not in entity_input
         ):
-            self._edit_pending_entity_input = entity_input
-            return await self.async_step_edit_device_vehicle_status()
+            _auto_fill_binary_vehicle_status(entity_input)
+            if CONF_VEHICLE_STATUS_VALUE_PLUGGED not in entity_input:
+                self._edit_pending_entity_input = entity_input
+                return await self.async_step_edit_device_vehicle_status()
 
         entity_control = entity_input.get(CONF_ENTITY_CONTROL, "")
         needs_values = (
