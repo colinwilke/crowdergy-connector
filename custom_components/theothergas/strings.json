@@ -3,20 +3,20 @@
     "step": {
       "user": {
         "title": "Connect to Crowdergy",
-        "description": "Sign in with your Crowdergy account. Create one in the Crowdergy app first.",
+        "description": "Sign in with your Crowdergy account. Create one in the Crowdergy iOS app first.",
         "data": {
           "email": "Email",
           "password": "Password"
         },
         "data_description": {
           "email": "Email address of your Crowdergy account.",
-          "password": "Password of your Crowdergy account."
+          "password": "Password of your Crowdergy account. Exchanged once for a token, not stored in Home Assistant."
         },
         "submit": "Next"
       },
       "location": {
         "title": "Location",
-        "description": "Tell us where your devices live. Used for aggregation — pre-filled from your HA coordinates.",
+        "description": "Used for the anonymous district map in the app. Pre-filled from your HA coordinates — only district text and centroid are stored.",
         "data": {
           "district": "District",
           "city": "City",
@@ -26,201 +26,201 @@
         "data_description": {
           "district": "District or neighbourhood (e.g. Schwabing).",
           "city": "City (e.g. Munich).",
-          "region": "Region (e.g. Bavaria).",
-          "entity_outdoor_temp_c": "Sensor with the current outdoor temperature in °C — shown in the app header. Leave empty and Crowdergy fetches the value automatically from Open-Meteo (weather data for your district)."
+          "region": "Region / state (e.g. Bavaria).",
+          "entity_outdoor_temp_c": "Sensor with outdoor temperature in °C. Leave empty to use Open-Meteo weather data for your district."
         },
         "submit": "Next"
       },
       "device_type": {
-        "title": "Device #{device_number} — type & name",
-        "description": "Pick the device type and a name. In the next step you'll link the related Home Assistant entities.",
+        "title": "Device #{device_number}",
+        "description": "Pick a device type and name. In the next step you'll link the related Home Assistant entities.",
         "data": {
           "device_type": "Device type",
           "device_name": "Name"
         },
         "data_description": {
-          "device_type": "Determines which entities are requested in the next step.",
           "device_name": "Display name in the Crowdergy app and in Home Assistant."
         },
         "submit": "Next"
       },
-      "device_entities": {
-        "title": "{device_name} ({device_type}) — link entities",
-        "description": "Link the Home Assistant entities relevant for this device type. All fields are optional; missing values are ignored.",
+      "device_config_mode": {
+        "title": "{device_name} — Control style",
+        "description": "How is the heat-pump / AC integrated in HA? Climate-Entity bundles temperature, control and modes in a single entity (Daikin, Mitsubishi, generic_thermostat). Manual links each sensor and switch individually (SG-Ready, Modbus).",
         "data": {
-          "entity_current_power_kw": "Current power entity",
-          "read_section": "Power data (read-only)",
-          "control_section": "Control (Crowdergize)"
+          "config_mode": "Control style"
+        },
+        "submit": "Next"
+      },
+      "device_entities": {
+        "title": "{device_name} — Sensors & control",
+        "description": "Which HA entities belong to this device? Leave fields empty if not relevant for your device type.",
+        "data": {
+          "read_section": "Sensors",
+          "control_section": "Control",
+          "included_in_haushalt": "Counted in haushalt sensor?"
         },
         "data_description": {
-          "entity_current_power_kw": "Sensor providing current power in W or kW.",
-          "read_section": "These entities are only read by Crowdergy.",
-          "control_section": "Crowdergy controls the device by writing one of two values to the entity below — \"device on\" → value_on, \"device off\" → value_off."
+          "included_in_haushalt": "On when your haushalt sensor already includes this consumer (common case: shared main meter). Crowdergy subtracts it so nothing is double-counted."
         },
         "sections": {
           "read_section": {
-            "name": "Power data (read-only)",
-            "description": "These entities are only read by Crowdergy.",
+            "name": "Sensors",
+            "description": "Read-only — Crowdergy never writes to these.",
             "data": {
-              "entity_current_power_kw": "Current power entity",
+              "entity_current_power_kw": "Power",
+              "entity_current_power_kw_2": "Power (reverse direction)",
               "invert_power_sign": "Invert sign",
-              "entity_soc_percent": "State-of-charge entity",
-              "entity_vehicle_status": "Vehicle status entity",
-              "entity_current_temp_c": "Current-temperature entity",
-              "entity_energy_total": "Import / consumption / charge counter (kWh, cumulative)",
-              "entity_energy_discharged_total": "Export / discharge counter (kWh, cumulative) — grid / battery"
+              "entity_soc_percent": "State of charge",
+              "entity_vehicle_status": "Vehicle status",
+              "entity_current_temp_c": "Current temperature",
+              "entity_energy_total": "Energy counter (kWh)",
+              "entity_energy_discharged_total": "Energy counter reverse (kWh)"
             },
             "data_description": {
-              "entity_current_power_kw": "Sensor providing current power in W or kW.",
-              "invert_power_sign": "Enable when the HA entity uses the opposite convention to Crowdergy (positive = consumption / charge by default). Crowdergy multiplies the sensor value by -1 before sending.",
-              "entity_soc_percent": "Sensor providing current state of charge in percent.",
-              "entity_vehicle_status": "Sensor or binary-sensor entity for vehicle status (e.g. \"connected\", \"charging\").",
-              "entity_current_temp_c": "Current temperature in °C — e.g. flow temperature of a heat pump or the inside temperature of a DHW tank. Shown next to the heat-pump tile in the app.",
-              "entity_energy_total": "Sensor with state_class total_increasing in kWh (lifetime counter). Crowdergy computes daily/monthly/yearly consumption via delta math. Optional — without this sensor the app keeps showing kW only.",
-              "entity_energy_discharged_total": "Optional second total_increasing kWh counter for the OTHER direction. Battery: discharge counter (`energy_total` above carries the charge counter). Grid: export counter (`energy_total` carries the import counter). When both are mapped Crowdergy stores the net signed value so the chart shows one bar per slot (consumption / import vs export / discharge). Leave empty if your inverter only exposes one signed sensor — that single value is used as-is."
+              "entity_current_power_kw": "Current power in W or kW. Grid/Battery: first direction (import / discharge). Solar/WP/Wallbox: the only direction.",
+              "entity_current_power_kw_2": "Grid/Battery only: second power direction (export / charge). Leave blank for a single signed sensor.",
+              "invert_power_sign": "On when your sensor uses the opposite sign convention.",
+              "entity_soc_percent": "Current state of charge in %. Required for Battery and Wallbox.",
+              "entity_vehicle_status": "Sensor that signals a car connected to the wallbox.",
+              "entity_current_temp_c": "Current temperature in °C — heat-pump flow or boiler interior.",
+              "entity_energy_total": "Lifetime kWh counter (HA state_class: total_increasing). Optional — drives daily/monthly/yearly stats.",
+              "entity_energy_discharged_total": "Grid/Battery only: second kWh counter for the reverse direction."
             }
           },
           "control_section": {
             "name": "Control",
-            "description": "Heating / Warmwater: EITHER a climate.* entity (recommended) OR a classic control entity. Wallbox + Battery: just the charge-mode entity.",
+            "description": "Heating/Warmwater: Climate-Entity (climate.*) or classic control entity + temperature sensor. Wallbox/Battery: charge-mode entity.",
             "data": {
-              "entity_climate": "Climate entity (recommended)",
-              "entity_control": "Control entity (alternative, classic)",
-              "entity_current_temp_c": "Current-temperature sensor (alternative, when no climate entity)",
-              "entity_charge_mode": "Charge-mode entity (Wallbox / Battery)"
+              "entity_climate": "Climate entity",
+              "entity_control": "Control entity",
+              "entity_current_temp_c": "Current temperature",
+              "entity_charge_mode": "Charge-mode entity"
             },
             "data_description": {
-              "entity_climate": "A climate.* entity from your heat pump — Crowdergy uses set_hvac_mode + reads current_temperature from its attribute. When set, the 'Control entity' field below is NOT needed.",
-              "entity_control": "Alternative to the climate entity: any writable HA entity (switch, number, select, input helper). Examples: SG-Ready select for heat pumps, charge-pause switch or current-limit number for wallboxes, charge/discharge select for batteries. Solar/Grid/Haushalt: leave blank.",
-              "entity_current_temp_c": "Sensor with current flow / room / tank temperature in °C. Only fill when NO climate entity is picked above — otherwise the temperature is derived from the current_temperature attribute of the climate entity.",
-              "entity_charge_mode": "Select entity offering the app's charge modes (e.g. \"Power Mode\" / \"Lock Mode\" / \"Solar Pure Mode\") as options."
+              "entity_climate": "Your heat-pump's climate.* entity — control, modes and current temperature are derived automatically.",
+              "entity_control": "Writable entity (switch, number, select). Examples: SG-Ready select, boost switch, current-limit number.",
+              "entity_current_temp_c": "Sensor with the current temperature (flow / room / tank).",
+              "entity_charge_mode": "Wallbox: charge-mode select (Lock/Power/Solar). Battery: mode entity (typically a number for +max / 0 / -max W)."
             }
           }
         },
         "submit": "Next"
       },
       "device_values": {
-        "title": "{device_name} ({device_type}) — control values",
-        "description": "Which values should Crowdergy write to \"{entity_control}\" when the device turns on or off? For select/number/climate entities the picker is filled automatically.",
+        "title": "{device_name} — Write values",
+        "description": "Which values should Crowdergy write to the control entity? Switch/Input-Boolean auto-fills; for Select/Climate/Number you pick from your options.",
         "data": {
-          "value_on": "Value for \"device on\"",
-          "value_off": "Value for \"device off\"",
-          "entity_control_hold": "Hold the control entity"
+          "value_on": "Value for on",
+          "value_off": "Value for off",
+          "value_cool_on": "Value for cool",
+          "entity_control_hold": "Hold mode"
         },
         "data_description": {
-          "value_on": "e.g. \"Power Mode\", 16, \"on\", \"heat\".",
-          "value_off": "e.g. \"Lock Mode\", 0, \"off\".",
-          "entity_control_hold": "Auto (default): re-write the value every 30 s. Rescues hysteresis-laden devices. On: same as Auto, explicit. Off: write once, then leave alone — for devices that beep, trigger an action or wake a display on every write."
+          "value_on": "Examples: SG-Ready \"Raised\", climate \"heat\", number \"16\" (wallbox 16 A), switch \"on\".",
+          "value_off": "Standby/off value. Examples: SG-Ready \"Lock\", climate \"off\", number \"0\", switch \"off\".",
+          "value_cool_on": "Heating with cooling capability only. Climate \"cool\" or your vendor equivalent. Blank = no cooling.",
+          "entity_control_hold": "Auto/Always: rewrite the value every 30 s (rescues hysteresis-laden devices). Once: write only once."
         },
         "submit": "Next"
       },
       "device_charge_mode_values": {
-        "title": "{device_name} ({device_type}) — charge-mode mapping (Aus / An / Solaroptimiert)",
-        "description": "Which option of \"{entity_charge_mode}\" maps to which Crowdergy mode? The iOS tile renders one button per filled-in row (plus an AI button). Leave a row blank to hide that mode in the app.",
+        "title": "{device_name} — Charge-mode mapping",
+        "description": "Which options of \"{entity_charge_mode}\" map to which Crowdergy modes? Each filled field renders one button on the iOS tile (plus the AI button).",
         "data": {
-          "charge_mode_value_lock": "Aus",
-          "charge_mode_value_power": "An",
-          "charge_mode_value_solar": "Solaroptimiert"
+          "charge_mode_value_lock": "Off",
+          "charge_mode_value_power": "On",
+          "charge_mode_value_solar": "Solar-optimised",
+          "entity_control_hold": "Hold mode"
         },
         "data_description": {
-          "charge_mode_value_lock": "Wallbox select-option that BLOCKS charging (e.g. \"Lock Mode\", \"Off\").",
-          "charge_mode_value_power": "Wallbox select-option that charges at MAX power (e.g. \"Power Mode\", \"Boost\").",
-          "charge_mode_value_solar": "Wallbox select-option that follows PV surplus (e.g. \"Solar Pure Mode\", \"Eco\")."
+          "charge_mode_value_lock": "Option that BLOCKS charging (e.g. \"Lock Mode\").",
+          "charge_mode_value_power": "Option that charges at MAX power (e.g. \"Power Mode\").",
+          "charge_mode_value_solar": "Option that follows PV surplus (e.g. \"Solar Pure Mode\").",
+          "entity_control_hold": "Auto/Always: rewrite every 30 s. Once: write only once."
         },
         "submit": "Next"
       },
       "device_battery_values": {
-        "title": "{device_name} ({device_type}) — battery mode mapping (Laden / Aus / Entladen)",
-        "description": "Which value should Crowdergy write to \"{entity_charge_mode}\" for each of the three active modes? Typical numbers: +max_W / 0 / -max_W (e.g. +5000 / 0 / -5000). Leave a row blank to suppress that mode — battery stays passive (inverter's native PV-priority) for that branch.",
+        "title": "{device_name} — Battery mode mapping",
+        "description": "Which values should Crowdergy write to \"{entity_charge_mode}\" for the three active modes? Typical number values: +max W / 0 / -max W.",
         "data": {
-          "battery_value_charge": "Laden",
-          "battery_value_idle": "Aus (SOC halten)",
-          "battery_value_discharge": "Entladen"
+          "battery_value_charge": "Charge",
+          "battery_value_idle": "Hold SOC",
+          "battery_value_discharge": "Discharge",
+          "entity_control_hold": "Hold mode"
         },
         "data_description": {
-          "battery_value_charge": "Value written when AI wants to force-charge from PV/grid at max power.",
-          "battery_value_idle": "Value written when AI wants to freeze SOC (suppress inverter's PV-self-consumption for this slot).",
-          "battery_value_discharge": "Value written when AI wants to force-discharge into home/grid at max power."
+          "battery_value_charge": "Value for force-charging at max power.",
+          "battery_value_idle": "Value for freezing SOC (stops the inverter's PV self-consumption).",
+          "battery_value_discharge": "Value for force-discharging at max power.",
+          "entity_control_hold": "Auto/Always: rewrite every 30 s. Once: write only once."
         },
         "submit": "Next"
       },
       "device_vehicle_status": {
-        "title": "{device_name} ({device_type}) — vehicle-status mapping",
-        "description": "Which raw values from \"{entity_vehicle_status}\" mean what? Crowdergy normalises everything to plugged / unplugged / error. Any value not listed below is treated as error.",
+        "title": "{device_name} — Vehicle status mapping",
+        "description": "Which raw values from \"{entity_vehicle_status}\" mean what? Crowdergy normalises everything to plugged / unplugged / error.",
         "data": {
           "vehicle_status_value_plugged": "Plugged-in value",
           "vehicle_status_value_unplugged": "Unplugged value",
           "vehicle_status_value_error": "Error value (optional)"
         },
         "data_description": {
-          "vehicle_status_value_plugged": "Values reported when a car is connected — comma-separated if multiple (e.g. \"connected, charging, paused\").",
-          "vehicle_status_value_unplugged": "Values reported when no car is connected — e.g. \"idle, disconnected, ready\".",
-          "vehicle_status_value_error": "Values reported for error / fault states — e.g. \"error, fault\". Optional. Values that match none of the three lists pass through unchanged."
+          "vehicle_status_value_plugged": "Values your sensor reports when a car is connected — comma-separated if multiple.",
+          "vehicle_status_value_unplugged": "Values for \"no connection\".",
+          "vehicle_status_value_error": "Values for fault states. Optional."
         },
         "submit": "Next"
       },
       "device_shares_hardware": {
-        "title": "{device_name} ({device_type}) — shared compressor",
-        "description": "Does this hot-water device share a compressor with a heating device you already added? Crowdergy then enforces a joint power limit so the two never demand more than the compressor can deliver.",
+        "title": "{device_name} — Shared compressor",
+        "description": "Does this hot-water device share a compressor with a heating device you already added? Crowdergy then enforces a joint power limit.",
         "data": {
           "shares_hardware_with_device_id": "Heating device on the same compressor (optional)"
         },
         "data_description": {
-          "shares_hardware_with_device_id": "Pick the heating device the hot-water unit is physically coupled with. Leave blank for standalone DHW heaters on a separate compressor."
-        },
-        "submit": "Next"
-      },
-      "device_cooling": {
-        "title": "{device_name} ({device_type}) — Cooling capability",
-        "description": "Reversible heat-pump or split-AC that can ALSO cool? Switch this on and Crowdergy's MPC will choose between heating and cooling per slot, respecting both the lower AND upper comfort bounds. Heating-only WPs (incl. SG-Ready setups) leave this off and behave exactly as before. If the cooling side is on a SEPARATE switch / select from the heating control, fill in the entity + values below; share the same entity (or use a climate.* entity) and leave the cooling entity blank.",
-        "data": {
-          "supports_cooling": "Supports cooling",
-          "entity_cool_control": "Cooling control entity (optional)",
-          "value_cool_on": "Cooling-ON value",
-          "value_cool_off": "Cooling-OFF value"
-        },
-        "data_description": {
-          "supports_cooling": "On for reversible WPs and split-ACs that physically cool the room.",
-          "entity_cool_control": "Only fill when the cooling side is on a separate HA entity from the heating control. Leave blank for SG-Ready setups or climate.* entities that handle both modes.",
-          "value_cool_on": "Value to write to the cooling entity when the solver decides to cool.",
-          "value_cool_off": "Value to write when cooling should stop."
-        },
-        "submit": "Next"
-      },
-      "device_included_in_haushalt": {
-        "title": "{device_name} ({device_type}) — counted in haushalt sensor?",
-        "description": "Is this device's draw already part of your haushalt sensor reading (typically the case when both run through the same home meter)? If yes, Crowdergy subtracts this device's kW and kWh from the haushalt value so the same energy isn't counted twice.",
-        "data": {
-          "included_in_haushalt": "Already counted in haushalt sensor"
-        },
-        "data_description": {
-          "included_in_haushalt": "Switch on for the common case (one main meter that sees every consumer). Off only if this device has its own separate meter that the haushalt sensor doesn't see."
+          "shares_hardware_with_device_id": "Pick the coupled heating device. Leave blank for a standalone DHW heat-pump."
         },
         "submit": "Next"
       },
       "add_more": {
         "title": "Add another device?",
-        "description": "You can add more devices or finish setup.",
+        "description": "Add more devices or finish setup. You can add devices later via Settings → Crowdergy → Configure.",
         "menu_options": {
           "device_type": "Add another device",
           "finish": "Done — finish setup"
         }
       }
     },
+    "selector": {
+      "config_mode": {
+        "options": {
+          "climate": "Climate-Entity",
+          "manual": "Manual"
+        }
+      },
+      "entity_control_hold": {
+        "options": {
+          "auto": "Auto (rewrite every 30 s)",
+          "always": "Always (rewrite every 30 s)",
+          "never": "Write once"
+        }
+      }
+    },
     "error": {
-      "cannot_connect": "Failed to connect to the server.",
-      "invalid_auth": "Login failed. Please check email and password.",
-      "unknown": "An unexpected error occurred."
+      "cannot_connect": "Failed to connect to the Crowdergy server.",
+      "invalid_auth": "Login failed. Check email and password — the account lives in the Crowdergy iOS app.",
+      "unknown": "Unexpected error."
     },
     "abort": {
-      "already_configured": "This account is already configured."
+      "already_configured": "This Crowdergy account is already configured on this Home Assistant instance."
     }
   },
   "options": {
     "step": {
       "init": {
-        "title": "Manage devices",
-        "description": "Add, edit or remove devices, or finish setup.",
+        "title": "Crowdergy — Configuration",
+        "description": "Manage the devices you handed to Crowdergy, or change the outdoor-temperature sensor.",
         "menu_options": {
           "add_device": "Add device",
           "edit_device": "Edit device",
@@ -229,370 +229,337 @@
           "done": "Done"
         }
       },
-      "add_device": {
-        "title": "Add device — type & name",
-        "description": "Pick the device type and a name. In the next step you'll link the related Home Assistant entities.",
-        "data": {
-          "device_type": "Device type",
-          "device_name": "Name"
-        },
-        "data_description": {
-          "device_type": "Determines which entities are requested in the next step.",
-          "device_name": "Display name in the Crowdergy app and in Home Assistant."
-        },
-        "submit": "Next"
-      },
-      "add_device_entities": {
-        "title": "{device_name} ({device_type}) — link entities",
-        "description": "Link the Home Assistant entities relevant for this device type. All fields are optional.",
-        "data": {
-          "entity_current_power_kw": "Current power entity",
-          "read_section": "Power data (read-only)",
-          "control_section": "Control (Crowdergize)"
-        },
-        "data_description": {
-          "entity_current_power_kw": "Sensor providing current power in W or kW.",
-          "read_section": "These entities are only read by Crowdergy.",
-          "control_section": "Crowdergy controls the device by writing one of two values to the entity below — \"device on\" → value_on, \"device off\" → value_off."
-        },
-        "sections": {
-          "read_section": {
-            "name": "Power data (read-only)",
-            "description": "These entities are only read by Crowdergy.",
-            "data": {
-              "entity_current_power_kw": "Current power entity",
-              "invert_power_sign": "Invert sign",
-              "entity_soc_percent": "State-of-charge entity",
-              "entity_vehicle_status": "Vehicle status entity",
-              "entity_current_temp_c": "Current-temperature entity",
-              "entity_energy_total": "Import / consumption / charge counter (kWh, cumulative)",
-              "entity_energy_discharged_total": "Export / discharge counter (kWh, cumulative) — grid / battery"
-            },
-            "data_description": {
-              "entity_current_power_kw": "Sensor providing current power in W or kW.",
-              "invert_power_sign": "Enable when the HA entity uses the opposite convention to Crowdergy (positive = consumption / charge by default). Crowdergy multiplies the sensor value by -1 before sending.",
-              "entity_soc_percent": "Sensor providing current state of charge in percent.",
-              "entity_vehicle_status": "Sensor or binary-sensor entity for vehicle status (e.g. \"connected\", \"charging\").",
-              "entity_current_temp_c": "Current temperature in °C — e.g. flow temperature of a heat pump or the inside temperature of a DHW tank. Shown next to the heat-pump tile in the app.",
-              "entity_energy_total": "Sensor with state_class total_increasing in kWh (lifetime counter). Crowdergy computes daily/monthly/yearly consumption via delta math. Optional — without this sensor the app keeps showing kW only.",
-              "entity_energy_discharged_total": "Optional second total_increasing kWh counter for the OTHER direction. Battery: discharge counter (`energy_total` above carries the charge counter). Grid: export counter (`energy_total` carries the import counter). When both are mapped Crowdergy stores the net signed value so the chart shows one bar per slot (consumption / import vs export / discharge). Leave empty if your inverter only exposes one signed sensor — that single value is used as-is."
-            }
-          },
-          "control_section": {
-            "name": "Control",
-            "description": "Heating / Warmwater: EITHER a climate.* entity (recommended) OR a classic control entity. Wallbox + Battery: just the charge-mode entity.",
-            "data": {
-              "entity_climate": "Climate entity (recommended)",
-              "entity_control": "Control entity (alternative, classic)",
-              "entity_current_temp_c": "Current-temperature sensor (alternative, when no climate entity)",
-              "entity_charge_mode": "Charge-mode entity (Wallbox / Battery)"
-            },
-            "data_description": {
-              "entity_climate": "A climate.* entity from your heat pump — Crowdergy uses set_hvac_mode + reads current_temperature from its attribute. When set, the 'Control entity' field below is NOT needed.",
-              "entity_control": "Alternative to the climate entity: any writable HA entity (switch, number, select, input helper). Examples: SG-Ready select for heat pumps, charge-pause switch or current-limit number for wallboxes, charge/discharge select for batteries. Solar/Grid/Haushalt: leave blank.",
-              "entity_current_temp_c": "Sensor with current flow / room / tank temperature in °C. Only fill when NO climate entity is picked above — otherwise the temperature is derived from the current_temperature attribute of the climate entity.",
-              "entity_charge_mode": "Select entity offering the app's charge modes (e.g. \"Power Mode\" / \"Lock Mode\" / \"Solar Pure Mode\") as options."
-            }
-          }
-        },
-        "submit": "Next"
-      },
-      "add_device_values": {
-        "title": "{device_name} ({device_type}) — control values",
-        "description": "Which values should Crowdergy write to \"{entity_control}\" when the device turns on or off? For select/number/climate entities the picker is filled automatically.",
-        "data": {
-          "value_on": "Value for \"device on\"",
-          "value_off": "Value for \"device off\"",
-          "entity_control_hold": "Hold the control entity"
-        },
-        "data_description": {
-          "value_on": "e.g. \"Power Mode\", 16, \"on\", \"heat\".",
-          "value_off": "e.g. \"Lock Mode\", 0, \"off\".",
-          "entity_control_hold": "Auto (default): re-write the value every 30 s. Rescues hysteresis-laden devices. On: same as Auto, explicit. Off: write once, then leave alone — for devices that beep, trigger an action or wake a display on every write."
-        },
-        "submit": "OK"
-      },
-      "add_device_charge_mode_values": {
-        "title": "{device_name} ({device_type}) — charge-mode mapping (Aus / An / Solaroptimiert)",
-        "description": "Which option of \"{entity_charge_mode}\" maps to which Crowdergy mode? The iOS tile renders one button per filled-in row (plus an AI button). Leave a row blank to hide that mode in the app.",
-        "data": {
-          "charge_mode_value_lock": "Aus",
-          "charge_mode_value_power": "An",
-          "charge_mode_value_solar": "Solaroptimiert"
-        },
-        "data_description": {
-          "charge_mode_value_lock": "Wallbox select-option that BLOCKS charging (e.g. \"Lock Mode\", \"Off\").",
-          "charge_mode_value_power": "Wallbox select-option that charges at MAX power (e.g. \"Power Mode\", \"Boost\").",
-          "charge_mode_value_solar": "Wallbox select-option that follows PV surplus (e.g. \"Solar Pure Mode\", \"Eco\")."
-        },
-        "submit": "Next"
-      },
-      "add_device_battery_values": {
-        "title": "{device_name} ({device_type}) — battery mode mapping (Laden / Aus / Entladen)",
-        "description": "Which value should Crowdergy write to \"{entity_charge_mode}\" for each of the three active modes? Typical numbers: +max_W / 0 / -max_W (e.g. +5000 / 0 / -5000). Leave a row blank to suppress that mode — battery stays passive (inverter's native PV-priority) for that branch.",
-        "data": {
-          "battery_value_charge": "Laden",
-          "battery_value_idle": "Aus (SOC halten)",
-          "battery_value_discharge": "Entladen"
-        },
-        "data_description": {
-          "battery_value_charge": "Value written when AI wants to force-charge from PV/grid at max power.",
-          "battery_value_idle": "Value written when AI wants to freeze SOC (suppress inverter's PV-self-consumption for this slot).",
-          "battery_value_discharge": "Value written when AI wants to force-discharge into home/grid at max power."
-        },
-        "submit": "Next"
-      },
-      "add_device_vehicle_status": {
-        "title": "{device_name} ({device_type}) — vehicle-status mapping",
-        "description": "Which raw values from \"{entity_vehicle_status}\" mean what? Crowdergy normalises everything to plugged / unplugged / error. Any value not listed below is treated as error.",
-        "data": {
-          "vehicle_status_value_plugged": "Plugged-in value",
-          "vehicle_status_value_unplugged": "Unplugged value",
-          "vehicle_status_value_error": "Error value (optional)"
-        },
-        "data_description": {
-          "vehicle_status_value_plugged": "Values reported when a car is connected — comma-separated if multiple (e.g. \"connected, charging, paused\").",
-          "vehicle_status_value_unplugged": "Values reported when no car is connected — e.g. \"idle, disconnected, ready\".",
-          "vehicle_status_value_error": "Values reported for error / fault states — e.g. \"error, fault\". Optional. Values that match none of the three lists pass through unchanged."
-        },
-        "submit": "Next"
-      },
-      "add_device_shares_hardware": {
-        "title": "{device_name} ({device_type}) — shared compressor",
-        "description": "Does this hot-water device share a compressor with a heating device you already added? Crowdergy then enforces a joint power limit so the two never demand more than the compressor can deliver.",
-        "data": {
-          "shares_hardware_with_device_id": "Heating device on the same compressor (optional)"
-        },
-        "data_description": {
-          "shares_hardware_with_device_id": "Pick the heating device the hot-water unit is physically coupled with. Leave blank for standalone DHW heaters on a separate compressor."
-        },
-        "submit": "Next"
-      },
-      "add_device_cooling": {
-        "title": "{device_name} ({device_type}) — Cooling capability",
-        "description": "Reversible heat-pump or split-AC that can ALSO cool? Switch this on and Crowdergy's MPC will choose between heating and cooling per slot. Heating-only WPs leave this off.",
-        "data": {
-          "supports_cooling": "Supports cooling",
-          "entity_cool_control": "Cooling control entity (optional)",
-          "value_cool_on": "Cooling-ON value",
-          "value_cool_off": "Cooling-OFF value"
-        },
-        "data_description": {
-          "supports_cooling": "On for reversible WPs and split-ACs that physically cool the room.",
-          "entity_cool_control": "Only fill when cooling lives on a separate HA entity from the heating control.",
-          "value_cool_on": "Value to write to the cooling entity when the solver decides to cool.",
-          "value_cool_off": "Value to write when cooling should stop."
-        },
-        "submit": "Next"
-      },
-      "add_device_included_in_haushalt": {
-        "title": "{device_name} ({device_type}) — counted in haushalt sensor?",
-        "description": "Is this device's draw already part of your haushalt sensor reading (typically the case when both run through the same home meter)? If yes, Crowdergy subtracts this device's kW and kWh from the haushalt value so the same energy isn't counted twice.",
-        "data": {
-          "included_in_haushalt": "Already counted in haushalt sensor"
-        },
-        "data_description": {
-          "included_in_haushalt": "Switch on for the common case (one main meter that sees every consumer). Off only if this device has its own separate meter that the haushalt sensor doesn't see."
-        },
-        "submit": "Next"
-      },
-      "edit_device": {
-        "title": "Edit device",
-        "description": "Pick the device to change.",
-        "data": {
-          "device_to_edit": "Device"
-        },
-        "submit": "Next"
-      },
-      "edit_device_type": {
-        "title": "Edit {device_name} — type & name",
-        "description": "Adjust type and name. In the next step you'll link the related entities.",
-        "data": {
-          "device_type": "Device type",
-          "device_name": "Name"
-        },
-        "data_description": {
-          "device_type": "Determines which entities are requested in the next step.",
-          "device_name": "Display name in the Crowdergy app and in Home Assistant."
-        },
-        "submit": "Next"
-      },
-      "edit_device_entities": {
-        "title": "{device_name} ({device_type}) — link entities",
-        "description": "Adjust the linked Home Assistant entities. All fields are optional.",
-        "data": {
-          "entity_current_power_kw": "Current power entity",
-          "read_section": "Power data (read-only)",
-          "control_section": "Control (Crowdergize)"
-        },
-        "data_description": {
-          "entity_current_power_kw": "Sensor providing current power in W or kW.",
-          "read_section": "These entities are only read by Crowdergy.",
-          "control_section": "Crowdergy controls the device by writing one of two values to the entity below — \"device on\" → value_on, \"device off\" → value_off."
-        },
-        "sections": {
-          "read_section": {
-            "name": "Power data (read-only)",
-            "description": "These entities are only read by Crowdergy.",
-            "data": {
-              "entity_current_power_kw": "Current power entity",
-              "invert_power_sign": "Invert sign",
-              "entity_soc_percent": "State-of-charge entity",
-              "entity_vehicle_status": "Vehicle status entity",
-              "entity_current_temp_c": "Current-temperature entity",
-              "entity_energy_total": "Import / consumption / charge counter (kWh, cumulative)",
-              "entity_energy_discharged_total": "Export / discharge counter (kWh, cumulative) — grid / battery"
-            },
-            "data_description": {
-              "entity_current_power_kw": "Sensor providing current power in W or kW.",
-              "invert_power_sign": "Enable when the HA entity uses the opposite convention to Crowdergy (positive = consumption / charge by default). Crowdergy multiplies the sensor value by -1 before sending.",
-              "entity_soc_percent": "Sensor providing current state of charge in percent.",
-              "entity_vehicle_status": "Sensor or binary-sensor entity for vehicle status (e.g. \"connected\", \"charging\").",
-              "entity_current_temp_c": "Current temperature in °C — e.g. flow temperature of a heat pump or the inside temperature of a DHW tank. Shown next to the heat-pump tile in the app.",
-              "entity_energy_total": "Sensor with state_class total_increasing in kWh (lifetime counter). Crowdergy computes daily/monthly/yearly consumption via delta math. Optional — without this sensor the app keeps showing kW only.",
-              "entity_energy_discharged_total": "Optional second total_increasing kWh counter for the OTHER direction. Battery: discharge counter (`energy_total` above carries the charge counter). Grid: export counter (`energy_total` carries the import counter). When both are mapped Crowdergy stores the net signed value so the chart shows one bar per slot (consumption / import vs export / discharge). Leave empty if your inverter only exposes one signed sensor — that single value is used as-is."
-            }
-          },
-          "control_section": {
-            "name": "Control",
-            "description": "Heating / Warmwater: EITHER a climate.* entity (recommended) OR a classic control entity. Wallbox + Battery: just the charge-mode entity.",
-            "data": {
-              "entity_climate": "Climate entity (recommended)",
-              "entity_control": "Control entity (alternative, classic)",
-              "entity_current_temp_c": "Current-temperature sensor (alternative, when no climate entity)",
-              "entity_charge_mode": "Charge-mode entity (Wallbox / Battery)"
-            },
-            "data_description": {
-              "entity_climate": "A climate.* entity from your heat pump — Crowdergy uses set_hvac_mode + reads current_temperature from its attribute. When set, the 'Control entity' field below is NOT needed.",
-              "entity_control": "Alternative to the climate entity: any writable HA entity (switch, number, select, input helper). Examples: SG-Ready select for heat pumps, charge-pause switch or current-limit number for wallboxes, charge/discharge select for batteries. Solar/Grid/Haushalt: leave blank.",
-              "entity_current_temp_c": "Sensor with current flow / room / tank temperature in °C. Only fill when NO climate entity is picked above — otherwise the temperature is derived from the current_temperature attribute of the climate entity.",
-              "entity_charge_mode": "Select entity offering the app's charge modes (e.g. \"Power Mode\" / \"Lock Mode\" / \"Solar Pure Mode\") as options."
-            }
-          }
-        },
-        "submit": "Next"
-      },
-      "edit_device_charge_mode_values": {
-        "title": "{device_name} ({device_type}) — charge-mode mapping (Aus / An / Solaroptimiert)",
-        "description": "Adjust which option of \"{entity_charge_mode}\" maps to which Crowdergy mode. Leaving a row blank hides that mode's button in the iOS tile.",
-        "data": {
-          "charge_mode_value_lock": "Aus",
-          "charge_mode_value_power": "An",
-          "charge_mode_value_solar": "Solaroptimiert"
-        },
-        "data_description": {
-          "charge_mode_value_lock": "Wallbox select-option that BLOCKS charging.",
-          "charge_mode_value_power": "Wallbox select-option that charges at MAX power.",
-          "charge_mode_value_solar": "Wallbox select-option that follows PV surplus."
-        },
-        "submit": "Next"
-      },
-      "edit_device_battery_values": {
-        "title": "{device_name} ({device_type}) — battery mode mapping (Laden / Aus / Entladen)",
-        "description": "Adjust which value gets written to \"{entity_charge_mode}\" for each active mode. Leave a row blank to suppress that mode — battery stays passive (inverter's PV-priority) for that branch.",
-        "data": {
-          "battery_value_charge": "Laden",
-          "battery_value_idle": "Aus (SOC halten)",
-          "battery_value_discharge": "Entladen"
-        },
-        "data_description": {
-          "battery_value_charge": "Value for force-charging at max power.",
-          "battery_value_idle": "Value for freezing SOC.",
-          "battery_value_discharge": "Value for force-discharging at max power."
-        },
-        "submit": "Next"
-      },
-      "edit_device_vehicle_status": {
-        "title": "{device_name} ({device_type}) — vehicle-status mapping",
-        "description": "Which raw values from \"{entity_vehicle_status}\" mean what? Crowdergy normalises to plugged / unplugged / error. Any unmapped value is treated as error.",
-        "data": {
-          "vehicle_status_value_plugged": "Plugged-in value",
-          "vehicle_status_value_unplugged": "Unplugged value",
-          "vehicle_status_value_error": "Error value (optional)"
-        },
-        "data_description": {
-          "vehicle_status_value_plugged": "Value reported when a car is connected.",
-          "vehicle_status_value_unplugged": "Value reported when no car is connected.",
-          "vehicle_status_value_error": "Value reported when something is wrong. Optional."
-        },
-        "submit": "Next"
-      },
-      "edit_device_shares_hardware": {
-        "title": "{device_name} ({device_type}) — shared compressor",
-        "description": "Does this hot-water device share a compressor with a heating device? Crowdergy then enforces a joint power limit.",
-        "data": {
-          "shares_hardware_with_device_id": "Heating device on the same compressor (optional)"
-        },
-        "data_description": {
-          "shares_hardware_with_device_id": "Pick the heating device coupled with this DHW unit. Leave blank for standalone DHW heaters."
-        },
-        "submit": "Next"
-      },
-      "edit_device_cooling": {
-        "title": "{device_name} ({device_type}) — Cooling capability",
-        "description": "Toggle whether this heating-family device can also cool. Pre-filled with the stored values.",
-        "data": {
-          "supports_cooling": "Supports cooling",
-          "entity_cool_control": "Cooling control entity (optional)",
-          "value_cool_on": "Cooling-ON value",
-          "value_cool_off": "Cooling-OFF value"
-        },
-        "data_description": {
-          "supports_cooling": "On for reversible WPs and split-ACs.",
-          "entity_cool_control": "Separate cooling entity; blank for SG-Ready / climate.* setups.",
-          "value_cool_on": "Value to write to cool.",
-          "value_cool_off": "Value to write to stop cooling."
-        },
-        "submit": "Save"
-      },
-      "edit_device_included_in_haushalt": {
-        "title": "{device_name} ({device_type}) — counted in haushalt sensor?",
-        "description": "Is this device's draw already part of your haushalt sensor reading? If yes, Crowdergy subtracts this device's kW and kWh from the haushalt value so the same energy isn't counted twice.",
-        "data": {
-          "included_in_haushalt": "Already counted in haushalt sensor"
-        },
-        "data_description": {
-          "included_in_haushalt": "On for the common case (single home meter that sees every consumer). Off if this device has its own separate meter."
-        },
-        "submit": "Save"
-      },
-      "edit_device_values": {
-        "title": "{device_name} ({device_type}) — control values",
-        "description": "Which values should Crowdergy write to \"{entity_control}\" when the device turns on or off? For select/number/climate entities the picker is filled automatically.",
-        "data": {
-          "value_on": "Value for \"device on\"",
-          "value_off": "Value for \"device off\"",
-          "entity_control_hold": "Hold the control entity"
-        },
-        "data_description": {
-          "value_on": "e.g. \"Power Mode\", 16, \"on\", \"heat\".",
-          "value_off": "e.g. \"Lock Mode\", 0, \"off\".",
-          "entity_control_hold": "Auto (default): re-write the value every 30 s. Rescues hysteresis-laden devices. On: same as Auto, explicit. Off: write once, then leave alone — for devices that beep, trigger an action or wake a display on every write."
-        },
-        "submit": "OK"
-      },
-      "remove_device": {
-        "title": "Remove device",
-        "description": "Pick the device to remove. It will be deleted from both Crowdergy and Home Assistant.",
-        "data": {
-          "device_to_remove": "Device"
-        },
-        "submit": "OK"
-      },
       "edit_outdoor_temp": {
         "title": "Outdoor temperature sensor",
-        "description": "Optional: an HA sensor with the current outdoor temperature in °C. Shown in the Crowdergy app header. Leave empty to let Crowdergy fetch the outdoor temperature automatically via Open-Meteo (weather data based on your district).",
-        "submit": "OK",
+        "description": "Optional HA sensor with the current outdoor temperature in °C. Leave empty to use Open-Meteo weather data for your district.",
+        "submit": "Save",
         "data": {
           "entity_outdoor_temp_c": "Outdoor temperature sensor (optional)"
         },
         "data_description": {
           "entity_outdoor_temp_c": "Sensor entity with the current outdoor temperature in °C."
         }
+      },
+      "add_device": {
+        "title": "Add device",
+        "description": "Pick a device type and name. In the next step you'll link the related Home Assistant entities.",
+        "submit": "Next",
+        "data": {
+          "device_type": "Device type",
+          "device_name": "Name"
+        },
+        "data_description": {
+          "device_name": "Display name in the Crowdergy app and in Home Assistant."
+        }
+      },
+      "add_device_config_mode": {
+        "title": "{device_name} — Control style",
+        "description": "How is the heat-pump / AC integrated in HA? Climate-Entity bundles temperature, control and modes (Daikin, Mitsubishi, generic_thermostat). Manual links each sensor and switch individually (SG-Ready, Modbus).",
+        "data": {
+          "config_mode": "Control style"
+        },
+        "submit": "Next"
+      },
+      "add_device_entities": {
+        "title": "{device_name} — Sensors & control",
+        "description": "Which HA entities belong to this device? Leave fields empty if not relevant.",
+        "data": {
+          "read_section": "Sensors",
+          "control_section": "Control",
+          "included_in_haushalt": "Counted in haushalt sensor?"
+        },
+        "data_description": {
+          "included_in_haushalt": "On when your haushalt sensor already includes this consumer (common case: shared main meter)."
+        },
+        "sections": {
+          "read_section": {
+            "name": "Sensors",
+            "description": "Read-only — Crowdergy never writes here.",
+            "data": {
+              "entity_current_power_kw": "Power",
+              "entity_current_power_kw_2": "Power (reverse direction)",
+              "invert_power_sign": "Invert sign",
+              "entity_soc_percent": "State of charge",
+              "entity_vehicle_status": "Vehicle status",
+              "entity_current_temp_c": "Current temperature",
+              "entity_energy_total": "Energy counter (kWh)",
+              "entity_energy_discharged_total": "Energy counter reverse (kWh)"
+            },
+            "data_description": {
+              "entity_current_power_kw": "Current power in W or kW.",
+              "entity_current_power_kw_2": "Grid/Battery only: second power direction.",
+              "invert_power_sign": "On when sensor uses the opposite sign convention.",
+              "entity_soc_percent": "Current state of charge in %.",
+              "entity_vehicle_status": "Sensor that signals a car connected to the wallbox.",
+              "entity_current_temp_c": "Current temperature in °C.",
+              "entity_energy_total": "Lifetime kWh counter. Optional.",
+              "entity_energy_discharged_total": "Grid/Battery only: counter for the reverse direction."
+            }
+          },
+          "control_section": {
+            "name": "Control",
+            "description": "Heating/Warmwater: Climate-Entity or classic control entity + temperature sensor. Wallbox/Battery: charge-mode entity.",
+            "data": {
+              "entity_climate": "Climate entity",
+              "entity_control": "Control entity",
+              "entity_current_temp_c": "Current temperature",
+              "entity_charge_mode": "Charge-mode entity"
+            },
+            "data_description": {
+              "entity_climate": "Climate.* entity — control, modes and current temperature are derived automatically.",
+              "entity_control": "Writable entity (switch, number, select).",
+              "entity_current_temp_c": "Sensor with the current temperature.",
+              "entity_charge_mode": "Wallbox: charge-mode select. Battery: mode entity."
+            }
+          }
+        },
+        "submit": "Next"
+      },
+      "add_device_values": {
+        "title": "{device_name} — Write values",
+        "description": "Which values should Crowdergy write to the control entity?",
+        "submit": "Next",
+        "data": {
+          "value_on": "Value for on",
+          "value_off": "Value for off",
+          "value_cool_on": "Value for cool",
+          "entity_control_hold": "Hold mode"
+        },
+        "data_description": {
+          "value_on": "Examples: SG-Ready \"Raised\", climate \"heat\", number \"16\", switch \"on\".",
+          "value_off": "Standby/off value. Examples: SG-Ready \"Lock\", climate \"off\", number \"0\", switch \"off\".",
+          "value_cool_on": "Heating with cooling capability only. Climate \"cool\" or vendor equivalent. Blank = no cooling.",
+          "entity_control_hold": "Auto/Always: rewrite every 30 s. Once: write only once."
+        }
+      },
+      "add_device_charge_mode_values": {
+        "title": "{device_name} — Charge-mode mapping",
+        "description": "Which option of \"{entity_charge_mode}\" maps to which Crowdergy mode?",
+        "data": {
+          "charge_mode_value_lock": "Off",
+          "charge_mode_value_power": "On",
+          "charge_mode_value_solar": "Solar-optimised",
+          "entity_control_hold": "Hold mode"
+        },
+        "data_description": {
+          "charge_mode_value_lock": "Option that BLOCKS charging.",
+          "charge_mode_value_power": "Option that charges at MAX power.",
+          "charge_mode_value_solar": "Option that follows PV surplus.",
+          "entity_control_hold": "Auto/Always: rewrite every 30 s. Once: write only once."
+        },
+        "submit": "Next"
+      },
+      "add_device_battery_values": {
+        "title": "{device_name} — Battery mode mapping",
+        "description": "Which value should Crowdergy write to \"{entity_charge_mode}\" for each active mode?",
+        "data": {
+          "battery_value_charge": "Charge",
+          "battery_value_idle": "Hold SOC",
+          "battery_value_discharge": "Discharge",
+          "entity_control_hold": "Hold mode"
+        },
+        "data_description": {
+          "battery_value_charge": "Value for force-charging.",
+          "battery_value_idle": "Value for freezing SOC.",
+          "battery_value_discharge": "Value for force-discharging.",
+          "entity_control_hold": "Auto/Always: rewrite every 30 s. Once: write only once."
+        },
+        "submit": "Next"
+      },
+      "add_device_vehicle_status": {
+        "title": "{device_name} — Vehicle status mapping",
+        "description": "Which raw values from \"{entity_vehicle_status}\" mean what?",
+        "data": {
+          "vehicle_status_value_plugged": "Plugged-in value",
+          "vehicle_status_value_unplugged": "Unplugged value",
+          "vehicle_status_value_error": "Error value (optional)"
+        },
+        "data_description": {
+          "vehicle_status_value_plugged": "Values your sensor reports when a car is connected.",
+          "vehicle_status_value_unplugged": "Values for \"no connection\".",
+          "vehicle_status_value_error": "Values for fault states. Optional."
+        },
+        "submit": "Next"
+      },
+      "add_device_shares_hardware": {
+        "title": "{device_name} — Shared compressor",
+        "description": "Does this hot-water device share a compressor with a heating device?",
+        "data": {
+          "shares_hardware_with_device_id": "Heating device on the same compressor (optional)"
+        },
+        "data_description": {
+          "shares_hardware_with_device_id": "Pick the coupled heating device."
+        },
+        "submit": "Next"
+      },
+      "edit_device": {
+        "title": "Edit device",
+        "description": "Pick the device to adjust.",
+        "submit": "Next",
+        "data": {
+          "device_to_edit": "Device"
+        }
+      },
+      "edit_device_entities": {
+        "title": "{device_name} — Sensors & control",
+        "description": "Edit display name and linked HA entities.",
+        "submit": "Next",
+        "data": {
+          "device_name": "Name",
+          "read_section": "Sensors",
+          "control_section": "Control",
+          "included_in_haushalt": "Counted in haushalt sensor?"
+        },
+        "data_description": {
+          "device_name": "Display name in the Crowdergy app and in Home Assistant.",
+          "included_in_haushalt": "On when your haushalt sensor already includes this consumer."
+        },
+        "sections": {
+          "read_section": {
+            "name": "Sensors",
+            "description": "Read-only.",
+            "data": {
+              "entity_current_power_kw": "Power",
+              "entity_current_power_kw_2": "Power (reverse direction)",
+              "invert_power_sign": "Invert sign",
+              "entity_soc_percent": "State of charge",
+              "entity_vehicle_status": "Vehicle status",
+              "entity_current_temp_c": "Current temperature",
+              "entity_energy_total": "Energy counter (kWh)",
+              "entity_energy_discharged_total": "Energy counter reverse (kWh)"
+            },
+            "data_description": {
+              "entity_current_power_kw": "Current power in W or kW.",
+              "entity_current_power_kw_2": "Grid/Battery only.",
+              "invert_power_sign": "On when sensor uses the opposite sign convention.",
+              "entity_soc_percent": "Current state of charge in %.",
+              "entity_vehicle_status": "Sensor that signals a car connected.",
+              "entity_current_temp_c": "Current temperature in °C.",
+              "entity_energy_total": "Lifetime kWh counter. Optional.",
+              "entity_energy_discharged_total": "Grid/Battery only."
+            }
+          },
+          "control_section": {
+            "name": "Control",
+            "description": "Heating/Warmwater: Climate-Entity or classic control. Wallbox/Battery: charge-mode entity.",
+            "data": {
+              "entity_climate": "Climate entity",
+              "entity_control": "Control entity",
+              "entity_current_temp_c": "Current temperature",
+              "entity_charge_mode": "Charge-mode entity"
+            },
+            "data_description": {
+              "entity_climate": "Climate.* entity — control + temperature automatic.",
+              "entity_control": "Writable entity (switch, number, select).",
+              "entity_current_temp_c": "Sensor with the current temperature.",
+              "entity_charge_mode": "Wallbox: charge-mode select. Battery: mode entity."
+            }
+          }
+        }
+      },
+      "edit_device_values": {
+        "title": "{device_name} — Write values",
+        "description": "Which values should Crowdergy write to the control entity?",
+        "submit": "Save",
+        "data": {
+          "value_on": "Value for on",
+          "value_off": "Value for off",
+          "value_cool_on": "Value for cool",
+          "entity_control_hold": "Hold mode"
+        },
+        "data_description": {
+          "value_on": "Examples: SG-Ready \"Raised\", climate \"heat\", number \"16\", switch \"on\".",
+          "value_off": "Standby/off value.",
+          "value_cool_on": "Heating with cooling capability only. Climate \"cool\" or vendor equivalent. Blank = no cooling.",
+          "entity_control_hold": "Auto/Always: rewrite every 30 s. Once: write only once."
+        }
+      },
+      "edit_device_charge_mode_values": {
+        "title": "{device_name} — Charge-mode mapping",
+        "description": "Adjust which option of \"{entity_charge_mode}\" maps to which Crowdergy mode.",
+        "submit": "Save",
+        "data": {
+          "charge_mode_value_lock": "Off",
+          "charge_mode_value_power": "On",
+          "charge_mode_value_solar": "Solar-optimised",
+          "entity_control_hold": "Hold mode"
+        },
+        "data_description": {
+          "charge_mode_value_lock": "Option that BLOCKS charging.",
+          "charge_mode_value_power": "Option that charges at MAX power.",
+          "charge_mode_value_solar": "Option that follows PV surplus.",
+          "entity_control_hold": "Auto/Always: rewrite every 30 s. Once: write only once."
+        }
+      },
+      "edit_device_battery_values": {
+        "title": "{device_name} — Battery mode mapping",
+        "description": "Adjust which value gets written to \"{entity_charge_mode}\" for each active mode.",
+        "submit": "Save",
+        "data": {
+          "battery_value_charge": "Charge",
+          "battery_value_idle": "Hold SOC",
+          "battery_value_discharge": "Discharge",
+          "entity_control_hold": "Hold mode"
+        },
+        "data_description": {
+          "battery_value_charge": "Value for force-charging.",
+          "battery_value_idle": "Value for freezing SOC.",
+          "battery_value_discharge": "Value for force-discharging.",
+          "entity_control_hold": "Auto/Always: rewrite every 30 s. Once: write only once."
+        }
+      },
+      "edit_device_vehicle_status": {
+        "title": "{device_name} — Vehicle status mapping",
+        "description": "Which raw values from \"{entity_vehicle_status}\" mean what?",
+        "submit": "Save",
+        "data": {
+          "vehicle_status_value_plugged": "Plugged-in value",
+          "vehicle_status_value_unplugged": "Unplugged value",
+          "vehicle_status_value_error": "Error value (optional)"
+        },
+        "data_description": {
+          "vehicle_status_value_plugged": "Value(s) your sensor reports when a car is connected.",
+          "vehicle_status_value_unplugged": "Value(s) for \"no connection\".",
+          "vehicle_status_value_error": "Value(s) for fault states. Optional."
+        }
+      },
+      "edit_device_shares_hardware": {
+        "title": "{device_name} — Shared compressor",
+        "description": "Does this hot-water device share a compressor with a heating device?",
+        "submit": "Save",
+        "data": {
+          "shares_hardware_with_device_id": "Heating device on the same compressor (optional)"
+        },
+        "data_description": {
+          "shares_hardware_with_device_id": "Pick the coupled heating device."
+        }
+      },
+      "remove_device": {
+        "title": "Remove device",
+        "description": "The device is deleted from both Crowdergy and Home Assistant. Already-earned Crowdergy Coins stay in your account.",
+        "submit": "Remove",
+        "data": {
+          "device_to_remove": "Device"
+        }
+      }
+    },
+    "selector": {
+      "config_mode": {
+        "options": {
+          "climate": "Climate-Entity",
+          "manual": "Manual"
+        }
+      },
+      "entity_control_hold": {
+        "options": {
+          "auto": "Auto (rewrite every 30 s)",
+          "always": "Always (rewrite every 30 s)",
+          "never": "Write once"
+        }
       }
     },
     "error": {
-      "cannot_connect": "Failed to connect to the server."
+      "cannot_connect": "Failed to connect to the Crowdergy server."
     }
   }
 }

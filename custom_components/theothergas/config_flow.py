@@ -289,6 +289,7 @@ def _entities_schema(
     device_type: str,
     defaults: dict[str, Any] | None = None,
     config_mode: str = CONFIG_MODE_MANUAL,
+    include_name: bool = False,
 ) -> vol.Schema:
     """Step 2: typ-abhängiges Entity-Schema.
 
@@ -297,10 +298,21 @@ def _entities_schema(
     Steuerungs-Section mit entity_control bzw. entity_charge_mode.
     Werte (value_on/off bzw. Lademodus-Mapping) folgen im nächsten
     Step typ-bewusst aus dem chosen entity_control hergeleitet.
+
+    include_name=True (Edit-Flow only) zeigt den Anzeigenamen oben am
+    Step, damit der User beim Bearbeiten umbenennen kann ohne durch
+    einen separaten Typ/Name-Step zu müssen (Type ist im Edit-Flow
+    sowieso fixed).
     """
     d = defaults or {}
     read_fields = _READ_FIELDS.get(device_type, [CONF_ENTITY_POWER])
     schema_dict: dict[Any, Any] = {}
+
+    if include_name:
+        name_default = d.get(CONF_DEVICE_NAME, "")
+        schema_dict[
+            vol.Required(CONF_DEVICE_NAME, default=name_default)
+        ] = str
 
     # "Vorzeichen umkehren"-Toggle für die Power-Entität. Crowdergy-
     # Konvention: positiv = Bezug / Verbrauch / Lade. HA-Sensoren die
@@ -503,10 +515,10 @@ def _values_schema(
 ) -> vol.Schema:
     """Step C schema: value_on + value_off, typed if entity_control supports it.
 
-    v3.0 include_cooling=True (heating type) → zusätzlich value_cool_on/
-    value_cool_off als optionale Felder im SELBEN Step (kein separates
-    Cooling-Step mehr). Leer = kein Cooling. _build_device_record leitet
-    supports_cooling = bool(value_cool_on) ab.
+    v3.0 include_cooling=True (heating type) → zusätzlich value_cool_on
+    inline. value_cool_off entfällt im Schema, weil es bei climate-* und
+    SG-Ready 1:1 identisch zu value_off ist (climate.set_hvac_mode("off"));
+    _register_device leitet es daraus ab.
     """
     value_sel = _value_selector(hass, entity_control)
 
@@ -537,7 +549,6 @@ def _values_schema(
     }
     if include_cooling:
         schema[_field(CONF_VALUE_COOL_ON)] = field_type
-        schema[_field(CONF_VALUE_COOL_OFF)] = field_type
     schema[_hold_mode_field(defaults)] = _hold_mode_selector()
     return vol.Schema(schema)
 
@@ -993,10 +1004,15 @@ async def _register_device(
         )
     # Cooling-Capability — nur für heating POSTen. v3.0: aus
     # bool(value_cool_on) abgeleitet (oder fallback auf den alten
-    # supports_cooling-Bool für Legacy-v2.x edit-paths).
+    # supports_cooling-Bool für Legacy-v2.x edit-paths). value_cool_off
+    # ist im neuen Schema nicht mehr separat — fällt auf value_off
+    # zurück, weil climate.set_hvac_mode("off") für beide Richtungen
+    # derselbe Aufruf ist.
     if device_type == "heating":
         cool_on = entity_input.get(CONF_VALUE_COOL_ON, "") or ""
         cool_off = entity_input.get(CONF_VALUE_COOL_OFF, "") or ""
+        if cool_on and not cool_off:
+            cool_off = entity_input.get(CONF_VALUE_OFF, "") or ""
         device_config["supports_cooling"] = bool(
             cool_on or entity_input.get(CONF_SUPPORTS_COOLING, False)
         )
@@ -1061,17 +1077,23 @@ async def _update_device_backend(
             entity_input.get(CONF_INCLUDED_IN_HAUSHALT, False)
         )
     # Cooling-Capability — Edit-Flow spiegelt die Auswahl. v3.0:
-    # leitet supports_cooling aus bool(value_cool_on) ab.
+    # leitet supports_cooling aus bool(value_cool_on) ab. value_cool_off
+    # ist im neuen Schema nicht mehr separat — fällt auf value_off
+    # zurück, weil climate.set_hvac_mode("off") für beide Richtungen
+    # derselbe Aufruf ist.
     if entity_input is not None and device_type == "heating":
         cool_on_val = entity_input.get(CONF_VALUE_COOL_ON, "") or ""
+        cool_off_val = entity_input.get(CONF_VALUE_COOL_OFF, "") or ""
+        if cool_on_val and not cool_off_val:
+            cool_off_val = entity_input.get(CONF_VALUE_OFF, "") or ""
         payload["supports_cooling"] = bool(
             cool_on_val or entity_input.get(CONF_SUPPORTS_COOLING, False)
         )
         payload["entity_cool_control"] = entity_input.get(
             CONF_ENTITY_COOL_CONTROL, ""
         )
-        payload["value_cool_on"] = entity_input.get(CONF_VALUE_COOL_ON, "")
-        payload["value_cool_off"] = entity_input.get(CONF_VALUE_COOL_OFF, "")
+        payload["value_cool_on"] = cool_on_val
+        payload["value_cool_off"] = cool_off_val
     async with httpx.AsyncClient(timeout=15.0) as client:
         response = await client.put(
             f"{api_url}/api/v1/devices/{device_id}",
@@ -1726,9 +1748,6 @@ class CrowdergyConfigFlow(ConfigFlow, domain=DOMAIN):
                 entity_input[CONF_VALUE_COOL_ON] = user_input.get(
                     CONF_VALUE_COOL_ON, ""
                 )
-                entity_input[CONF_VALUE_COOL_OFF] = user_input.get(
-                    CONF_VALUE_COOL_OFF, ""
-                )
             entity_input[CONF_ENTITY_CONTROL_HOLD] = user_input.get(
                 CONF_ENTITY_CONTROL_HOLD, ENTITY_CONTROL_HOLD_AUTO
             )
@@ -2213,9 +2232,6 @@ class CrowdergyOptionsFlow(OptionsFlow):
                 entity_input[CONF_VALUE_COOL_ON] = user_input.get(
                     CONF_VALUE_COOL_ON, ""
                 )
-                entity_input[CONF_VALUE_COOL_OFF] = user_input.get(
-                    CONF_VALUE_COOL_OFF, ""
-                )
             entity_input[CONF_ENTITY_CONTROL_HOLD] = user_input.get(
                 CONF_ENTITY_CONTROL_HOLD, ENTITY_CONTROL_HOLD_AUTO
             )
@@ -2359,6 +2375,15 @@ class CrowdergyOptionsFlow(OptionsFlow):
         device_name = self._edit_pending_name or target[CONF_DEVICE_NAME]
 
         if user_input is not None:
+            # Device-name comes via this step in v3.0 — type-step is
+            # skipped on edit (type-changes are rare and lossy), but
+            # rename is common and belongs right next to the entity
+            # mapping anyway.
+            new_name = (
+                user_input.pop(CONF_DEVICE_NAME, "")
+                or device_name
+            )
+            self._edit_pending_name = new_name
             entity_input = _apply_climate_first(
                 _flatten_sections(user_input)
             )
@@ -2382,7 +2407,12 @@ class CrowdergyOptionsFlow(OptionsFlow):
 
         return self.async_show_form(
             step_id="edit_device_entities",
-            data_schema=_entities_schema(device_type, defaults=target, config_mode=target.get(CONF_DEVICE_CONFIG_MODE) or CONFIG_MODE_MANUAL),
+            data_schema=_entities_schema(
+                device_type,
+                defaults={**target, CONF_DEVICE_NAME: device_name},
+                config_mode=target.get(CONF_DEVICE_CONFIG_MODE) or CONFIG_MODE_MANUAL,
+                include_name=True,
+            ),
             description_placeholders={
                 "device_type": DEVICE_TYPE_LABELS_DE.get(device_type, device_type),
                 "device_name": device_name,
@@ -2734,10 +2764,6 @@ class CrowdergyOptionsFlow(OptionsFlow):
                 entity_input[CONF_VALUE_COOL_ON] = (
                     user_input.get(CONF_VALUE_COOL_ON)
                     or target.get(CONF_VALUE_COOL_ON, "")
-                )
-                entity_input[CONF_VALUE_COOL_OFF] = (
-                    user_input.get(CONF_VALUE_COOL_OFF)
-                    or target.get(CONF_VALUE_COOL_OFF, "")
                 )
             entity_input[CONF_ENTITY_CONTROL_HOLD] = user_input.get(
                 CONF_ENTITY_CONTROL_HOLD,
