@@ -36,6 +36,25 @@ UPDATE_INTERVAL = 30
 
 CONF_DEVICE_NAME = "device_name"
 CONF_DEVICE_TYPE = "device_type"
+
+# v3.0 Konfigurations-Modus pro Gerät. User wählt einmal im Anlage-
+# Flow wie er sein Gerät konfiguriert; folgende Steps wechseln daraufhin
+# ihr Schema (Manuell = alle Entities einzeln; Climate = climate.*-
+# Entity + abgeleitete Steuerung + Modi). Aktuell relevant nur für
+# heating + warmwater. Wallbox + sonstige laufen immer "manual" (Wert
+# implizit, Step wird übersprungen). Edit-Flow zeigt den Picker nicht;
+# wer den Modus wechseln will: Gerät entfernen + neu anlegen.
+CONF_DEVICE_CONFIG_MODE = "config_mode"
+CONFIG_MODE_MANUAL = "manual"
+CONFIG_MODE_CLIMATE = "climate"
+
+# v3.0 Zweite Power-Entity für bidirektionale Geräte (Grid-
+# Einspeisung, Batterie-Ladung, später V2G-Wallbox). Wenn nur das
+# erste Power-Feld gesetzt ist, gilt der signed-Convention-Path
+# (positiv = aus dem Device, negativ = ins Device) plus der bekannte
+# invert_power_sign-Toggle. Wenn beide gesetzt sind, computet der
+# Coordinator power = power_1 − power_2 analog zur Energie-Logik.
+CONF_ENTITY_POWER_2 = "entity_current_power_kw_2"
 CONF_DISTRICT = "district"
 CONF_CITY = "city"
 CONF_REGION = "region"

@@ -16,9 +16,12 @@ from .const import (
     CONF_API_URL,
     CONF_CITY,
     CONF_DEVICE_ID,
+    CONF_DEVICE_CONFIG_MODE,
     CONF_DEVICE_NAME,
     CONF_DEVICE_TYPE,
     CONF_DEVICES,
+    CONFIG_MODE_CLIMATE,
+    CONFIG_MODE_MANUAL,
     CONF_DISTRICT,
     CONF_ENTITY_OUTDOOR_TEMP,
     CONF_EMAIL,
@@ -226,6 +229,38 @@ def _type_name_schema(defaults: dict[str, Any] | None = None) -> vol.Schema:
             name_field: str,
         }
     )
+
+
+def _config_mode_schema(
+    defaults: dict[str, Any] | None = None,
+) -> vol.Schema:
+    """v3.0 Step 1b: KonfigMode-Picker für heating/warmwater.
+    Default Manuell für neue Geräte (sicher: alle Entities einzeln,
+    funktioniert mit jedem HA-Setup). Climate ist die moderne Variante
+    für WPs die als climate.* Entity in HA erscheinen — Steuerung +
+    Ist-Temperatur + Modi kommen automatisch.
+    """
+    d = defaults or {}
+    default_mode = d.get(CONF_DEVICE_CONFIG_MODE) or CONFIG_MODE_MANUAL
+    return vol.Schema({
+        vol.Required(
+            CONF_DEVICE_CONFIG_MODE, default=default_mode
+        ): selector.SelectSelector(
+            selector.SelectSelectorConfig(
+                options=[
+                    selector.SelectOptionDict(
+                        value=CONFIG_MODE_MANUAL,
+                        label="Manuell — alle Sensoren und Steuer-Entitäten einzeln angeben (für SG-Ready, Modbus-Setups und sonstige)",
+                    ),
+                    selector.SelectOptionDict(
+                        value=CONFIG_MODE_CLIMATE,
+                        label="Climate-Entity — eine climate.* Entität gibt Steuerung, Ist-Temperatur und Heiz-/Kühl-Modi gleichzeitig her (Daikin, Mitsubishi, generic_thermostat etc.)",
+                    ),
+                ],
+                mode=selector.SelectSelectorMode.LIST,
+            )
+        ),
+    })
 
 
 def _entity_field(key: str, defaults: dict[str, Any]) -> Any:
@@ -756,6 +791,12 @@ def _build_device_record(
         CONF_DEVICE_ID: backend_device_id,
         CONF_DEVICE_NAME: device_name,
         CONF_DEVICE_TYPE: device_type,
+        # v3.0 KonfigMode (manual / climate). Default manual für Legacy
+        # v2.x Geräte ohne Feld — sicher, weil die Manuell-Flow-Logik
+        # genau das alte Verhalten ist.
+        CONF_DEVICE_CONFIG_MODE: entity_input.get(
+            CONF_DEVICE_CONFIG_MODE, CONFIG_MODE_MANUAL
+        ),
         CONF_ENTITY_POWER: entity_input.get(CONF_ENTITY_POWER, ""),
         CONF_INVERT_POWER_SIGN: bool(entity_input.get(CONF_INVERT_POWER_SIGN, False)),
         CONF_ENTITY_SOC: entity_input.get(CONF_ENTITY_SOC, ""),
@@ -1149,6 +1190,9 @@ class CrowdergyConfigFlow(ConfigFlow, domain=DOMAIN):
         # Carry the device-type/name picked in step 1 into step 2.
         self._pending_type: str | None = None
         self._pending_name: str | None = None
+        # v3.0 KonfigMode-Wahl aus Step 1b — entscheidet ob entity_*
+        # einzeln (manual) oder via climate.* gebündelt (climate) sind.
+        self._pending_config_mode: str = CONFIG_MODE_MANUAL
         # Entity-mapping kept between step 2 and step 3 (values).
         self._pending_entity_input: dict[str, Any] | None = None
 
@@ -1238,12 +1282,44 @@ class CrowdergyConfigFlow(ConfigFlow, domain=DOMAIN):
         if user_input is not None:
             self._pending_type = user_input[CONF_DEVICE_TYPE]
             self._pending_name = user_input[CONF_DEVICE_NAME]
+            # v3.0: WP-Typen (heating, warmwater) bekommen einen
+            # KonfigMode-Step danach. Andere Typen skippen direkt zu
+            # device_entities mit implizitem config_mode = manual.
+            if self._pending_type in {"heating", "warmwater"}:
+                return await self.async_step_device_config_mode()
+            self._pending_config_mode = CONFIG_MODE_MANUAL
             return await self.async_step_device_entities()
 
         return self.async_show_form(
             step_id="device_type",
             data_schema=_type_name_schema(),
             description_placeholders={"device_number": str(len(self._devices) + 1)},
+        )
+
+    async def async_step_device_config_mode(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Step 1b (heating/warmwater only): KonfigMode-Picker.
+        Manuell = klassisch alle Entities einzeln. Climate-Entity =
+        moderne climate.* Integration, Steuerung + Modi + Ist-Temp
+        kommen automatisch. Edit-Flow skippt diesen Step — wer den
+        Modus wechseln will, entfernt das Gerät und legt's neu an.
+        """
+        if user_input is not None:
+            self._pending_config_mode = user_input.get(
+                CONF_DEVICE_CONFIG_MODE, CONFIG_MODE_MANUAL
+            )
+            return await self.async_step_device_entities()
+
+        return self.async_show_form(
+            step_id="device_config_mode",
+            data_schema=_config_mode_schema(),
+            description_placeholders={
+                "device_type": DEVICE_TYPE_LABELS_DE.get(
+                    self._pending_type or "", self._pending_type or ""
+                ),
+                "device_name": self._pending_name or "",
+            },
         )
 
     async def async_step_device_entities(
@@ -1597,6 +1673,11 @@ class CrowdergyConfigFlow(ConfigFlow, domain=DOMAIN):
         errors: dict[str, str] = {}
         device_type = self._pending_type or "generic"
         device_name = self._pending_name or ""
+        # v3.0: ConfigMode aus dem Pending-State ins entity_input
+        # einbringen, sodass _build_device_record es persistiert.
+        entity_input.setdefault(
+            CONF_DEVICE_CONFIG_MODE, self._pending_config_mode
+        )
         try:
             dev = await _register_device(
                 self._data[CONF_API_URL],
@@ -1609,6 +1690,7 @@ class CrowdergyConfigFlow(ConfigFlow, domain=DOMAIN):
             self._devices.append(dev)
             self._pending_type = None
             self._pending_name = None
+            self._pending_config_mode = CONFIG_MODE_MANUAL
             self._pending_entity_input = None
             return await self.async_step_add_more()
         except (httpx.HTTPStatusError, httpx.RequestError) as err:
@@ -1655,6 +1737,7 @@ class CrowdergyOptionsFlow(OptionsFlow):
         # Add-flow scratch state.
         self._pending_type: str | None = None
         self._pending_name: str | None = None
+        self._pending_config_mode: str = CONFIG_MODE_MANUAL
         self._pending_entity_input: dict[str, Any] | None = None
         # Edit-flow scratch state.
         self._edit_target_id: str | None = None
@@ -1716,11 +1799,35 @@ class CrowdergyOptionsFlow(OptionsFlow):
         if user_input is not None:
             self._pending_type = user_input[CONF_DEVICE_TYPE]
             self._pending_name = user_input[CONF_DEVICE_NAME]
+            if self._pending_type in {"heating", "warmwater"}:
+                return await self.async_step_add_device_config_mode()
+            self._pending_config_mode = CONFIG_MODE_MANUAL
             return await self.async_step_add_device_entities()
 
         return self.async_show_form(
             step_id="add_device",
             data_schema=_type_name_schema(),
+        )
+
+    async def async_step_add_device_config_mode(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """v3.0 add-flow Variante des KonfigMode-Pickers."""
+        if user_input is not None:
+            self._pending_config_mode = user_input.get(
+                CONF_DEVICE_CONFIG_MODE, CONFIG_MODE_MANUAL
+            )
+            return await self.async_step_add_device_entities()
+
+        return self.async_show_form(
+            step_id="add_device_config_mode",
+            data_schema=_config_mode_schema(),
+            description_placeholders={
+                "device_type": DEVICE_TYPE_LABELS_DE.get(
+                    self._pending_type or "", self._pending_type or ""
+                ),
+                "device_name": self._pending_name or "",
+            },
         )
 
     async def async_step_add_device_entities(
@@ -2039,6 +2146,9 @@ class CrowdergyOptionsFlow(OptionsFlow):
         errors: dict[str, str] = {}
         device_type = self._pending_type or "generic"
         device_name = self._pending_name or ""
+        entity_input.setdefault(
+            CONF_DEVICE_CONFIG_MODE, self._pending_config_mode
+        )
         try:
             dev = await _register_device(
                 self._entry.data[CONF_API_URL],
@@ -2051,6 +2161,7 @@ class CrowdergyOptionsFlow(OptionsFlow):
             self._devices.append(dev)
             self._pending_type = None
             self._pending_name = None
+            self._pending_config_mode = CONFIG_MODE_MANUAL
             self._pending_entity_input = None
             return await self.async_step_init()
         except (httpx.HTTPStatusError, httpx.RequestError) as err:
@@ -2077,7 +2188,17 @@ class CrowdergyOptionsFlow(OptionsFlow):
 
         if user_input is not None:
             self._edit_target_id = user_input["device_to_edit"]
-            return await self.async_step_edit_device_type()
+            # v3.0: kein type-name Step mehr auf Edit. Typ ändert sich
+            # eh nicht; Name ist auf der Entities-Seite editierbar.
+            target = next(
+                (d for d in self._devices
+                 if d.get(CONF_DEVICE_ID) == self._edit_target_id),
+                None,
+            )
+            if target is not None:
+                self._edit_pending_type = target.get(CONF_DEVICE_TYPE)
+                self._edit_pending_name = target.get(CONF_DEVICE_NAME)
+            return await self.async_step_edit_device_entities()
 
         options = [
             selector.SelectOptionDict(

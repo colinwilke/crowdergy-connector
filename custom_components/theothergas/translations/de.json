@@ -44,6 +44,14 @@
           "device_name": "Wird genau so in der Crowdergy-App und als Home-Assistant-Gerätename verwendet (z. B. Wallbox Hof, Wärmepumpe Keller)."
         }
       },
+      "device_config_mode": {
+        "title": "{device_name} ({device_type}) — Konfigurations-Modus",
+        "description": "Wie willst du deine Wärmepumpe einrichten? Manuell ist der klassische Weg für SG-Ready- und Modbus-Setups, Climate-Entity ist der schnelle Weg wenn deine WP als climate.* Entität in HA erscheint.",
+        "submit": "Weiter",
+        "data": {
+          "config_mode": "Konfigurations-Modus"
+        }
+      },
       "device_entities": {
         "title": "{device_name} ({device_type}) — Entitäten verknüpfen",
         "description": "Sage Crowdergy, welche Home-Assistant-Entitäten zu diesem Gerät gehören. Lesende Entitäten ziehen Status-Daten in die App (Leistung, Ladezustand, Temperatur …), die Steuer-Entität ist diejenige, die Crowdergy beim Crowdergize-Schalten an- bzw. ausschaltet. Felder, die für deinen Gerätetyp nicht relevant sind, einfach leer lassen.",
@@ -237,6 +245,14 @@
         "data_description": {
           "device_type": "Solar, Batterie, Wallbox, Wärmepumpe, Netz, Haushalt oder Gerät (sonstiges Schaltbares).",
           "device_name": "Anzeigename — taucht so in der Crowdergy-App und in Home Assistant auf."
+        }
+      },
+      "add_device_config_mode": {
+        "title": "{device_name} ({device_type}) — Konfigurations-Modus",
+        "description": "Wie willst du deine Wärmepumpe einrichten? Manuell für SG-Ready- und Modbus-Setups, Climate-Entity wenn deine WP als climate.* Entität in HA erscheint.",
+        "submit": "Weiter",
+        "data": {
+          "config_mode": "Konfigurations-Modus"
         }
       },
       "add_device_entities": {
