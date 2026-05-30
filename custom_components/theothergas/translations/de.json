@@ -94,18 +94,20 @@
           },
           "control_section": {
             "name": "Steuerung",
-            "description": "Heizung/Warmwasser: im Climate-Modus eine climate.* Entität; im Manuell-Modus eine klassische Steuer-Entität + separater Ist-Temp-Sensor. Wallbox/Batterie: Lademodus-Entität.",
+            "description": "Heizung im Climate-Modus: eine climate.* Entität. Warmwasser im Climate-Modus: eine water_heater.* Entität. Manuell-Modus: klassische Steuer-Entität + separater Ist-Temp-Sensor. Wallbox/Batterie: Lademodus-Entität.",
             "data": {
               "entity_climate": "Climate-Entität",
               "entity_control": "Steuer-Entität",
-              "entity_current_temp_c": "Ist-Temperatur",
-              "entity_charge_mode": "Lademodus-Entität"
+              "entity_current_temp_c": "Ist-Temperatur (optional)",
+              "entity_charge_mode": "Lademodus-Entität",
+              "entity_water_heater": "Warmwasser-Entität"
             },
             "data_description": {
               "entity_climate": "Die climate.* Entität deiner WP — Steuerung, Modi und Ist-Temperatur kommen automatisch.",
               "entity_control": "Schreibbare Entität (Switch, Number, Select). Beispiele: SG-Ready-Select, Boost-Switch, Strom-Limit-Number.",
-              "entity_current_temp_c": "Sensor mit der aktuellen Temperatur (Vorlauf / Raum / Boiler).",
-              "entity_charge_mode": "Wallbox: Lademodus-Select (Lock/Power/Solar). Batterie: Modi-Entität (typisch Number für +max / 0 / -max W)."
+              "entity_current_temp_c": "Im Climate-/Water-Heater-Modus optional: separater Sensor, wenn die current_temperature der Climate-Entity falsch ist. Im Manuell-Modus: dein Vorlauf-/Raum-/Boiler-Sensor (Pflicht).",
+              "entity_charge_mode": "Wallbox: Lademodus-Select (Lock/Power/Solar). Batterie: Modi-Entität (typisch Number für +max / 0 / -max W).",
+              "entity_water_heater": "HA's water_heater-Entität für deine Brauchwasser-WP. Analog Climate-Entität — Steuerung, Modi und Ist-Temperatur kommen automatisch."
             }
           }
         }
@@ -307,18 +309,20 @@
           },
           "control_section": {
             "name": "Steuerung",
-            "description": "Heizung/Warmwasser: im Climate-Modus eine climate.* Entität; im Manuell-Modus eine klassische Steuer-Entität + separater Ist-Temp-Sensor. Wallbox/Batterie: Lademodus-Entität.",
+            "description": "Heizung im Climate-Modus: eine climate.* Entität. Warmwasser im Climate-Modus: eine water_heater.* Entität. Manuell-Modus: klassische Steuer-Entität + separater Ist-Temp-Sensor. Wallbox/Batterie: Lademodus-Entität.",
             "data": {
               "entity_climate": "Climate-Entität",
               "entity_control": "Steuer-Entität",
-              "entity_current_temp_c": "Ist-Temperatur",
-              "entity_charge_mode": "Lademodus-Entität"
+              "entity_current_temp_c": "Ist-Temperatur (optional)",
+              "entity_charge_mode": "Lademodus-Entität",
+              "entity_water_heater": "Warmwasser-Entität"
             },
             "data_description": {
               "entity_climate": "Die climate.* Entität deiner WP — Steuerung, Modi und Ist-Temperatur kommen automatisch.",
               "entity_control": "Schreibbare Entität (Switch, Number, Select). Beispiele: SG-Ready-Select, Boost-Switch, Strom-Limit-Number.",
-              "entity_current_temp_c": "Sensor mit der aktuellen Temperatur (Vorlauf / Raum / Boiler).",
-              "entity_charge_mode": "Wallbox: Lademodus-Select (Lock/Power/Solar). Batterie: Modi-Entität (typisch Number für +max / 0 / -max W)."
+              "entity_current_temp_c": "Im Climate-/Water-Heater-Modus optional: separater Sensor, wenn die current_temperature der Climate-Entity falsch ist. Im Manuell-Modus: dein Vorlauf-/Raum-/Boiler-Sensor (Pflicht).",
+              "entity_charge_mode": "Wallbox: Lademodus-Select (Lock/Power/Solar). Batterie: Modi-Entität (typisch Number für +max / 0 / -max W).",
+              "entity_water_heater": "HA's water_heater-Entität für deine Brauchwasser-WP. Analog Climate-Entität — Steuerung, Modi und Ist-Temperatur kommen automatisch."
             }
           }
         }
@@ -453,18 +457,20 @@
           },
           "control_section": {
             "name": "Steuerung",
-            "description": "Heizung/Warmwasser: Climate-Entität ODER klassische Steuer-Entität + Ist-Temp-Sensor. Wallbox/Batterie: Lademodus-Entität.",
+            "description": "Heizung im Climate-Modus: eine climate.* Entität. Warmwasser im Climate-Modus: eine water_heater.* Entität. Manuell-Modus: klassische Steuer-Entität + separater Ist-Temp-Sensor. Wallbox/Batterie: Lademodus-Entität.",
             "data": {
               "entity_climate": "Climate-Entität",
               "entity_control": "Steuer-Entität",
-              "entity_current_temp_c": "Ist-Temperatur",
-              "entity_charge_mode": "Lademodus-Entität"
+              "entity_current_temp_c": "Ist-Temperatur (optional)",
+              "entity_charge_mode": "Lademodus-Entität",
+              "entity_water_heater": "Warmwasser-Entität"
             },
             "data_description": {
               "entity_climate": "Climate-Entität — Steuerung, Modi und Ist-Temperatur kommen automatisch.",
               "entity_control": "Schreibbare Entität (Switch, Number, Select).",
-              "entity_current_temp_c": "Sensor mit der aktuellen Temperatur.",
-              "entity_charge_mode": "Wallbox: Lademodus-Select. Batterie: Modi-Entität."
+              "entity_current_temp_c": "Im Climate-/Water-Heater-Modus optional: separater Sensor, wenn die current_temperature der Climate-Entity falsch ist. Im Manuell-Modus: dein Vorlauf-/Raum-/Boiler-Sensor (Pflicht).",
+              "entity_charge_mode": "Wallbox: Lademodus-Select. Batterie: Modi-Entität.",
+              "entity_water_heater": "HA's water_heater-Entität für deine Brauchwasser-WP. Analog Climate-Entität — Steuerung, Modi und Ist-Temperatur kommen automatisch."
             }
           }
         }

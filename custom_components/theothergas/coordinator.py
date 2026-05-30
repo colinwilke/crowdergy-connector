@@ -428,14 +428,15 @@ class CrowdergyCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
             return state.state
 
     def _read_temp_c(self, entity_id: str) -> Any:
-        """Ist-Temperatur lesen. Bei climate.* steht im state der
-        hvac_mode (z.B. 'heat'), die echte Temperatur sitzt im Attribut
-        `current_temperature`. Für sensor-/number-Entities Fallback auf
-        den State.
+        """Ist-Temperatur lesen. Bei climate.* / water_heater.* steht
+        im state ein Mode-String (z.B. 'heat' / 'eco') und die echte
+        Temperatur sitzt im Attribut `current_temperature`. Für
+        sensor-/number-Entities Fallback auf den State.
         """
         if not entity_id:
             return None
-        if entity_id.split(".", 1)[0] == "climate":
+        domain = entity_id.split(".", 1)[0]
+        if domain in ("climate", "water_heater"):
             state = self.hass.states.get(entity_id)
             if state is None:
                 return None
@@ -1610,6 +1611,18 @@ class CrowdergyCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
                 await self.hass.services.async_call(
                     domain, "set_hvac_mode",
                     {"entity_id": entity_id, "hvac_mode": str(raw_value)},
+                    blocking=True,
+                )
+            elif domain == "water_heater":
+                # HA's water_heater integration uses set_operation_mode
+                # with operation_mode parameter (vs climate's hvac_mode).
+                # Typical operation_modes are "eco" / "performance" /
+                # "electric" / "off" — the user maps these via
+                # value_on / value_off in the device_values step just
+                # like with climate.
+                await self.hass.services.async_call(
+                    domain, "set_operation_mode",
+                    {"entity_id": entity_id, "operation_mode": str(raw_value)},
                     blocking=True,
                 )
             elif verbose:

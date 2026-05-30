@@ -119,6 +119,14 @@ CONF_VALUE_OFF = "value_off"
 # und Ist-Temperatur-Entity.
 CONF_ENTITY_CLIMATE = "entity_climate"
 
+# v3.0.6 Warmwasser-Variante zu CONF_ENTITY_CLIMATE: viele
+# Brauchwasser-WPs erscheinen in HA als water_heater.* statt
+# climate.* — separates Form-Feld mit eigenem Domain-Selector
+# damit der EntitySelector nur passende Optionen anbietet.
+# _apply_climate_first collapsed beides aufs gleiche entity_control
+# zum Speichern.
+CONF_ENTITY_WATER_HEATER = "entity_water_heater"
+
 # Wallbox-only: separate write-target for the Lademodus picker in the iOS
 # app. Settable HA select entity (typically with "Lock Mode" / "Power Mode" /
 # "Solar Pure Mode" — or any other options the user has configured on their

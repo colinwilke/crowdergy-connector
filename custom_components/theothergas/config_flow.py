@@ -27,6 +27,7 @@ from .const import (
     CONF_EMAIL,
     CONF_ENTITY_CHARGE_MODE,
     CONF_ENTITY_CLIMATE,
+    CONF_ENTITY_WATER_HEATER,
     CONF_ENTITY_CONTROL,
     CONF_ENTITY_POWER,
     CONF_ENTITY_POWER_2,
@@ -175,19 +176,27 @@ _ENTITY_SELECTORS: dict[str, selector.EntitySelector] = {
         # Validierung verweigert.
         selector.EntitySelectorConfig(domain=["sensor", "climate"])
     ),
-    # Climate-first Pick für heating/warmwater. Aus dem climate-State
+    # Climate-first Pick für heating. Aus dem climate-State
     # leitet der Connector Steuerung (set_hvac_mode), Ist-Temperatur
     # (Attribut current_temperature) und Modi-Liste (hvac_modes) ab.
     CONF_ENTITY_CLIMATE: selector.EntitySelector(
         selector.EntitySelectorConfig(domain="climate")
     ),
+    # Water-heater-first Pick für warmwater (v3.0.6). Analog
+    # entity_climate aber für HA's water_heater-Domain — viele
+    # Brauchwasser-WPs sitzen dort statt unter climate.
+    CONF_ENTITY_WATER_HEATER: selector.EntitySelector(
+        selector.EntitySelectorConfig(domain="water_heater")
+    ),
     # Any settable HA entity — connector adapts the service call to the
     # entity's domain at runtime (switch.turn_on/off, number.set_value,
-    # select.select_option, climate.set_hvac_mode, …).
+    # select.select_option, climate.set_hvac_mode,
+    # water_heater.set_operation_mode, …).
     CONF_ENTITY_CONTROL: selector.EntitySelector(
         selector.EntitySelectorConfig(domain=[
             "switch", "input_boolean", "number", "select",
-            "light", "fan", "climate", "input_number", "input_select",
+            "light", "fan", "climate", "water_heater",
+            "input_number", "input_select",
         ])
     ),
     # Wallbox-only Lademodus target — restricted to select entities since
@@ -392,9 +401,22 @@ def _entities_schema(
             d.get(CONF_DEVICE_CONFIG_MODE) or config_mode or CONFIG_MODE_MANUAL
         )
         if effective_mode == CONFIG_MODE_CLIMATE:
+            # Heating → climate-Domain, Warmwasser → water_heater-Domain.
+            # User-Wunsch 2026-05-30: für beide IMMER ein optionales
+            # Ist-Temperatur-Override-Feld anbieten — manche Vendor-
+            # Integrationen liefern eine kaputte current_temperature
+            # über die Climate-/Water-Heater-Entity und der User braucht
+            # einen sauberen separaten Sensor als Override.
+            if device_type == "warmwater":
+                primary_field = _entity_field(CONF_ENTITY_WATER_HEATER, d)
+                primary_selector = _ENTITY_SELECTORS[CONF_ENTITY_WATER_HEATER]
+            else:
+                primary_field = _entity_field(CONF_ENTITY_CLIMATE, d)
+                primary_selector = _ENTITY_SELECTORS[CONF_ENTITY_CLIMATE]
             control_schema = vol.Schema({
-                _entity_field(CONF_ENTITY_CLIMATE, d):
-                    _ENTITY_SELECTORS[CONF_ENTITY_CLIMATE],
+                primary_field: primary_selector,
+                _entity_field(CONF_ENTITY_CURRENT_TEMP, d):
+                    _ENTITY_SELECTORS[CONF_ENTITY_CURRENT_TEMP],
             })
         else:
             control_schema = vol.Schema({
@@ -435,18 +457,29 @@ def _flatten_sections(user_input: dict[str, Any]) -> dict[str, Any]:
 
 
 def _apply_climate_first(entity_input: dict[str, Any]) -> dict[str, Any]:
-    """Climate-first: wenn entity_climate gesetzt, kopieren wir den
-    Wert auf entity_control + entity_current_temp_c. Damit kommen
-    Steuer-Dispatch + Telemetry-Read im Coordinator mit derselben
-    climate.* Entity klar — Service-Call-Adapter weiß für `climate.*`
-    set_hvac_mode zu verwenden, Telemetry-Read schaut auf das Attribut
-    `current_temperature` statt den State.
+    """Climate-/Water-Heater-first: wenn entity_climate ODER
+    entity_water_heater gesetzt ist, kopieren wir den Wert auf
+    entity_control. Damit weiß der Connector im Dispatch ob er
+    `climate.set_hvac_mode` (climate.*) oder
+    `water_heater.set_operation_mode` (water_heater.*) ruft —
+    die Domain-Auswahl ist im Service-Adapter.
+
+    `entity_current_temp_c` gilt Override-First: hat der User
+    bereits ein separates Sensor-Feld gefüllt, behält das Vorrang;
+    sonst leiten wir aus der Primär-Entity ab (`current_temperature`
+    Attribut). Useful wenn die climate-/water_heater-Entity eine
+    falsche oder veraltete Temperatur liefert (Vendor-spezifisch).
+
     Mutiert das Dict in-place und gibt es zurück (chainable).
     """
-    climate = entity_input.get(CONF_ENTITY_CLIMATE, "")
-    if climate:
-        entity_input[CONF_ENTITY_CONTROL] = climate
-        entity_input[CONF_ENTITY_CURRENT_TEMP] = climate
+    primary = (
+        entity_input.get(CONF_ENTITY_CLIMATE, "")
+        or entity_input.get(CONF_ENTITY_WATER_HEATER, "")
+    )
+    if primary:
+        entity_input[CONF_ENTITY_CONTROL] = primary
+        if not entity_input.get(CONF_ENTITY_CURRENT_TEMP, ""):
+            entity_input[CONF_ENTITY_CURRENT_TEMP] = primary
     return entity_input
 
 
@@ -490,6 +523,22 @@ def _value_selector(hass, entity_id: str):
             )
     if domain == "climate":
         modes = state.attributes.get("hvac_modes") or []
+        if modes:
+            return selector.SelectSelector(
+                selector.SelectSelectorConfig(
+                    options=[
+                        selector.SelectOptionDict(value=m, label=m) for m in modes
+                    ],
+                    mode=selector.SelectSelectorMode.DROPDOWN,
+                )
+            )
+    if domain == "water_heater":
+        # HA's water_heater exposes the available modes as the
+        # `operation_list` attribute (vendor-specific: "eco" / "boost"
+        # / "off" / "performance" / "electric" / etc.). Mirror the
+        # climate-side selector so the value_on / value_off step
+        # presents a dropdown instead of a free-text field.
+        modes = state.attributes.get("operation_list") or []
         if modes:
             return selector.SelectSelector(
                 selector.SelectSelectorConfig(
@@ -780,6 +829,9 @@ def _build_device_record(
         CONF_ENTITY_SOC: entity_input.get(CONF_ENTITY_SOC, ""),
         CONF_ENTITY_VEHICLE_STATUS: entity_input.get(CONF_ENTITY_VEHICLE_STATUS, ""),
         CONF_ENTITY_CLIMATE: entity_input.get(CONF_ENTITY_CLIMATE, ""),
+        CONF_ENTITY_WATER_HEATER: entity_input.get(
+            CONF_ENTITY_WATER_HEATER, ""
+        ),
         CONF_ENTITY_CURRENT_TEMP: entity_input.get(CONF_ENTITY_CURRENT_TEMP, ""),
         CONF_ENTITY_ENERGY_TOTAL: entity_input.get(CONF_ENTITY_ENERGY_TOTAL, ""),
         CONF_ENTITY_ENERGY_DISCHARGED_TOTAL: entity_input.get(

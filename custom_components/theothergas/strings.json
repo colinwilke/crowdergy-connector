@@ -93,18 +93,20 @@
           },
           "control_section": {
             "name": "Control",
-            "description": "Heating/Warmwater: Climate-Entity (climate.*) or classic control entity + temperature sensor. Wallbox/Battery: charge-mode entity.",
+            "description": "Heating in Climate mode: a climate.* entity. Warmwater in Climate mode: a water_heater.* entity. Manual mode: classic control entity + separate temperature sensor. Wallbox/Battery: charge-mode entity.",
             "data": {
               "entity_climate": "Climate entity",
               "entity_control": "Control entity",
-              "entity_current_temp_c": "Current temperature",
-              "entity_charge_mode": "Charge-mode entity"
+              "entity_current_temp_c": "Current temperature (optional)",
+              "entity_charge_mode": "Charge-mode entity",
+              "entity_water_heater": "Water-heater entity"
             },
             "data_description": {
               "entity_climate": "Your heat-pump's climate.* entity — control, modes and current temperature are derived automatically.",
               "entity_control": "Writable entity (switch, number, select). Examples: SG-Ready select, boost switch, current-limit number.",
-              "entity_current_temp_c": "Sensor with the current temperature (flow / room / tank).",
-              "entity_charge_mode": "Wallbox: charge-mode select (Lock/Power/Solar). Battery: mode entity (typically a number for +max / 0 / -max W)."
+              "entity_current_temp_c": "Climate / water-heater mode: optional separate sensor that overrides the entity's current_temperature when it's wrong. Manual mode: your flow / room / tank sensor (required).",
+              "entity_charge_mode": "Wallbox: charge-mode select (Lock/Power/Solar). Battery: mode entity (typically a number for +max / 0 / -max W).",
+              "entity_water_heater": "HA's water_heater entity for your DHW heat pump. Like the climate entity — control, modes and current temperature derived automatically."
             }
           }
         },
@@ -306,18 +308,20 @@
           },
           "control_section": {
             "name": "Control",
-            "description": "Heating/Warmwater: Climate-Entity or classic control entity + temperature sensor. Wallbox/Battery: charge-mode entity.",
+            "description": "Heating in Climate mode: a climate.* entity. Warmwater in Climate mode: a water_heater.* entity. Manual mode: classic control entity + separate temperature sensor. Wallbox/Battery: charge-mode entity.",
             "data": {
               "entity_climate": "Climate entity",
               "entity_control": "Control entity",
-              "entity_current_temp_c": "Current temperature",
-              "entity_charge_mode": "Charge-mode entity"
+              "entity_current_temp_c": "Current temperature (optional)",
+              "entity_charge_mode": "Charge-mode entity",
+              "entity_water_heater": "Water-heater entity"
             },
             "data_description": {
               "entity_climate": "Climate.* entity — control, modes and current temperature are derived automatically.",
               "entity_control": "Writable entity (switch, number, select).",
-              "entity_current_temp_c": "Sensor with the current temperature.",
-              "entity_charge_mode": "Wallbox: charge-mode select. Battery: mode entity."
+              "entity_current_temp_c": "Climate / water-heater mode: optional separate sensor that overrides the entity's current_temperature when it's wrong. Manual mode: your flow / room / tank sensor (required).",
+              "entity_charge_mode": "Wallbox: charge-mode select. Battery: mode entity.",
+              "entity_water_heater": "HA's water_heater entity for your DHW heat pump. Like the climate entity — control, modes and current temperature derived automatically."
             }
           }
         },
@@ -453,18 +457,20 @@
           },
           "control_section": {
             "name": "Control",
-            "description": "Heating/Warmwater: Climate-Entity or classic control. Wallbox/Battery: charge-mode entity.",
+            "description": "Heating in Climate mode: a climate.* entity. Warmwater in Climate mode: a water_heater.* entity. Manual mode: classic control entity + separate temperature sensor. Wallbox/Battery: charge-mode entity.",
             "data": {
               "entity_climate": "Climate entity",
               "entity_control": "Control entity",
-              "entity_current_temp_c": "Current temperature",
-              "entity_charge_mode": "Charge-mode entity"
+              "entity_current_temp_c": "Current temperature (optional)",
+              "entity_charge_mode": "Charge-mode entity",
+              "entity_water_heater": "Water-heater entity"
             },
             "data_description": {
               "entity_climate": "Climate.* entity — control + temperature automatic.",
               "entity_control": "Writable entity (switch, number, select).",
-              "entity_current_temp_c": "Sensor with the current temperature.",
-              "entity_charge_mode": "Wallbox: charge-mode select. Battery: mode entity."
+              "entity_current_temp_c": "Climate / water-heater mode: optional separate sensor that overrides the entity's current_temperature when it's wrong. Manual mode: your flow / room / tank sensor (required).",
+              "entity_charge_mode": "Wallbox: charge-mode select. Battery: mode entity.",
+              "entity_water_heater": "HA's water_heater entity for your DHW heat pump. Like the climate entity — control, modes and current temperature derived automatically."
             }
           }
         }
