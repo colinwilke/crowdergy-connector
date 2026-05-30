@@ -37,6 +37,7 @@ from .const import (
     CONF_VALUE_OFF,
     CONF_VALUE_ON,
     CONF_ENTITY_COOL_CONTROL,
+    CONF_SUPPORTS_COOLING,
     CONF_VALUE_COOL_ON,
     CONF_VALUE_COOL_OFF,
     CONF_BATTERY_VALUE_IDLE,
@@ -480,7 +481,7 @@ class CrowdergyCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
                 return True   # presence flipped
             if abs(cur - old) >= threshold:
                 return True
-        for key in ("vehicle_status", "charge_mode", "is_on"):
+        for key in ("vehicle_status", "charge_mode", "is_on", "cool_on"):
             if payload.get(key) != prev.get(key):
                 return True
         return False
@@ -599,6 +600,10 @@ class CrowdergyCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
         - number / select / climate: compare against value_on / value_off.
           Equal to value_on → True, equal to value_off → False, anything
           else (a user setting a different value manually) → None.
+
+        Spezialfall climate-Entity mit supports_cooling: ein "cool"
+        State zählt explizit als is_on=False (nicht heizen), damit das
+        Backend die Heat/Cool-Trennung sauber sieht.
         """
         entity_id = dev.get(CONF_ENTITY_CONTROL, "") or ""
         if not entity_id:
@@ -633,6 +638,62 @@ class CrowdergyCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
         if _matches(value_on):
             return True
         if _matches(value_off):
+            return False
+        # Cooling-aware: wenn die selbe Entity gerade auf cool-Wert
+        # steht (climate.* mit value_cool_on = "cool"), ist das Gerät
+        # NICHT am heizen.
+        if dev.get(CONF_SUPPORTS_COOLING):
+            value_cool_on = dev.get(CONF_VALUE_COOL_ON, "")
+            if _matches(value_cool_on):
+                return False
+        return None
+
+    def _read_cool_on_state(self, dev: dict[str, Any]) -> bool | None:
+        """Translate cooling-side state into a Boolean `cool_on`.
+
+        Drei Konfigurationen:
+        1. supports_cooling=False → immer None (Backend bleibt 0).
+        2. Separate entity_cool_control gemapped → diese Entity gegen
+           value_cool_on / value_cool_off (bzw. value_off).
+        3. Geteilte entity_control (typisch climate.*) → die selbe
+           Entity gegen value_cool_on / value_off (Heizung-Off-Wert
+           dient auch als Cool-Off).
+
+        Returns None bei unklarem State, sodass Backend cool_on
+        unverändert lässt.
+        """
+        if not dev.get(CONF_SUPPORTS_COOLING):
+            return None
+        cool_entity = dev.get(CONF_ENTITY_COOL_CONTROL, "") or ""
+        if cool_entity:
+            entity_id = cool_entity
+            value_cool_on = dev.get(CONF_VALUE_COOL_ON, "")
+            value_cool_off = dev.get(CONF_VALUE_COOL_OFF, "")
+        else:
+            entity_id = dev.get(CONF_ENTITY_CONTROL, "") or ""
+            value_cool_on = dev.get(CONF_VALUE_COOL_ON, "")
+            value_cool_off = dev.get(CONF_VALUE_OFF, "")
+        if not entity_id:
+            return None
+        state = self.hass.states.get(entity_id)
+        if state is None or state.state in ("unknown", "unavailable"):
+            return None
+        domain = entity_id.split(".", 1)[0]
+        raw_state = str(state.state)
+
+        def _matches(target: Any) -> bool:
+            if target in ("", None):
+                return False
+            if domain in ("number", "input_number"):
+                try:
+                    return float(raw_state) == float(target)
+                except (TypeError, ValueError):
+                    return False
+            return raw_state == str(target)
+
+        if _matches(value_cool_on):
+            return True
+        if _matches(value_cool_off):
             return False
         return None
 
@@ -802,6 +863,11 @@ class CrowdergyCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
             # can't decide (no mapping, unknown state, ambiguous values);
             # the backend then leaves device.is_on untouched.
             is_on = self._read_is_on_state(dev)
+            # Cool-State Detection für cooling-fähige Heizungs-Devices.
+            # Sendet das Backend cool_on=True/False sodass die iOS-Tile
+            # "Kühlt" sauber anzeigt — auch bei manuellem User-Wechsel
+            # über HA. None = unverändert lassen.
+            cool_on = self._read_cool_on_state(dev)
 
             # is_active is the "Crowdergize" consent flag — owned by the
             # backend, NOT derived from any HA entity. We deliberately do
@@ -826,6 +892,8 @@ class CrowdergyCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
                 payload["energy_kwh_delta"] = energy_kwh_delta
             if is_on is not None:
                 payload["is_on"] = is_on
+            if cool_on is not None:
+                payload["cool_on"] = cool_on
 
             if device_id and self._should_send(device_id, payload):
                 try:
