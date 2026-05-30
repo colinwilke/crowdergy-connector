@@ -55,6 +55,7 @@ from .const import (
     CONF_VALUE_COOL_ON,
     CONF_VALUE_COOL_OFF,
     ENTITY_CONTROL_HOLD_ALWAYS,
+    ENTITY_CONTROL_HOLD_AUTO,
     ENTITY_CONTROL_HOLD_NEVER,
     DEFAULT_API_URL,
     DEVICE_TYPES,
@@ -445,36 +446,45 @@ def _values_schema(
 
     field_type: Any = value_sel if value_sel is not None else str
 
-    # Hold-mode 2026-05-30 zurückgebracht: User-Klimaanlage piept bei
-    # jedem 30s-Rewrite. Picker mit zwei klaren Optionen statt der
-    # alten 'always'/'never' Tokens, sodass jeder User entscheiden
-    # kann ob der Hold-Loop für sein Gerät passt.
-    hold_default = (
-        defaults.get(CONF_ENTITY_CONTROL_HOLD)
-        or ENTITY_CONTROL_HOLD_ALWAYS
+    return vol.Schema({
+        _field(CONF_VALUE_ON): field_type,
+        _field(CONF_VALUE_OFF): field_type,
+        _hold_mode_field(defaults): _hold_mode_selector(),
+    })
+
+
+def _hold_mode_field(defaults: dict[str, Any] | None = None) -> Any:
+    """Voluptuous-Field für die Hold-Mode Auswahl. Default = "auto"."""
+    d = defaults or {}
+    return vol.Optional(
+        CONF_ENTITY_CONTROL_HOLD,
+        default=d.get(CONF_ENTITY_CONTROL_HOLD) or ENTITY_CONTROL_HOLD_AUTO,
     )
-    hold_selector = selector.SelectSelector(
+
+
+def _hold_mode_selector() -> selector.SelectSelector:
+    """3-Option Dropdown — gilt für entity_control (heating/warmwater/
+    generic) UND für entity_charge_mode (wallbox/battery). Auto =
+    aktuell wie Always, später ggf. mit Smart-Verifikation."""
+    return selector.SelectSelector(
         selector.SelectSelectorConfig(
             options=[
                 selector.SelectOptionDict(
+                    value=ENTITY_CONTROL_HOLD_AUTO,
+                    label="Auto (empfohlen — alle 30 s nachschreiben)",
+                ),
+                selector.SelectOptionDict(
                     value=ENTITY_CONTROL_HOLD_ALWAYS,
-                    label="Alle 30 s nachschreiben (empfohlen)",
+                    label="An (explizit alle 30 s nachschreiben)",
                 ),
                 selector.SelectOptionDict(
                     value=ENTITY_CONTROL_HOLD_NEVER,
-                    label="Nur einmal schreiben (für Geräte die bei jedem Schreiben piepen / Aktion auslösen)",
+                    label="Aus (nur einmal schreiben — für Geräte die bei jedem Schreiben piepen)",
                 ),
             ],
             mode=selector.SelectSelectorMode.DROPDOWN,
         )
     )
-    return vol.Schema({
-        _field(CONF_VALUE_ON): field_type,
-        _field(CONF_VALUE_OFF): field_type,
-        vol.Optional(
-            CONF_ENTITY_CONTROL_HOLD, default=hold_default
-        ): hold_selector,
-    })
 
 
 # ── v2.0: vehicle-status ternary mapping (wallbox-only) ────────────────────
@@ -566,6 +576,7 @@ def _charge_mode_values_schema(
         _field(CONF_CHARGE_MODE_VALUE_LOCK): field_type,
         _field(CONF_CHARGE_MODE_VALUE_POWER): field_type,
         _field(CONF_CHARGE_MODE_VALUE_SOLAR): field_type,
+        _hold_mode_field(d): _hold_mode_selector(),
     })
 
 
@@ -610,6 +621,7 @@ def _battery_values_schema(
         _field(CONF_BATTERY_VALUE_CHARGE): field_type,
         _field(CONF_BATTERY_VALUE_IDLE): field_type,
         _field(CONF_BATTERY_VALUE_DISCHARGE): field_type,
+        _hold_mode_field(d): _hold_mode_selector(),
     })
 
 
@@ -758,7 +770,7 @@ def _build_device_record(
         CONF_VALUE_ON: entity_input.get(CONF_VALUE_ON, ""),
         CONF_VALUE_OFF: entity_input.get(CONF_VALUE_OFF, ""),
         CONF_ENTITY_CONTROL_HOLD: entity_input.get(
-            CONF_ENTITY_CONTROL_HOLD, ENTITY_CONTROL_HOLD_ALWAYS
+            CONF_ENTITY_CONTROL_HOLD, ENTITY_CONTROL_HOLD_AUTO
         ),
         CONF_ENTITY_CHARGE_MODE: entity_input.get(CONF_ENTITY_CHARGE_MODE, ""),
         # v2.0: ternary vehicle-status mapping (wallbox-only). Empty
@@ -1365,6 +1377,9 @@ class CrowdergyConfigFlow(ConfigFlow, domain=DOMAIN):
             entity_input[CONF_CHARGE_MODE_VALUE_SOLAR] = user_input.get(
                 CONF_CHARGE_MODE_VALUE_SOLAR, ""
             )
+            entity_input[CONF_ENTITY_CONTROL_HOLD] = user_input.get(
+                CONF_ENTITY_CONTROL_HOLD, ENTITY_CONTROL_HOLD_AUTO
+            )
             return await self._dispatch_post_entities(entity_input)
 
         return self.async_show_form(
@@ -1402,6 +1417,9 @@ class CrowdergyConfigFlow(ConfigFlow, domain=DOMAIN):
             )
             entity_input[CONF_BATTERY_VALUE_DISCHARGE] = user_input.get(
                 CONF_BATTERY_VALUE_DISCHARGE, ""
+            )
+            entity_input[CONF_ENTITY_CONTROL_HOLD] = user_input.get(
+                CONF_ENTITY_CONTROL_HOLD, ENTITY_CONTROL_HOLD_AUTO
             )
             return await self._dispatch_post_entities(entity_input)
 
@@ -1559,7 +1577,7 @@ class CrowdergyConfigFlow(ConfigFlow, domain=DOMAIN):
             entity_input[CONF_VALUE_ON] = user_input.get(CONF_VALUE_ON, "")
             entity_input[CONF_VALUE_OFF] = user_input.get(CONF_VALUE_OFF, "")
             entity_input[CONF_ENTITY_CONTROL_HOLD] = user_input.get(
-                CONF_ENTITY_CONTROL_HOLD, ENTITY_CONTROL_HOLD_ALWAYS
+                CONF_ENTITY_CONTROL_HOLD, ENTITY_CONTROL_HOLD_AUTO
             )
             return await self._dispatch_post_entities(entity_input)
 
@@ -1814,6 +1832,9 @@ class CrowdergyOptionsFlow(OptionsFlow):
             entity_input[CONF_CHARGE_MODE_VALUE_SOLAR] = user_input.get(
                 CONF_CHARGE_MODE_VALUE_SOLAR, ""
             )
+            entity_input[CONF_ENTITY_CONTROL_HOLD] = user_input.get(
+                CONF_ENTITY_CONTROL_HOLD, ENTITY_CONTROL_HOLD_AUTO
+            )
             return await self._dispatch_add_post_entities(entity_input)
 
         return self.async_show_form(
@@ -1847,6 +1868,9 @@ class CrowdergyOptionsFlow(OptionsFlow):
             )
             entity_input[CONF_BATTERY_VALUE_DISCHARGE] = user_input.get(
                 CONF_BATTERY_VALUE_DISCHARGE, ""
+            )
+            entity_input[CONF_ENTITY_CONTROL_HOLD] = user_input.get(
+                CONF_ENTITY_CONTROL_HOLD, ENTITY_CONTROL_HOLD_AUTO
             )
             return await self._dispatch_add_post_entities(entity_input)
 
@@ -1995,7 +2019,7 @@ class CrowdergyOptionsFlow(OptionsFlow):
             entity_input[CONF_VALUE_ON] = user_input.get(CONF_VALUE_ON, "")
             entity_input[CONF_VALUE_OFF] = user_input.get(CONF_VALUE_OFF, "")
             entity_input[CONF_ENTITY_CONTROL_HOLD] = user_input.get(
-                CONF_ENTITY_CONTROL_HOLD, ENTITY_CONTROL_HOLD_ALWAYS
+                CONF_ENTITY_CONTROL_HOLD, ENTITY_CONTROL_HOLD_AUTO
             )
             return await self._dispatch_add_post_entities(entity_input)
 
@@ -2128,7 +2152,7 @@ class CrowdergyOptionsFlow(OptionsFlow):
             # so dispatch never reasons about it.
             entity_input.setdefault(
                 CONF_ENTITY_CONTROL_HOLD,
-                target.get(CONF_ENTITY_CONTROL_HOLD, ENTITY_CONTROL_HOLD_ALWAYS),
+                target.get(CONF_ENTITY_CONTROL_HOLD, ENTITY_CONTROL_HOLD_AUTO),
             )
             # value_on / value_off are intentionally NOT carried
             # forward. Pre-fix the carry caused the dispatcher's
@@ -2250,6 +2274,9 @@ class CrowdergyOptionsFlow(OptionsFlow):
             entity_input[CONF_CHARGE_MODE_VALUE_SOLAR] = user_input.get(
                 CONF_CHARGE_MODE_VALUE_SOLAR, ""
             )
+            entity_input[CONF_ENTITY_CONTROL_HOLD] = user_input.get(
+                CONF_ENTITY_CONTROL_HOLD, ENTITY_CONTROL_HOLD_AUTO
+            )
             return await self._dispatch_edit_post_entities(target, entity_input)
 
         return self.async_show_form(
@@ -2289,6 +2316,9 @@ class CrowdergyOptionsFlow(OptionsFlow):
             )
             entity_input[CONF_BATTERY_VALUE_DISCHARGE] = user_input.get(
                 CONF_BATTERY_VALUE_DISCHARGE, ""
+            )
+            entity_input[CONF_ENTITY_CONTROL_HOLD] = user_input.get(
+                CONF_ENTITY_CONTROL_HOLD, ENTITY_CONTROL_HOLD_AUTO
             )
             return await self._dispatch_edit_post_entities(target, entity_input)
 
@@ -2488,7 +2518,7 @@ class CrowdergyOptionsFlow(OptionsFlow):
             )
             entity_input[CONF_ENTITY_CONTROL_HOLD] = user_input.get(
                 CONF_ENTITY_CONTROL_HOLD,
-                target.get(CONF_ENTITY_CONTROL_HOLD, ENTITY_CONTROL_HOLD_ALWAYS),
+                target.get(CONF_ENTITY_CONTROL_HOLD, ENTITY_CONTROL_HOLD_AUTO),
             )
             return await self._dispatch_edit_post_entities(target, entity_input)
 

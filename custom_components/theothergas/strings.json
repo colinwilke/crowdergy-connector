@@ -105,12 +105,12 @@
         "data": {
           "value_on": "Value for \"device on\"",
           "value_off": "Value for \"device off\"",
-          "entity_control_hold": "Re-write the value periodically?"
+          "entity_control_hold": "Hold the control entity"
         },
         "data_description": {
           "value_on": "e.g. \"Power Mode\", 16, \"on\", \"heat\".",
           "value_off": "e.g. \"Lock Mode\", 0, \"off\".",
-          "entity_control_hold": "\"Every 30 s\" (default) rescues devices with hysteresis; \"Write once\" for devices that beep, trigger an action or wake a display on every write."
+          "entity_control_hold": "Auto (default): re-write the value every 30 s. Rescues hysteresis-laden devices. On: same as Auto, explicit. Off: write once, then leave alone — for devices that beep, trigger an action or wake a display on every write."
         },
         "submit": "Next"
       },
@@ -303,12 +303,12 @@
         "data": {
           "value_on": "Value for \"device on\"",
           "value_off": "Value for \"device off\"",
-          "entity_control_hold": "Re-write the value periodically?"
+          "entity_control_hold": "Hold the control entity"
         },
         "data_description": {
           "value_on": "e.g. \"Power Mode\", 16, \"on\", \"heat\".",
           "value_off": "e.g. \"Lock Mode\", 0, \"off\".",
-          "entity_control_hold": "\"Every 30 s\" (default) rescues devices with hysteresis; \"Write once\" for devices that beep, trigger an action or wake a display on every write."
+          "entity_control_hold": "Auto (default): re-write the value every 30 s. Rescues hysteresis-laden devices. On: same as Auto, explicit. Off: write once, then leave alone — for devices that beep, trigger an action or wake a display on every write."
         },
         "submit": "OK"
       },
@@ -562,12 +562,12 @@
         "data": {
           "value_on": "Value for \"device on\"",
           "value_off": "Value for \"device off\"",
-          "entity_control_hold": "Re-write the value periodically?"
+          "entity_control_hold": "Hold the control entity"
         },
         "data_description": {
           "value_on": "e.g. \"Power Mode\", 16, \"on\", \"heat\".",
           "value_off": "e.g. \"Lock Mode\", 0, \"off\".",
-          "entity_control_hold": "\"Every 30 s\" (default) rescues devices with hysteresis; \"Write once\" for devices that beep, trigger an action or wake a display on every write."
+          "entity_control_hold": "Auto (default): re-write the value every 30 s. Rescues hysteresis-laden devices. On: same as Auto, explicit. Off: write once, then leave alone — for devices that beep, trigger an action or wake a display on every write."
         },
         "submit": "OK"
       },

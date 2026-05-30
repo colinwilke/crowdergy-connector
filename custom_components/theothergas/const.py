@@ -177,6 +177,18 @@ CONF_SHARES_HARDWARE_WITH = "shares_hardware_with_device_id"
 # release-after-stable-checks third mode but it never paid off
 # against the simple-and-safe periodic rewrite.
 CONF_ENTITY_CONTROL_HOLD = "entity_control_hold"
+# Drei Modi für die Steuer-Entitäts-Hold-Loop (gilt für entity_control
+# bei heating/warmwater/generic und für entity_charge_mode bei wallbox/
+# battery):
+#   "auto"   — Default für neue Geräte. Aktuell identisch zu "always"
+#              (alle 30 s nachschreiben). Reserviert für zukünftige
+#              Smart-Verifikation: erstmal nachschreiben, dann nach
+#              stabilen Reads aufhören.
+#   "always" — User-explizit: immer nachschreiben, kein Smart.
+#   "never"  — Einmal schreiben, dann Crowdergy fasst die Entity nicht
+#              mehr an (für Geräte die bei jedem Schreiben piepen,
+#              eine Aktion auslösen oder ein Display einschalten).
+ENTITY_CONTROL_HOLD_AUTO = "auto"
 ENTITY_CONTROL_HOLD_ALWAYS = "always"
 ENTITY_CONTROL_HOLD_NEVER = "never"
 

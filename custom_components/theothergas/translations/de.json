@@ -105,12 +105,12 @@
         "data": {
           "value_on": "Wert für: Gerät an",
           "value_off": "Wert für: Gerät aus",
-          "entity_control_hold": "Wert regelmäßig nachschreiben?"
+          "entity_control_hold": "Halten der Steuer-Entität"
         },
         "data_description": {
           "value_on": "Was schreiben wir wenn Crowdergy Gerät an sagt? Beispiele:\n• Wallbox-Strom-Limit (Number): 16 (= 16 A laden)\n• Wallbox-Lock-Switch: off (= Lock aufheben)\n• SG-Ready-Select: Erhöht oder dein Hersteller-Äquivalent\n• Wärmepumpen-Boost-Switch: on\n• Allgemeiner Switch: on",
           "value_off": "Was schreiben wir wenn Crowdergy Gerät aus sagt? Wichtig: meist NICHT der Standard-/Normal-Modus, sondern aktiv nicht laufen. Beispiele:\n• Wallbox-Strom-Limit (Number): 0 (= Pause)\n• Wallbox-Lock-Switch: on (= Lock setzen)\n• SG-Ready-Select: Sperre oder dein Hersteller-Äquivalent\n• Allgemeiner Switch: off",
-          "entity_control_hold": "Bei \"Alle 30 s nachschreiben\" rettet Crowdergy hysteresebehaftete Geräte (z.B. WPs die nach einem Modus-Wechsel selbst zurückkippen) und hält die Steuerung stabil. \"Nur einmal schreiben\" für Geräte die bei jedem Schreiben piepen (manche Klimaanlagen), eine Aktion auslösen oder ein Display einschalten. Default: alle 30 s."
+          "entity_control_hold": "Auto (Default): Crowdergy schreibt den Wert alle 30 s nach. Rettet hysteresebehaftete Geräte (z.B. WPs die nach einem Modus-Wechsel selbst zurückkippen). An: explizit alle 30 s nachschreiben (semantisch identisch zu Auto). Aus: nur einmal schreiben — für Geräte die bei jedem Schreiben piepen (manche Klimaanlagen), eine Aktion auslösen oder ein Display wecken."
         }
       },
       "device_charge_mode_values": {
@@ -120,12 +120,14 @@
         "data": {
           "charge_mode_value_lock": "Aus",
           "charge_mode_value_power": "An",
-          "charge_mode_value_solar": "Solaroptimiert"
+          "charge_mode_value_solar": "Solaroptimiert",
+          "entity_control_hold": "Halten der Lademodus-Entität"
         },
         "data_description": {
           "charge_mode_value_lock": "Wallbox-Option, die das Laden SPERRT (z. B. \"Lock Mode\", \"Aus\").",
           "charge_mode_value_power": "Wallbox-Option, die mit MAX-Leistung lädt (z. B. \"Power Mode\", \"Boost\").",
-          "charge_mode_value_solar": "Wallbox-Option, die PV-Überschuss folgt (z. B. \"Solar Pure Mode\", \"Eco\")."
+          "charge_mode_value_solar": "Wallbox-Option, die PV-Überschuss folgt (z. B. \"Solar Pure Mode\", \"Eco\").",
+          "entity_control_hold": "Auto/An: alle 30 s nachschreiben. Aus: einmal schreiben, dann nicht mehr."
         }
       },
       "device_vehicle_status": {
@@ -299,12 +301,12 @@
         "data": {
           "value_on": "Wert für: Gerät an",
           "value_off": "Wert für: Gerät aus",
-          "entity_control_hold": "Wert regelmäßig nachschreiben?"
+          "entity_control_hold": "Halten der Steuer-Entität"
         },
         "data_description": {
           "value_on": "Beispiele: Wallbox-Strom-Limit (Number) 16 (= 16 A laden); SG-Ready-Select Erhöht; Allgemein on.",
           "value_off": "Aktiv nicht laufen — meist nicht Normal, sondern z. B.: Wallbox-Strom-Limit 0 (= Pause); SG-Ready-Select Sperre; Lock-Switch on (= sperren); Allgemein off.",
-          "entity_control_hold": "Alle 30 s nachschreiben (Default) rettet hysteresebehaftete Geräte; Nur einmal schreiben für Geräte die bei jedem Schreiben piepen oder eine Aktion auslösen."
+          "entity_control_hold": "Auto/An: alle 30 s nachschreiben (rettet hysteresebehaftete Geräte). Aus: einmal schreiben, dann nicht mehr — für Geräte die bei jedem Schreiben piepen."
         }
       },
       "add_device_charge_mode_values": {
@@ -314,12 +316,14 @@
         "data": {
           "charge_mode_value_lock": "Aus",
           "charge_mode_value_power": "An",
-          "charge_mode_value_solar": "Solaroptimiert"
+          "charge_mode_value_solar": "Solaroptimiert",
+          "entity_control_hold": "Halten der Lademodus-Entität"
         },
         "data_description": {
           "charge_mode_value_lock": "Wallbox-Option, die das Laden SPERRT (z. B. \"Lock Mode\", \"Aus\").",
           "charge_mode_value_power": "Wallbox-Option, die mit MAX-Leistung lädt (z. B. \"Power Mode\", \"Boost\").",
-          "charge_mode_value_solar": "Wallbox-Option, die PV-Überschuss folgt (z. B. \"Solar Pure Mode\", \"Eco\")."
+          "charge_mode_value_solar": "Wallbox-Option, die PV-Überschuss folgt (z. B. \"Solar Pure Mode\", \"Eco\").",
+          "entity_control_hold": "Auto/An: alle 30 s nachschreiben. Aus: einmal schreiben, dann nicht mehr."
         }
       },
       "add_device_vehicle_status": {
@@ -458,7 +462,8 @@
         "data": {
           "charge_mode_value_lock": "Aus",
           "charge_mode_value_power": "An",
-          "charge_mode_value_solar": "Solaroptimiert"
+          "charge_mode_value_solar": "Solaroptimiert",
+          "entity_control_hold": "Halten der Lademodus-Entität"
         },
         "data_description": {
           "charge_mode_value_lock": "Wallbox-Option, die das Laden SPERRT.",
@@ -527,7 +532,7 @@
         "data": {
           "value_on": "Wert für: Gerät an",
           "value_off": "Wert für: Gerät aus",
-          "entity_control_hold": "Wert regelmäßig nachschreiben?"
+          "entity_control_hold": "Halten der Steuer-Entität"
         },
         "data_description": {
           "value_on": "Beispiele: Number 16, Select Erhöht, Switch on.",

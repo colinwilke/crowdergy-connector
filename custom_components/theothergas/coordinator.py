@@ -892,9 +892,10 @@ class CrowdergyCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
             )
             if dev is None:
                 continue
+            # Hold-Mode: auto (Default) und always rewriten, never skipt.
             mode = (
-                dev.get(CONF_ENTITY_CONTROL_HOLD, ENTITY_CONTROL_HOLD_ALWAYS)
-                or ENTITY_CONTROL_HOLD_ALWAYS
+                dev.get(CONF_ENTITY_CONTROL_HOLD)
+                or ENTITY_CONTROL_HOLD_AUTO
             )
             if mode == ENTITY_CONTROL_HOLD_NEVER:
                 continue  # user opted out of periodic rewriting
@@ -1280,10 +1281,22 @@ class CrowdergyCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
     def _start_charge_mode_hold(self, device_id: str) -> None:
         """Replace any existing charge_mode hold task for this device.
         Idempotent — cancelling a not-yet-started task is a no-op.
+
+        Respektiert ENTITY_CONTROL_HOLD: auto/always → hold-loop läuft,
+        never → User-Opt-Out, kein Re-Write nach dem ersten Apply.
         """
         prev = self._charge_mode_hold_tasks.pop(device_id, None)
         if prev is not None and not prev.done():
             prev.cancel()
+        dev = next(
+            (d for d in self.devices if d.get(CONF_DEVICE_ID) == device_id),
+            None,
+        )
+        if dev is None:
+            return
+        mode = dev.get(CONF_ENTITY_CONTROL_HOLD) or ENTITY_CONTROL_HOLD_AUTO
+        if mode == ENTITY_CONTROL_HOLD_NEVER:
+            return
         self._charge_mode_hold_tasks[device_id] = self.hass.async_create_task(
             self._charge_mode_hold_loop(device_id),
             name=f"theothergas_charge_mode_hold_{device_id}",
@@ -1569,7 +1582,7 @@ class CrowdergyCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
         # (warmwasser, Kostal Modbus regs) need the periodic write to
         # ever take effect, and the rewrite is harmless on devices
         # that hold fine on their own.
-        mode = dev.get(CONF_ENTITY_CONTROL_HOLD) or ENTITY_CONTROL_HOLD_ALWAYS
+        mode = dev.get(CONF_ENTITY_CONTROL_HOLD) or ENTITY_CONTROL_HOLD_AUTO
         if mode == ENTITY_CONTROL_HOLD_NEVER:
             return
 
