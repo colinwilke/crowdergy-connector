@@ -52,10 +52,10 @@ class CrowdergyActiveSwitch(
     """
 
     _attr_has_entity_name = True
-    # "Crowdergy_" prefix matches the rest of the connector-injected
-    # entities, so HA dashboards don't blur the Crowdergize switch
-    # with whatever the user's underlying integration calls things.
-    _attr_name = "Crowdergy_Crowdergize"
+    # User-facing UI uses "Crowdergy AI" as the brand for the per-device
+    # consent toggle. Code/API/DB stay on the internal Crowdergize naming
+    # — see project_crowdergy_ai_branding memory.
+    _attr_name = "Crowdergy AI"
     _attr_icon = "mdi:transmission-tower"
 
     def __init__(
@@ -68,7 +68,10 @@ class CrowdergyActiveSwitch(
         self._attr_unique_id = f"{self._device_id}_is_active"
         self._attr_device_info = get_device_info(device)
         device_slug = slugify(device.get(CONF_DEVICE_NAME, "device"))
-        self._attr_suggested_object_id = f"crowdergy_{device_slug}_crowdergize"
+        # `suggested_object_id` only seeds NEW entities — existing
+        # `switch.crowdergy_xxx_crowdergize` IDs stay as they are (HA
+        # entity registry keeps them). Only the displayed name flips.
+        self._attr_suggested_object_id = f"crowdergy_{device_slug}_ai"
 
     @property
     def is_on(self) -> bool | None:

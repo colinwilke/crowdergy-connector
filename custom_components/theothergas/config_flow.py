@@ -258,22 +258,17 @@ def _config_mode_schema(
     """
     d = defaults or {}
     default_mode = d.get(CONF_DEVICE_CONFIG_MODE) or CONFIG_MODE_MANUAL
+    # Inline labels weggelassen damit der `selector.config_mode.options`
+    # Translation-Block aus de.json/strings.json greift — sonst überstimmen
+    # die Inline-Werte die Übersetzungen.
     return vol.Schema({
         vol.Required(
             CONF_DEVICE_CONFIG_MODE, default=default_mode
         ): selector.SelectSelector(
             selector.SelectSelectorConfig(
-                options=[
-                    selector.SelectOptionDict(
-                        value=CONFIG_MODE_MANUAL,
-                        label="Manuell — alle Sensoren und Steuer-Entitäten einzeln angeben (für SG-Ready, Modbus-Setups und sonstige)",
-                    ),
-                    selector.SelectOptionDict(
-                        value=CONFIG_MODE_CLIMATE,
-                        label="Climate-Entity — eine climate.* Entität gibt Steuerung, Ist-Temperatur und Heiz-/Kühl-Modi gleichzeitig her (Daikin, Mitsubishi, generic_thermostat etc.)",
-                    ),
-                ],
+                options=[CONFIG_MODE_MANUAL, CONFIG_MODE_CLIMATE],
                 mode=selector.SelectSelectorMode.LIST,
+                translation_key="config_mode",
             )
         ),
     })
@@ -565,24 +560,20 @@ def _hold_mode_field(defaults: dict[str, Any] | None = None) -> Any:
 def _hold_mode_selector() -> selector.SelectSelector:
     """3-Option Dropdown — gilt für entity_control (heating/warmwater/
     generic) UND für entity_charge_mode (wallbox/battery). Auto =
-    aktuell wie Always, später ggf. mit Smart-Verifikation."""
+    aktuell wie Always, später ggf. mit Smart-Verifikation.
+    Labels kommen aus den `selector.entity_control_hold.options`
+    Translation-Blöcken (de.json/strings.json) — Inline-Labels würden
+    die Übersetzungen überschreiben.
+    """
     return selector.SelectSelector(
         selector.SelectSelectorConfig(
             options=[
-                selector.SelectOptionDict(
-                    value=ENTITY_CONTROL_HOLD_AUTO,
-                    label="Auto (empfohlen — alle 30 s nachschreiben)",
-                ),
-                selector.SelectOptionDict(
-                    value=ENTITY_CONTROL_HOLD_ALWAYS,
-                    label="An (explizit alle 30 s nachschreiben)",
-                ),
-                selector.SelectOptionDict(
-                    value=ENTITY_CONTROL_HOLD_NEVER,
-                    label="Aus (nur einmal schreiben — für Geräte die bei jedem Schreiben piepen)",
-                ),
+                ENTITY_CONTROL_HOLD_AUTO,
+                ENTITY_CONTROL_HOLD_ALWAYS,
+                ENTITY_CONTROL_HOLD_NEVER,
             ],
             mode=selector.SelectSelectorMode.DROPDOWN,
+            translation_key="entity_control_hold",
         )
     )
 
