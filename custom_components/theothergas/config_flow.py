@@ -750,85 +750,6 @@ def _shares_hardware_schema(
     })
 
 
-def _cooling_schema(
-    hass: Any,
-    entity_control: str,
-    defaults: dict[str, Any] | None = None,
-    *,
-    new_device: bool,
-) -> vol.Schema:
-    """v2.5 form for the cooling-capable extension.
-
-    Three fields, all optional:
-      * `supports_cooling` — Boolean capability flag. Default off for
-        new devices (most heat-pumps are heating-only); the edit-flow
-        defaults to the stored value.
-      * `entity_cool_control` — Optional separate cooling-side
-        control entity. Leave blank for SG-Ready WPs where heating
-        and cooling share the same select/relay (the connector then
-        relies on heating-side `entity_control` only, or, for
-        `climate.*` entities, calls `set_hvac_mode("cool")` against
-        the existing entity_control).
-      * `value_cool_on` / `value_cool_off` — the values to write
-        when `entity_cool_control` is set. Mirror the heating-side
-        `value_on` / `value_off` pattern.
-
-    Value-Felder werden typ-bewusst gerendert: ist die referenzierte
-    Steuer-Entity ein `select` / `input_select` / `climate`, kommen
-    die Optionen als Dropdown statt freiem Textfeld. Prio:
-    `entity_cool_control` (separate Kühl-Entity) → `entity_control`
-    (SG-Ready: gleiche Entity für Heizen+Kühlen) → Plain-Text.
-    """
-    d = defaults or {}
-    cool_entity = d.get(CONF_ENTITY_COOL_CONTROL, "") or entity_control
-    value_sel = _value_selector(hass, cool_entity)
-    field_type: Any = value_sel if value_sel is not None else selector.TextSelector()
-
-    def _value_field(key: str) -> Any:
-        default = d.get(key, "")
-        if default == "":
-            return vol.Optional(key)
-        return vol.Optional(key, default=str(default))
-
-    return vol.Schema({
-        vol.Optional(
-            CONF_SUPPORTS_COOLING,
-            default=d.get(CONF_SUPPORTS_COOLING, False),
-        ): selector.BooleanSelector(),
-        # EntitySelector rejects "" — use _entity_field so the default
-        # is omitted entirely when no cooling entity is stored. Without
-        # this, saving the form with cooling left off raised
-        # "Entity is neither a valid entity ID nor a valid UUID".
-        _entity_field(CONF_ENTITY_COOL_CONTROL, d): selector.EntitySelector(
-            selector.EntitySelectorConfig(
-                domain=["select", "input_select", "switch", "input_boolean", "climate"]
-            )
-        ),
-        _value_field(CONF_VALUE_COOL_ON): field_type,
-        _value_field(CONF_VALUE_COOL_OFF): field_type,
-    })
-
-
-def _included_in_haushalt_schema(
-    defaults: dict[str, Any] | None = None,
-    *,
-    new_device: bool,
-) -> vol.Schema:
-    """v2.4 form: single Boolean — "Im Haushaltsverbrauch enthalten?".
-
-    `new_device=True` pre-selects Ja (the common case: one home-meter
-    that sees every classic consumer). Edit-flow passes False so the
-    stored value drives the default.
-    """
-    d = defaults or {}
-    default = d.get(CONF_INCLUDED_IN_HAUSHALT, True if new_device else False)
-    return vol.Schema({
-        vol.Optional(
-            CONF_INCLUDED_IN_HAUSHALT, default=default
-        ): selector.BooleanSelector(),
-    })
-
-
 # ── Persistence helpers ─────────────────────────────────────────────────────
 
 
@@ -1641,71 +1562,6 @@ class CrowdergyConfigFlow(ConfigFlow, domain=DOMAIN):
             },
         )
 
-    async def async_step_device_cooling(
-        self, user_input: dict[str, Any] | None = None
-    ) -> ConfigFlowResult:
-        """v2.5 step: cooling-capable extension for heating-family
-        devices (reversible WPs, split-ACs). All fields optional —
-        leave supports_cooling off and the rest blank for a
-        heating-only WP. For SG-Ready WPs that gain a cooling mode
-        via the SAME entity_control, leave entity_cool_control blank
-        and the connector falls back to the heating-side mapping."""
-        device_type = self._pending_type or "generic"
-        device_name = self._pending_name or ""
-        entity_input = dict(self._pending_entity_input or {})
-        entity_control = entity_input.get(CONF_ENTITY_CONTROL, "")
-
-        if user_input is not None:
-            entity_input[CONF_SUPPORTS_COOLING] = bool(
-                user_input.get(CONF_SUPPORTS_COOLING, False)
-            )
-            entity_input[CONF_ENTITY_COOL_CONTROL] = user_input.get(
-                CONF_ENTITY_COOL_CONTROL, ""
-            )
-            entity_input[CONF_VALUE_COOL_ON] = user_input.get(
-                CONF_VALUE_COOL_ON, ""
-            )
-            entity_input[CONF_VALUE_COOL_OFF] = user_input.get(
-                CONF_VALUE_COOL_OFF, ""
-            )
-            return await self._dispatch_post_entities(entity_input)
-
-        return self.async_show_form(
-            step_id="device_cooling",
-            data_schema=_cooling_schema(self.hass, entity_control, {}, new_device=True),
-            description_placeholders={
-                "device_type": DEVICE_TYPE_LABELS_DE.get(device_type, device_type),
-                "device_name": device_name,
-            },
-        )
-
-    async def async_step_device_included_in_haushalt(
-        self, user_input: dict[str, Any] | None = None
-    ) -> ConfigFlowResult:
-        """v2.4 step: mark classic-consumer devices whose draw is
-        already counted by the user's haushalt-sensor. Backend
-        subtracts these from the haushalt's reading so kW and kWh
-        aren't doubled. Pre-selected `Ja` (the common case: one
-        home-meter that sees every consumer)."""
-        device_type = self._pending_type or "generic"
-        device_name = self._pending_name or ""
-        entity_input = dict(self._pending_entity_input or {})
-
-        if user_input is not None:
-            entity_input[CONF_INCLUDED_IN_HAUSHALT] = bool(
-                user_input.get(CONF_INCLUDED_IN_HAUSHALT, True)
-            )
-            return await self._dispatch_post_entities(entity_input)
-
-        return self.async_show_form(
-            step_id="device_included_in_haushalt",
-            data_schema=_included_in_haushalt_schema({}, new_device=True),
-            description_placeholders={
-                "device_type": DEVICE_TYPE_LABELS_DE.get(device_type, device_type),
-                "device_name": device_name,
-            },
-        )
-
     async def async_step_device_values(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
@@ -2123,62 +1979,6 @@ class CrowdergyOptionsFlow(OptionsFlow):
             },
         )
 
-    async def async_step_add_device_cooling(
-        self, user_input: dict[str, Any] | None = None
-    ) -> ConfigFlowResult:
-        """Options-flow variant of the v2.5 cooling-capable step."""
-        device_type = self._pending_type or "generic"
-        device_name = self._pending_name or ""
-        entity_input = dict(self._pending_entity_input or {})
-        entity_control = entity_input.get(CONF_ENTITY_CONTROL, "")
-
-        if user_input is not None:
-            entity_input[CONF_SUPPORTS_COOLING] = bool(
-                user_input.get(CONF_SUPPORTS_COOLING, False)
-            )
-            entity_input[CONF_ENTITY_COOL_CONTROL] = user_input.get(
-                CONF_ENTITY_COOL_CONTROL, ""
-            )
-            entity_input[CONF_VALUE_COOL_ON] = user_input.get(
-                CONF_VALUE_COOL_ON, ""
-            )
-            entity_input[CONF_VALUE_COOL_OFF] = user_input.get(
-                CONF_VALUE_COOL_OFF, ""
-            )
-            return await self._dispatch_add_post_entities(entity_input)
-
-        return self.async_show_form(
-            step_id="add_device_cooling",
-            data_schema=_cooling_schema(self.hass, entity_control, {}, new_device=True),
-            description_placeholders={
-                "device_type": DEVICE_TYPE_LABELS_DE.get(device_type, device_type),
-                "device_name": device_name,
-            },
-        )
-
-    async def async_step_add_device_included_in_haushalt(
-        self, user_input: dict[str, Any] | None = None
-    ) -> ConfigFlowResult:
-        """Options-flow variant of the v2.4 haushalt-inclusion picker."""
-        device_type = self._pending_type or "generic"
-        device_name = self._pending_name or ""
-        entity_input = dict(self._pending_entity_input or {})
-
-        if user_input is not None:
-            entity_input[CONF_INCLUDED_IN_HAUSHALT] = bool(
-                user_input.get(CONF_INCLUDED_IN_HAUSHALT, True)
-            )
-            return await self._dispatch_add_post_entities(entity_input)
-
-        return self.async_show_form(
-            step_id="add_device_included_in_haushalt",
-            data_schema=_included_in_haushalt_schema({}, new_device=True),
-            description_placeholders={
-                "device_type": DEVICE_TYPE_LABELS_DE.get(device_type, device_type),
-                "device_name": device_name,
-            },
-        )
-
     async def async_step_add_device_values(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
@@ -2297,30 +2097,6 @@ class CrowdergyOptionsFlow(OptionsFlow):
                     ),
                 }
             ),
-        )
-
-    async def async_step_edit_device_type(
-        self, user_input: dict[str, Any] | None = None
-    ) -> ConfigFlowResult:
-        """Edit-Step 1: type + name with the stored values pre-filled."""
-        target = next(
-            (d for d in self._devices if d.get(CONF_DEVICE_ID) == self._edit_target_id),
-            None,
-        )
-        if target is None:
-            return await self.async_step_init()
-
-        if user_input is not None:
-            self._edit_pending_type = user_input[CONF_DEVICE_TYPE]
-            self._edit_pending_name = user_input[CONF_DEVICE_NAME]
-            return await self.async_step_edit_device_entities()
-
-        return self.async_show_form(
-            step_id="edit_device_type",
-            data_schema=_type_name_schema(defaults=target),
-            description_placeholders={
-                "device_name": target.get(CONF_DEVICE_NAME, ""),
-            },
         )
 
     async def async_step_edit_device_entities(
@@ -2571,78 +2347,6 @@ class CrowdergyOptionsFlow(OptionsFlow):
                 "device_type": DEVICE_TYPE_LABELS_DE.get(device_type, device_type),
                 "device_name": device_name,
                 "entity_vehicle_status": entity_vehicle_status,
-            },
-        )
-
-    async def async_step_edit_device_cooling(
-        self, user_input: dict[str, Any] | None = None
-    ) -> ConfigFlowResult:
-        """Edit-flow variant of the v2.5 cooling-capable step.
-        Pre-fills the stored values so re-saving without touching
-        anything is a true no-op."""
-        target = next(
-            (d for d in self._devices if d.get(CONF_DEVICE_ID) == self._edit_target_id),
-            None,
-        )
-        if target is None:
-            return await self.async_step_init()
-        device_type = self._edit_pending_type or target[CONF_DEVICE_TYPE]
-        device_name = self._edit_pending_name or target[CONF_DEVICE_NAME]
-        entity_input = dict(self._edit_pending_entity_input or {})
-        entity_control = entity_input.get(CONF_ENTITY_CONTROL, "")
-
-        if user_input is not None:
-            entity_input[CONF_SUPPORTS_COOLING] = bool(
-                user_input.get(CONF_SUPPORTS_COOLING, False)
-            )
-            entity_input[CONF_ENTITY_COOL_CONTROL] = user_input.get(
-                CONF_ENTITY_COOL_CONTROL, ""
-            )
-            entity_input[CONF_VALUE_COOL_ON] = user_input.get(
-                CONF_VALUE_COOL_ON, ""
-            )
-            entity_input[CONF_VALUE_COOL_OFF] = user_input.get(
-                CONF_VALUE_COOL_OFF, ""
-            )
-            return await self._dispatch_edit_post_entities(target, entity_input)
-
-        return self.async_show_form(
-            step_id="edit_device_cooling",
-            data_schema=_cooling_schema(self.hass, entity_control, target, new_device=False),
-            description_placeholders={
-                "device_type": DEVICE_TYPE_LABELS_DE.get(device_type, device_type),
-                "device_name": device_name,
-            },
-        )
-
-    async def async_step_edit_device_included_in_haushalt(
-        self, user_input: dict[str, Any] | None = None
-    ) -> ConfigFlowResult:
-        """Edit-flow variant of the v2.4 haushalt-inclusion picker.
-        Pre-fills the stored value so re-saving without touching
-        anything is a true no-op."""
-        target = next(
-            (d for d in self._devices if d.get(CONF_DEVICE_ID) == self._edit_target_id),
-            None,
-        )
-        if target is None:
-            return await self.async_step_init()
-        device_type = self._edit_pending_type or target[CONF_DEVICE_TYPE]
-        device_name = self._edit_pending_name or target[CONF_DEVICE_NAME]
-        entity_input = dict(self._edit_pending_entity_input or {})
-
-        if user_input is not None:
-            entity_input[CONF_INCLUDED_IN_HAUSHALT] = bool(
-                user_input.get(CONF_INCLUDED_IN_HAUSHALT, False)
-            )
-            return await self._dispatch_edit_post_entities(target, entity_input)
-
-        return self.async_show_form(
-            step_id="edit_device_included_in_haushalt",
-            data_schema=_included_in_haushalt_schema(target, new_device=False),
-            description_placeholders={
-                "device_type": DEVICE_TYPE_LABELS_DE.get(device_type, device_type),
-                "device_name": device_name,
             },
         )
 
