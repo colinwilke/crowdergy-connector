@@ -170,23 +170,23 @@
         "submit": "Next"
       },
       "device_battery_values": {
-        "title": "{device_name} — Battery mode mapping",
-        "description": "Which values should Crowdergy write to \"{entity_charge_mode}\" for the three active modes? Typical number values: +max W / 0 / -max W.",
+        "title": "{device_name} — Battery mode values",
+        "description": "Which value should Crowdergy write to \"{entity_charge_mode}\" for each of the four battery modes? All four are required. The Passive value is the most important — it's written every time Crowdergy AI is switched off so the inverter takes over autonomously instead of staying in the last active mode.",
         "data": {
-          "battery_value_charge": "Charge",
-          "battery_value_idle": "Hold SOC",
-          "battery_value_discharge": "Discharge",
-          "entity_control_hold": "Hold mode",
-          "battery_value_passive": "Passive (hand over)"
+          "battery_value_charge": "Charge from grid",
+          "battery_value_discharge": "Discharge to home",
+          "battery_value_idle": "Freeze (hold SOC)",
+          "battery_value_passive": "Passive (hand back to inverter) — required, used on AI-off",
+          "entity_control_hold": "Re-write cadence"
         },
         "data_description": {
-          "battery_value_charge": "Value for force-charging at max power.",
-          "battery_value_idle": "Value for freezing SOC (stops the inverter's PV self-consumption).",
-          "battery_value_discharge": "Value for force-discharging at max power.",
-          "entity_control_hold": "Auto/Always: rewrite every 30 s. Once: write only once.",
-          "battery_value_passive": "Value for 'Passive Mode' — written when the solver wants the inverter to take over battery control (native PV self-consumption). Blank = no write, inverter does its thing."
+          "battery_value_charge": "Value that puts the inverter into force-charge from grid at max power. Number-entity example: +max W (e.g. +5000). Select-entity example: \"Charge\".",
+          "battery_value_discharge": "Value that puts the inverter into force-discharge into the home loads at max power. Number-entity example: −max W (e.g. −5000). Select-entity example: \"Discharge\".",
+          "battery_value_idle": "Value that freezes the SOC — no charge, no discharge. Number-entity example: 0. Select-entity example: \"Hold\". Blocks the inverter's autonomous PV self-consumption.",
+          "battery_value_passive": "Value that hands the battery back to the inverter's autonomous PV self-consumption logic — Crowdergy stops steering. **This value is written on every AI-off transition** so the battery never stays stuck in the last active mode. Required.",
+          "entity_control_hold": "How often Crowdergy re-writes the mode. Auto/Always: every 30 s (recommended — some inverters silently auto-revert). Once: write once and stop."
         },
-        "submit": "Next"
+        "submit": "Save"
       },
       "device_vehicle_status": {
         "title": "{device_name} — Vehicle status mapping",
@@ -387,23 +387,23 @@
         "submit": "Next"
       },
       "add_device_battery_values": {
-        "title": "{device_name} — Battery mode mapping",
-        "description": "Which value should Crowdergy write to \"{entity_charge_mode}\" for each active mode?",
+        "title": "{device_name} — Battery mode values",
+        "description": "Which value should Crowdergy write to \"{entity_charge_mode}\" for each of the four battery modes? All four are required. Passive is written every time AI is switched off so the battery hands back to the inverter.",
         "data": {
-          "battery_value_charge": "Charge",
-          "battery_value_idle": "Hold SOC",
-          "battery_value_discharge": "Discharge",
-          "entity_control_hold": "Hold mode",
-          "battery_value_passive": "Passive (hand over)"
+          "battery_value_charge": "Charge from grid",
+          "battery_value_discharge": "Discharge to home",
+          "battery_value_idle": "Freeze (hold SOC)",
+          "battery_value_passive": "Passive (hand back to inverter) — required, used on AI-off",
+          "entity_control_hold": "Re-write cadence"
         },
         "data_description": {
-          "battery_value_charge": "Value for force-charging.",
-          "battery_value_idle": "Value for freezing SOC.",
-          "battery_value_discharge": "Value for force-discharging.",
-          "entity_control_hold": "Auto/Always: rewrite every 30 s. Once: write only once.",
-          "battery_value_passive": "Value for 'Passive Mode' — written when the solver wants the inverter to take over battery control (native PV self-consumption). Blank = no write, inverter does its thing."
+          "battery_value_charge": "Force-charge from grid at max power.",
+          "battery_value_discharge": "Force-discharge into the home at max power.",
+          "battery_value_idle": "Freeze SOC (no charge, no discharge).",
+          "battery_value_passive": "Hand back to inverter's PV self-consumption. **Written on every AI-off transition.** Required.",
+          "entity_control_hold": "Auto/Always re-writes every 30 s (recommended). Once writes only once."
         },
-        "submit": "Next"
+        "submit": "Save"
       },
       "add_device_vehicle_status": {
         "title": "{device_name} — Vehicle status mapping",
@@ -537,22 +537,22 @@
         }
       },
       "edit_device_battery_values": {
-        "title": "{device_name} — Battery mode mapping",
-        "description": "Adjust which value gets written to \"{entity_charge_mode}\" for each active mode.",
+        "title": "{device_name} — Battery mode values",
+        "description": "Adjust which value gets written to \"{entity_charge_mode}\" for each of the four battery modes. All four are required. Passive is written on every AI-off so the battery hands back to the inverter instead of staying in the last active mode.",
         "submit": "Save",
         "data": {
-          "battery_value_charge": "Charge",
-          "battery_value_idle": "Hold SOC",
-          "battery_value_discharge": "Discharge",
-          "entity_control_hold": "Hold mode",
-          "battery_value_passive": "Passive (hand over)"
+          "battery_value_charge": "Charge from grid",
+          "battery_value_discharge": "Discharge to home",
+          "battery_value_idle": "Freeze (hold SOC)",
+          "battery_value_passive": "Passive (hand back to inverter) — required, used on AI-off",
+          "entity_control_hold": "Re-write cadence"
         },
         "data_description": {
-          "battery_value_charge": "Value for force-charging.",
-          "battery_value_idle": "Value for freezing SOC.",
-          "battery_value_discharge": "Value for force-discharging.",
-          "entity_control_hold": "Auto/Always: rewrite every 30 s. Once: write only once.",
-          "battery_value_passive": "Value for 'Passive Mode' — written when the solver wants the inverter to take over battery control (native PV self-consumption). Blank = no write, inverter does its thing."
+          "battery_value_charge": "Force-charge from grid at max power.",
+          "battery_value_discharge": "Force-discharge into the home at max power.",
+          "battery_value_idle": "Freeze SOC (no charge, no discharge).",
+          "battery_value_passive": "Hand back to inverter's PV self-consumption. **Written on every AI-off transition.** Required.",
+          "entity_control_hold": "Auto/Always re-writes every 30 s (recommended). Once writes only once."
         }
       },
       "edit_device_vehicle_status": {

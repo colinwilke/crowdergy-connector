@@ -756,12 +756,14 @@ def _charge_mode_values_schema(
 def _battery_values_schema(
     hass, entity_charge_mode: str, defaults: dict[str, Any] | None = None
 ) -> vol.Schema:
-    """Schema for the three battery-mode mappings — Laden / Aus / Entladen
-    → the value written to the user's HA-entity (typically a number-entity
-    taking e.g. +5000 / 0 / -5000 W). Free-text by default; if the
-    entity happens to be a select with options, render as a dropdown
-    like the wallbox three-mode step. All three fields are optional —
-    modes the user leaves blank get suppressed in the worker dispatch."""
+    """Schema für die vier Batterie-Modus-Werte. Alle vier sind
+    Pflichtfelder wenn ein entity_charge_mode gemapped ist —
+    der „Passiv"-Wert ist **kritisch** weil er bei AI-Aus immer in
+    die HA-Entity geschrieben wird (definierter Safe-Default,
+    Inverter übernimmt PV-Self-Consumption autonom). Ohne Pflicht-
+    feld blieb die Battery nach AI-Aus im letzten aktiven Mode
+    hängen → User-Report 2026-05-31 Battery wurde unerwartet
+    weiter ge-Halten."""
     d = defaults or {}
 
     field_type: Any = str
@@ -781,17 +783,17 @@ def _battery_values_schema(
                     )
                 )
 
-    def _field(key: str) -> Any:
-        default = d.get(key) or ""
+    def _required(key: str) -> Any:
+        default = d.get(key)
         if default:
-            return vol.Optional(key, default=default)
-        return vol.Optional(key)
+            return vol.Required(key, default=default)
+        return vol.Required(key)
 
     return vol.Schema({
-        _field(CONF_BATTERY_VALUE_CHARGE): field_type,
-        _field(CONF_BATTERY_VALUE_IDLE): field_type,
-        _field(CONF_BATTERY_VALUE_DISCHARGE): field_type,
-        _field(CONF_BATTERY_VALUE_PASSIVE): field_type,
+        _required(CONF_BATTERY_VALUE_CHARGE): field_type,
+        _required(CONF_BATTERY_VALUE_DISCHARGE): field_type,
+        _required(CONF_BATTERY_VALUE_IDLE): field_type,
+        _required(CONF_BATTERY_VALUE_PASSIVE): field_type,
         _hold_mode_field(d): _hold_mode_selector(),
     })
 

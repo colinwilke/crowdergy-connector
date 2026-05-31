@@ -170,22 +170,22 @@
         }
       },
       "device_battery_values": {
-        "title": "{device_name} — Batterie-Modi zuordnen",
-        "description": "Welche Werte soll Crowdergy auf „{entity_charge_mode}“ für die drei aktiven Modi schreiben? Typische Number-Werte: +max W / 0 / −max W (z. B. +5000 / 0 / −5000). Felder leer lassen blendet den jeweiligen Modus aus — die Batterie folgt dann passiv dem Wechselrichter-Default.",
-        "submit": "Weiter",
+        "title": "{device_name} — Batterie-Modi konfigurieren",
+        "description": "Welcher Wert soll auf „{entity_charge_mode}“ geschrieben werden, wenn die AI einen der vier Modi wählt? Alle vier Werte sind Pflicht. Der Passiv-Wert ist besonders wichtig: er wird bei jedem AI-Aus geschrieben, damit die Batterie zurück an den Wechselrichter übergibt und nicht im letzten aktiven Modus hängen bleibt.",
+        "submit": "Speichern",
         "data": {
-          "battery_value_charge": "Laden",
-          "battery_value_idle": "SOC halten",
-          "battery_value_discharge": "Entladen",
-          "entity_control_hold": "Hold-Modus",
-          "battery_value_passive": "Passiv (an WR)"
+          "battery_value_charge": "Aus dem Netz laden",
+          "battery_value_discharge": "Ins Haus entladen",
+          "battery_value_idle": "Einfrieren (SOC halten)",
+          "battery_value_passive": "Passiv (an Wechselrichter zurückgeben) — Pflicht, bei AI-Aus",
+          "entity_control_hold": "Nachschreib-Rhythmus"
         },
         "data_description": {
-          "battery_value_charge": "Wert für „Force-Laden mit Max-Leistung“ (z. B. aus dem Netz für Tibber-Niedrigtarif).",
-          "battery_value_idle": "Wert für „SOC einfrieren“ (Wechselrichter stoppt die PV-Eigenverbrauchs-Ladung).",
-          "battery_value_discharge": "Wert für „Force-Entladen mit Max-Leistung“ (z. B. in den Haushalt bei teuren Tarif-Stunden).",
-          "entity_control_hold": "Auto/Immer: alle 30 s nachschreiben. Einmalig: nur einmal schreiben.",
-          "battery_value_passive": "Wert für 'Passive Mode' — wenn der Solver die Batterie-Steuerung an den Wechselrichter abgeben soll (native PV-Eigenverbrauch). Leer = kein Schreiben, Inverter macht selbst."
+          "battery_value_charge": "Wert für Force-Laden aus dem Netz mit Max-Leistung. Number-Beispiel: +max W (z. B. +5000). Select-Beispiel: „Laden“.",
+          "battery_value_discharge": "Wert für Force-Entladen in den Haushalt mit Max-Leistung. Number-Beispiel: −max W (z. B. −5000). Select-Beispiel: „Entladen“.",
+          "battery_value_idle": "Wert zum Einfrieren der SOC — kein Laden, kein Entladen. Number-Beispiel: 0. Select-Beispiel: „Halten“. Blockiert auch den PV-Eigenverbrauch des Wechselrichters.",
+          "battery_value_passive": "Wert um die Batterie an die autonome PV-Eigenverbrauchs-Logik des Wechselrichters zurückzugeben — Crowdergy stoppt die Steuerung. **Wird bei jedem AI-Aus geschrieben**, damit die Batterie nie im letzten aktiven Modus hängen bleibt. Pflichtfeld.",
+          "entity_control_hold": "Wie oft Crowdergy den Modus nachschreibt. Auto/Immer: alle 30 s (empfohlen — manche Wechselrichter fallen still zurück). Einmalig: nur einmal."
         }
       },
       "device_vehicle_status": {
@@ -387,22 +387,22 @@
         }
       },
       "add_device_battery_values": {
-        "title": "{device_name} — Batterie-Modi zuordnen",
-        "description": "Welche Werte soll Crowdergy auf „{entity_charge_mode}“ für die drei aktiven Modi schreiben? Typische Number-Werte: +max W / 0 / −max W. Felder leer lassen blendet den jeweiligen Modus aus.",
-        "submit": "Weiter",
+        "title": "{device_name} — Batterie-Modi konfigurieren",
+        "description": "Welcher Wert soll auf „{entity_charge_mode}“ geschrieben werden, wenn die AI einen der vier Modi wählt? Alle vier Werte sind Pflicht. Passiv wird bei jedem AI-Aus geschrieben, damit die Batterie zurück an den Wechselrichter übergibt.",
+        "submit": "Speichern",
         "data": {
-          "battery_value_charge": "Laden",
-          "battery_value_idle": "SOC halten",
-          "battery_value_discharge": "Entladen",
-          "entity_control_hold": "Hold-Modus",
-          "battery_value_passive": "Passiv (an WR)"
+          "battery_value_charge": "Aus dem Netz laden",
+          "battery_value_discharge": "Ins Haus entladen",
+          "battery_value_idle": "Einfrieren (SOC halten)",
+          "battery_value_passive": "Passiv (an Wechselrichter zurückgeben) — Pflicht, bei AI-Aus",
+          "entity_control_hold": "Nachschreib-Rhythmus"
         },
         "data_description": {
-          "battery_value_charge": "Wert für „Force-Laden mit Max-Leistung“.",
-          "battery_value_idle": "Wert für „SOC einfrieren“ (Wechselrichter stoppt die PV-Eigenverbrauchs-Ladung).",
-          "battery_value_discharge": "Wert für „Force-Entladen mit Max-Leistung“.",
-          "entity_control_hold": "Auto/Immer: alle 30 s nachschreiben. Einmalig: nur einmal schreiben.",
-          "battery_value_passive": "Wert für 'Passive Mode' — wenn der Solver die Batterie-Steuerung an den Wechselrichter abgeben soll (native PV-Eigenverbrauch). Leer = kein Schreiben, Inverter macht selbst."
+          "battery_value_charge": "Wert für Force-Laden aus dem Netz mit Max-Leistung.",
+          "battery_value_discharge": "Wert für Force-Entladen in den Haushalt mit Max-Leistung.",
+          "battery_value_idle": "Wert zum Einfrieren der SOC — kein Laden, kein Entladen.",
+          "battery_value_passive": "Wert um an die PV-Eigenverbrauchs-Logik des Wechselrichters zurückzugeben. **Wird bei jedem AI-Aus geschrieben.** Pflichtfeld.",
+          "entity_control_hold": "Auto/Immer schreibt alle 30 s nach (empfohlen). Einmalig schreibt nur einmal."
         }
       },
       "add_device_vehicle_status": {
@@ -537,22 +537,22 @@
         }
       },
       "edit_device_battery_values": {
-        "title": "{device_name} — Batterie-Modi zuordnen",
-        "description": "Welche Werte soll Crowdergy auf „{entity_charge_mode}“ für die drei aktiven Modi schreiben? Felder leer lassen blendet den jeweiligen Modus aus.",
+        "title": "{device_name} — Batterie-Modi konfigurieren",
+        "description": "Welcher Wert soll auf „{entity_charge_mode}“ geschrieben werden, wenn die AI einen der vier Modi wählt? Alle vier Werte sind Pflicht. Passiv wird bei jedem AI-Aus geschrieben, damit die Batterie zurück an den Wechselrichter übergibt.",
         "submit": "Speichern",
         "data": {
-          "battery_value_charge": "Laden",
-          "battery_value_idle": "SOC halten",
-          "battery_value_discharge": "Entladen",
-          "entity_control_hold": "Hold-Modus",
-          "battery_value_passive": "Passiv (an WR)"
+          "battery_value_charge": "Aus dem Netz laden",
+          "battery_value_discharge": "Ins Haus entladen",
+          "battery_value_idle": "Einfrieren (SOC halten)",
+          "battery_value_passive": "Passiv (an Wechselrichter zurückgeben) — Pflicht, bei AI-Aus",
+          "entity_control_hold": "Nachschreib-Rhythmus"
         },
         "data_description": {
-          "battery_value_charge": "Wert für „Force-Laden mit Max-Leistung“.",
-          "battery_value_idle": "Wert für „SOC einfrieren“.",
-          "battery_value_discharge": "Wert für „Force-Entladen mit Max-Leistung“.",
-          "entity_control_hold": "Auto/Immer: alle 30 s nachschreiben. Einmalig: nur einmal schreiben.",
-          "battery_value_passive": "Wert für 'Passive Mode' — wenn der Solver die Batterie-Steuerung an den Wechselrichter abgeben soll (native PV-Eigenverbrauch). Leer = kein Schreiben, Inverter macht selbst."
+          "battery_value_charge": "Wert für Force-Laden aus dem Netz mit Max-Leistung.",
+          "battery_value_discharge": "Wert für Force-Entladen in den Haushalt mit Max-Leistung.",
+          "battery_value_idle": "Wert zum Einfrieren der SOC — kein Laden, kein Entladen.",
+          "battery_value_passive": "Wert um an die PV-Eigenverbrauchs-Logik des Wechselrichters zurückzugeben. **Wird bei jedem AI-Aus geschrieben.** Pflichtfeld.",
+          "entity_control_hold": "Auto/Immer schreibt alle 30 s nach (empfohlen). Einmalig schreibt nur einmal."
         }
       },
       "edit_device_vehicle_status": {
