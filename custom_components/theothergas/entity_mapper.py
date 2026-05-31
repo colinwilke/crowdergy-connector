@@ -416,40 +416,57 @@ def group_candidates_by_device(
     hass: HomeAssistant,
     entities: list[EntityMeta],
 ) -> list[DeviceGroup]:
-    """Bündele alle Mapping-Kandidaten pro HA-DeviceRegistry-Eintrag
-    zu einer Crowdergy-`DeviceGroup`. Entities ohne device_id landen
-    in einer Sammel-Gruppe pro Crowdergy-Typ. Eine HA-Device kann
-    mehrere Crowdergy-Typen bedienen (z.B. Fronius-Inverter mit
-    solar + battery + grid am gleichen DeviceEntry) — die wird in
-    eine Gruppe pro Typ gesplittet, damit der User pro Crowdergy-
-    Device eine eigene Card im Confirm-Step sieht.
+    """Reduziert alle Kandidaten auf **maximal eine Gruppe pro Crowdergy-
+    Typ** — der „best guess" pro Typ.
+
+    Vorgehen (v3.1.1, nach User-Feedback v3.1.0 ergab 35 Cards bei einem
+    realen Setup, was unbenutzbar war):
+    1. Alle Kandidaten pro Typ sammeln.
+    2. Pro Typ: Kandidaten nach HA-device_id clustern und das Cluster
+       mit dem höchsten kombinierten Score (Σ confidence über alle
+       distinkten Slots) wählen — der beste „Container" für diesen Typ.
+    3. Aus dem Sieger-Cluster pro Slot den höchst-konfidenten
+       Kandidaten ziehen.
+    4. Eine DeviceGroup pro Typ in der Output-Liste.
+
+    Wer mehrere Geräte desselben Typs hat (zwei Wallboxen, mehrere
+    Generics) ergänzt sie nach dem Auto-Setup via OptionsFlow / „Gerät
+    hinzufügen". P1-Hypothese: 90 % der Setups haben pro Typ höchstens
+    ein Crowdergy-relevantes Gerät.
     """
     dev_reg = dr.async_get(hass)
-    # device_id → device_type → list[MappingCandidate]
-    bucket: dict[tuple[str | None, str], list[MappingCandidate]] = {}
+
+    # Pro Crowdergy-Typ alle Kandidaten sammeln, gruppiert nach HA-
+    # device_id. Cluster-Score = Σ confidence über distinkte Slots
+    # (mehr verschiedene Slots = vollständigeres Gerät = besser).
+    by_type: dict[str, dict[str | None, dict[str, MappingCandidate]]] = {}
     for meta in entities:
         for cand in classify_entity(meta):
-            if cand.confidence < HEURISTIC_REJECT:
+            if cand.confidence < HEURISTIC_REJECT or cand.slot is None:
                 continue
             if cand.device_type is None:
                 continue
-            key = (meta.device_id, cand.device_type)
-            bucket.setdefault(key, []).append(cand)
+            cluster = by_type.setdefault(cand.device_type, {}).setdefault(
+                meta.device_id, {}
+            )
+            existing = cluster.get(cand.slot)
+            if existing is None or cand.confidence > existing.confidence:
+                cluster[cand.slot] = cand
 
     groups: list[DeviceGroup] = []
-    for (dev_id, dtype), cands in bucket.items():
-        # Pro Slot nur den besten Kandidaten behalten
-        best_by_slot: dict[str, MappingCandidate] = {}
-        for c in cands:
-            if c.slot is None:
-                continue
-            existing = best_by_slot.get(c.slot)
-            if existing is None or c.confidence > existing.confidence:
-                best_by_slot[c.slot] = c
+    for dtype, clusters in by_type.items():
+        if not clusters:
+            continue
+        # Score jeden Cluster, wähle das beste. Tie-Break: mehr Slots
+        # gewinnt vor mehr Confidence-Summe (vollständiger ist besser
+        # als „nur ein Power-Sensor mit 95 %").
+        def _score(slots: dict[str, MappingCandidate]) -> tuple[int, float]:
+            return (len(slots), sum(c.confidence for c in slots.values()))
 
-        # Sinnvoller Default-Name aus dem HA-DeviceRegistry, sonst
-        # aus den Tokens / dem Typ.
-        device_entry = dev_reg.async_get(dev_id) if dev_id else None
+        best_dev_id, best_slots = max(clusters.items(), key=lambda kv: _score(kv[1]))
+
+        # Suggested-Name vom HA-DeviceRegistry, Fallback auf Typ-Default.
+        device_entry = dev_reg.async_get(best_dev_id) if best_dev_id else None
         if device_entry is not None and device_entry.name_by_user:
             name = device_entry.name_by_user
         elif device_entry is not None and device_entry.name:
@@ -461,15 +478,20 @@ def group_candidates_by_device(
             DeviceGroup(
                 suggested_type=dtype,        # type: ignore[arg-type]
                 suggested_name=name,
-                ha_device_id=dev_id,
-                candidates=list(best_by_slot.values()),
+                ha_device_id=best_dev_id,
+                candidates=list(best_slots.values()),
             )
         )
 
-    # Sortiert nach Confidence absteigend — User sieht die sichersten
-    # Gruppen zuerst, die wackeligen wandern nach unten und kriegen
-    # mehr Aufmerksamkeit.
-    groups.sort(key=lambda g: g.avg_confidence, reverse=True)
+    # Stabile, gut lesbare Reihenfolge: solar zuerst, dann battery,
+    # grid, heatpump-family, wallbox, generic — entspricht der iOS-
+    # Tile-Sortierung.
+    order = {
+        "solar": 0, "battery": 1, "grid": 2,
+        "heating": 3, "warmwater": 4, "wallbox": 5,
+        "generic": 6, "haushalt": 7,
+    }
+    groups.sort(key=lambda g: order.get(g.suggested_type, 99))
     return groups
 
 
