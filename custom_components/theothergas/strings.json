@@ -31,6 +31,19 @@
         },
         "submit": "Next"
       },
+      "setup_mode": {
+        "title": "Setup style",
+        "description": "Choose how to register your devices. Auto-Setup scans your Home Assistant instance and suggests devices — you confirm or edit each one. Manual Setup walks you through every device by hand.",
+        "data": {
+          "setup_mode": "Setup style"
+        },
+        "submit": "Next"
+      },
+      "auto_confirm": {
+        "title": "Detected devices ({device_count})",
+        "description": "We scanned your HA instance and found these candidates. Confidence is shown per group; uncheck \"Include\" to skip a device. After confirming, you'll be asked the device-specific mode values (Aus/An, Lock/Solar/Power, …) as usual.",
+        "submit": "Confirm all"
+      },
       "device_type": {
         "title": "Device #{device_number}",
         "description": "Pick a device type and name. In the next step you'll link the related Home Assistant entities.",

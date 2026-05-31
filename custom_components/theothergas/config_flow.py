@@ -60,6 +60,10 @@ from .const import (
     CONF_ENTITY_COOL_CONTROL,
     CONF_VALUE_COOL_ON,
     CONF_VALUE_COOL_OFF,
+    CONF_SETUP_MODE,
+    SETUP_MODE_AUTO,
+    SETUP_MODE_MANUAL,
+    HEURISTIC_ACCEPT,
     ENTITY_CONTROL_HOLD_ALWAYS,
     ENTITY_CONTROL_HOLD_AUTO,
     ENTITY_CONTROL_HOLD_NEVER,
@@ -68,6 +72,7 @@ from .const import (
     DOMAIN,
     USER_AGENT,
 )
+from .entity_mapper import DeviceGroup, discover_devices
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -1273,6 +1278,11 @@ class CrowdergyConfigFlow(ConfigFlow, domain=DOMAIN):
         self._pending_config_mode: str = CONFIG_MODE_MANUAL
         # Entity-mapping kept between step 2 and step 3 (values).
         self._pending_entity_input: dict[str, Any] | None = None
+        # v3.1 Auto-Setup state. Erkannte Geräte-Gruppen aus dem
+        # entity_mapper-Scan + die FIFO der vom User confirm'd-Devices
+        # die noch durch den klassischen Value-Step-Pfad müssen.
+        self._auto_groups: list[DeviceGroup] = []
+        self._auto_queue: list[dict[str, Any]] = []
 
     @staticmethod
     @callback
@@ -1333,7 +1343,7 @@ class CrowdergyConfigFlow(ConfigFlow, domain=DOMAIN):
             self._data[CONF_ENTITY_OUTDOOR_TEMP] = user_input.get(
                 CONF_ENTITY_OUTDOOR_TEMP, ""
             )
-            return await self.async_step_device_type()
+            return await self.async_step_setup_mode()
 
         # Pre-fill from HA's configured coordinates so the user usually
         # just hits Submit. Resolved once per fresh location step; if the
@@ -1352,6 +1362,210 @@ class CrowdergyConfigFlow(ConfigFlow, domain=DOMAIN):
                 }
             ),
         )
+
+    # ── v3.1 Auto-Setup-Pfad ───────────────────────────────────────
+
+    async def async_step_setup_mode(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Erster Schritt nach Login + Standort: Manuell vs Auto.
+
+        Per ConfigEntry fix gewählt — wer den Modus später wechseln
+        will, entfernt die Integration und legt sie neu an. Default
+        ist Auto, weil das die deutlich angenehmere UX ist; Manuell
+        bleibt als Escape-Hatch für komplexe Setups (Modbus-Custom-
+        Sensoren etc.) wo die Heuristik nichts erkennt.
+        """
+        if user_input is not None:
+            mode = user_input.get(CONF_SETUP_MODE, SETUP_MODE_AUTO)
+            self._data[CONF_SETUP_MODE] = mode
+            if mode == SETUP_MODE_AUTO:
+                return await self.async_step_auto_discover()
+            return await self.async_step_device_type()
+
+        return self.async_show_form(
+            step_id="setup_mode",
+            data_schema=vol.Schema(
+                {
+                    vol.Required(CONF_SETUP_MODE, default=SETUP_MODE_AUTO): selector.SelectSelector(
+                        selector.SelectSelectorConfig(
+                            options=[
+                                {"value": SETUP_MODE_AUTO, "label": "Auto-Setup (Crowdergy erkennt deine Geräte)"},
+                                {"value": SETUP_MODE_MANUAL, "label": "Manuelles Setup (alles selbst auswählen)"},
+                            ],
+                            mode=selector.SelectSelectorMode.LIST,
+                            translation_key=CONF_SETUP_MODE,
+                        )
+                    ),
+                }
+            ),
+        )
+
+    async def async_step_auto_discover(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Scant die HA-Instanz, klassifiziert + gruppiert Entities zu
+        Crowdergy-Geräte-Vorschlägen. Findet die Heuristik nichts,
+        fallen wir auf den manuellen Pfad zurück — sonst weiter zur
+        Confirm-Page.
+        """
+        try:
+            groups = await discover_devices(self.hass)
+        except Exception:   # noqa: BLE001 — Heuristik darf den Flow nie blockieren
+            _LOGGER.exception("Auto-Discover failed, falling back to manual flow")
+            groups = []
+
+        # Sicherheits-Filter: nur Gruppen mit min. einem Slot anzeigen,
+        # alles andere ist nur Rauschen.
+        groups = [g for g in groups if g.slot_map()]
+        self._auto_groups = groups
+
+        if not groups:
+            return await self.async_step_device_type()
+        return await self.async_step_auto_confirm()
+
+    async def async_step_auto_confirm(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Listet alle erkannten Gruppen mit pre-filled Entity-Slots.
+        User editiert / bestätigt; auf Submit wandern alle aktivierten
+        Gruppen in `_auto_queue`. Anschließend läuft pro Gruppe der
+        klassische `_dispatch_post_entities`-Pfad — so kommen die Mode-
+        Values-Steps (charge_mode, battery, vehicle_status, value_on)
+        gewohnt durch, nur die Entity-Auswahl ist eben vorbelegt.
+        """
+        if user_input is not None:
+            for idx, group in enumerate(self._auto_groups):
+                prefix = f"d{idx}_"
+                if not user_input.get(f"{prefix}include", True):
+                    continue
+                entity_input: dict[str, Any] = {}
+                # Slot-Felder die wir in der Form gerendert haben (siehe
+                # unten): jedes nicht-leere Resultat ins entity_input.
+                for slot in (
+                    CONF_ENTITY_POWER,
+                    CONF_ENTITY_ENERGY_TOTAL,
+                    CONF_ENTITY_SOC,
+                    CONF_ENTITY_CURRENT_TEMP,
+                    CONF_ENTITY_VEHICLE_STATUS,
+                    CONF_ENTITY_CONTROL,
+                    CONF_ENTITY_CHARGE_MODE,
+                    CONF_ENTITY_CLIMATE,
+                    CONF_ENTITY_WATER_HEATER,
+                ):
+                    val = user_input.get(f"{prefix}{slot}", "")
+                    if val:
+                        entity_input[slot] = val
+                # ConfigMode auto-detect: wenn climate.* oder water_
+                # heater.* drin sind, schalten wir auf CONFIG_MODE_
+                # CLIMATE — die Heuristik hat erkannt dass das eine
+                # gebündelte HA-Entity ist.
+                config_mode = (
+                    CONFIG_MODE_CLIMATE
+                    if entity_input.get(CONF_ENTITY_CLIMATE)
+                       or entity_input.get(CONF_ENTITY_WATER_HEATER)
+                    else CONFIG_MODE_MANUAL
+                )
+                self._auto_queue.append(
+                    {
+                        "device_type": user_input.get(
+                            f"{prefix}type", group.suggested_type
+                        ),
+                        "device_name": user_input.get(
+                            f"{prefix}name", group.suggested_name
+                        ),
+                        "config_mode": config_mode,
+                        "entity_input": entity_input,
+                    }
+                )
+            return await self._auto_process_next()
+
+        # Form-Schema bauen — flach, pro Gruppe ein vol.section mit
+        # include/name/type/<detected-slots>. Sections rendern in HA
+        # als zusammenklappbare Cards, das gibt uns die optische
+        # Gruppierung ohne eigenes UI-Markup.
+        schema_dict: dict[Any, Any] = {}
+        descriptions: dict[str, str] = {}
+
+        for idx, group in enumerate(self._auto_groups):
+            prefix = f"d{idx}_"
+            slot_map = group.slot_map()
+            section_schema: dict[Any, Any] = {
+                vol.Optional(f"{prefix}include", default=True): bool,
+                vol.Required(
+                    f"{prefix}name", default=group.suggested_name
+                ): str,
+                vol.Required(
+                    f"{prefix}type", default=group.suggested_type
+                ): vol.In(DEVICE_TYPES),
+            }
+            for slot in (
+                CONF_ENTITY_POWER,
+                CONF_ENTITY_ENERGY_TOTAL,
+                CONF_ENTITY_SOC,
+                CONF_ENTITY_CURRENT_TEMP,
+                CONF_ENTITY_VEHICLE_STATUS,
+                CONF_ENTITY_CONTROL,
+                CONF_ENTITY_CHARGE_MODE,
+                CONF_ENTITY_CLIMATE,
+                CONF_ENTITY_WATER_HEATER,
+            ):
+                default = slot_map.get(slot, "")
+                section_schema[
+                    vol.Optional(f"{prefix}{slot}", default=default)
+                ] = selector.EntitySelector(
+                    selector.EntitySelectorConfig(multiple=False)
+                )
+            schema_dict[
+                vol.Optional(
+                    f"group_{idx}",
+                    default={
+                        f"{prefix}include": True,
+                        f"{prefix}name": group.suggested_name,
+                        f"{prefix}type": group.suggested_type,
+                        **{
+                            f"{prefix}{slot}": eid
+                            for slot, eid in slot_map.items()
+                        },
+                    },
+                )
+            ] = section(vol.Schema(section_schema), {"collapsed": False})
+            confidence_pct = int(round(group.avg_confidence * 100))
+            marker = "✓" if group.avg_confidence >= HEURISTIC_ACCEPT else "?"
+            descriptions[f"group_{idx}"] = (
+                f"{marker} {group.suggested_name} · "
+                f"{DEVICE_TYPE_LABELS_DE.get(group.suggested_type, group.suggested_type)} "
+                f"({confidence_pct}%)"
+            )
+
+        return self.async_show_form(
+            step_id="auto_confirm",
+            data_schema=vol.Schema(schema_dict),
+            description_placeholders={
+                "device_count": str(len(self._auto_groups)),
+            },
+        )
+
+    async def _auto_process_next(self) -> ConfigFlowResult:
+        """Pop des nächsten Auto-Devices aus der Queue und weiter durch
+        den klassischen Per-Device-Value-Step-Pfad. Queue leer →
+        finish.
+        """
+        if not self._auto_queue:
+            return await self.async_step_finish()
+        pending = self._auto_queue.pop(0)
+        self._pending_type = pending["device_type"]
+        self._pending_name = pending["device_name"]
+        self._pending_config_mode = pending.get("config_mode", CONFIG_MODE_MANUAL)
+        entity_input = pending.get("entity_input", {})
+        # Dispatch geht durch dieselben Value-Steps wie der Manuell-
+        # Flow — Mode-Werte (Lock/Solar/Power, charge/idle/discharge,
+        # plugged/unplugged, value_on/value_off) werden gewohnt
+        # abgefragt; nur die Entity-Auswahl ist aus der Heuristik
+        # vorbelegt. Nach _register_with_entities landet der Flow in
+        # `async_step_add_more` — den hooken wir unten so dass Auto-
+        # Mode dort direkt das nächste Queue-Element nachzieht.
+        return await self._dispatch_post_entities(entity_input)
 
     async def async_step_device_type(
         self, user_input: dict[str, Any] | None = None
@@ -1735,6 +1949,12 @@ class CrowdergyConfigFlow(ConfigFlow, domain=DOMAIN):
     async def async_step_add_more(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
+        # Auto-Mode walking durch die Queue — solange noch was offen
+        # ist, sofort weiter mit dem nächsten Device statt den Menu-
+        # Dialog zu zeigen. Erst wenn die Queue leer ist gibt's das
+        # gewohnte „weiter hinzufügen / fertig" Menü.
+        if self._auto_queue:
+            return await self._auto_process_next()
         return self.async_show_menu(
             step_id="add_more",
             menu_options=["device_type", "finish"],

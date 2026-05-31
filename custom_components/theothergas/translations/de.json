@@ -31,6 +31,19 @@
           "entity_outdoor_temp_c": "Sensor mit Außentemperatur in °C. Leer = Crowdergy nutzt Open-Meteo-Wetterdaten für deinen Stadtteil."
         }
       },
+      "setup_mode": {
+        "title": "Setup-Modus",
+        "description": "Wie willst du deine Geräte einrichten?\n\n• **Auto-Setup** — Crowdergy scannt deine HA-Instanz und schlägt Geräte vor; du bestätigst oder korrigierst jeden Vorschlag. Schnell für gängige Integrationen (Fronius, Sonnen, Keba, Daikin …).\n• **Manuelles Setup** — Du legst jedes Gerät und seine Entitäten Schritt für Schritt selbst an. Sinnvoll bei Custom-Modbus / MQTT-Sensoren wo die Heuristik nichts erkennt.",
+        "data": {
+          "setup_mode": "Setup-Modus"
+        },
+        "submit": "Weiter"
+      },
+      "auto_confirm": {
+        "title": "Erkannte Geräte ({device_count})",
+        "description": "Wir haben deine HA-Instanz durchgescannt und folgende Geräte-Kandidaten erkannt. Die Confidence pro Gruppe siehst du links — ✓ = sicher, ? = bitte prüfen. Einschließen-Haken raus überspringt das Gerät. Nach Bestätigung fragen wir wie gewohnt nach den geräte-spezifischen Modus-Werten (Aus/An, Lock/Solar/Power, …).",
+        "submit": "Alle bestätigen"
+      },
       "device_type": {
         "title": "Gerät #{device_number}",
         "description": "Wähle Gerätetyp und Namen. Im nächsten Schritt verknüpfst du die zugehörigen Home-Assistant-Entitäten.\n\n• Solar — PV-Anlage\n• Batterie — Heimspeicher\n• Wallbox — E-Auto-Lader\n• Heizung — Raumheizungs-WP / Klimaanlage\n• Warmwasser — Brauchwasser-WP\n• Netz — Hauptzähler\n• Haushalt — Grundlast / sonstige Verbraucher am Hauszähler\n• Gerät — sonstiges Schaltbares (Pool, IR-Heizung, …)",

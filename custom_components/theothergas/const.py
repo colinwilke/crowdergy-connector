@@ -266,3 +266,27 @@ CHARGE_MODE_HOLD_INTERVAL = 15
 SSE_STALE_THRESHOLD_S = 60
 
 PLATFORMS = ["sensor", "switch", "binary_sensor"]
+
+# ── Auto-Mapping (Phase 1) ────────────────────────────────────────────
+# v3.1: erster Schritt im Config-Flow ist eine Wahl zwischen
+# „Manuelles Setup" (klassischer Pfad, alle Entities einzeln) und
+# „Auto-Setup" (Heuristik scannt HA, schlägt Devices + Slots vor;
+# User bestätigt). Per ConfigEntry fix gewählt — wer wechseln will,
+# entfernt die Integration und legt sie neu an.
+CONF_SETUP_MODE = "setup_mode"
+SETUP_MODE_MANUAL = "manual"
+SETUP_MODE_AUTO = "auto"
+
+# Confidence-Schwellen für die Heuristik (im entity_mapper):
+# ≥ HEURISTIC_ACCEPT = sicher pre-fill, kein „prüfen"-Marker.
+# < HEURISTIC_REJECT = unklar, zeigt „bitte prüfen" oder skippt den
+#   Slot komplett.
+# dazwischen = pre-fill mit Marker, in Phase 2 zusätzlich an LLM weiter.
+HEURISTIC_ACCEPT = 0.80
+HEURISTIC_REJECT = 0.40
+
+# Phase-2-Gate: solange False bleibt der Auto-Flow rein heuristisch.
+# Erst in Phase 2 wird der Backend-LLM-Call angeknipst. Kill-Switch
+# auch für Phase-2-Setups die das LLM bewusst nicht nutzen wollen.
+MAPPING_LLM_ENABLED = False
+LLM_MIN_CONFIDENCE = 0.5
