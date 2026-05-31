@@ -277,7 +277,10 @@ def classify_entity(meta: EntityMeta) -> list[MappingCandidate]:
     Liefert mehrere Vorschläge wenn die Entity mehrdeutig auf
     verschiedene Slots passt (selten — meistens ein klarer Hit).
     """
-    integration_types = INTEGRATION_HINTS.get(meta.platform, frozenset())
+    # platform kann theoretisch None sein (Template-Sensoren, dynamic
+    # Entities). INTEGRATION_HINTS.get fängt das ab; ohne Match landen
+    # wir auf dem Name-Token-only-Pfad weiter unten.
+    integration_types = INTEGRATION_HINTS.get(meta.platform or "", frozenset())
     slot_guess = _guess_slot(meta)
     if slot_guess is None:
         return []
@@ -462,13 +465,22 @@ def group_candidates_by_device(
     for dtype, clusters in by_type.items():
         if not clusters:
             continue
-        # Score jeden Cluster, wähle das beste. Tie-Break: mehr Slots
-        # gewinnt vor mehr Confidence-Summe (vollständiger ist besser
-        # als „nur ein Power-Sensor mit 95 %").
-        def _score(slots: dict[str, MappingCandidate]) -> tuple[int, float]:
-            return (len(slots), sum(c.confidence for c in slots.values()))
+        # Score jeden Cluster, wähle das beste. Primär mehr Slots,
+        # dann Σ confidence, dann (deterministischer Tie-Break) die
+        # HA-device_id als String — sonst hängt das Resultat bei
+        # Tie von Dict-Insertion-Order ab und ist nicht reproduzierbar
+        # über Setup-Runs hinweg.
+        def _score(
+            kv: tuple[str | None, dict[str, MappingCandidate]],
+        ) -> tuple[int, float, str]:
+            dev_id, slots = kv
+            return (
+                len(slots),
+                sum(c.confidence for c in slots.values()),
+                str(dev_id or ""),
+            )
 
-        best_dev_id, best_slots = max(clusters.items(), key=lambda kv: _score(kv[1]))
+        best_dev_id, best_slots = max(clusters.items(), key=_score)
 
         # Suggested-Name vom HA-DeviceRegistry, Fallback auf Typ-Default.
         device_entry = dev_reg.async_get(best_dev_id) if best_dev_id else None
@@ -705,7 +717,7 @@ async def discover_devices_with_llm(
         return heuristic_groups
 
     try:
-        async with httpx.AsyncClient(timeout=35.0) as client:
+        async with httpx.AsyncClient(timeout=10.0) as client:
             resp = await client.post(
                 f"{api_url}/api/v1/mapping/suggest",
                 headers={
@@ -717,9 +729,26 @@ async def discover_devices_with_llm(
             )
             resp.raise_for_status()
             data = resp.json()
-    except (httpx.HTTPError, ValueError):
-        # LLM-Fail: User bekommt nur die Heuristik-Vorschläge. Auto-
-        # Setup arbeitet eingeschränkt aber bricht nicht ab.
+    except httpx.TimeoutException:
+        import logging
+        logging.getLogger(__name__).warning(
+            "Auto-Setup LLM-Call: Backend antwortet nicht in 10 s, "
+            "fallback auf reine Heuristik."
+        )
+        return heuristic_groups
+    except httpx.HTTPStatusError as err:
+        import logging
+        logging.getLogger(__name__).warning(
+            "Auto-Setup LLM-Call: Backend HTTP %s — fallback auf "
+            "reine Heuristik.", err.response.status_code,
+        )
+        return heuristic_groups
+    except (httpx.HTTPError, ValueError) as err:
+        import logging
+        logging.getLogger(__name__).warning(
+            "Auto-Setup LLM-Call gescheitert (%s) — fallback auf "
+            "reine Heuristik.", err,
+        )
         return heuristic_groups
 
     suggestions = data.get("suggestions", [])
