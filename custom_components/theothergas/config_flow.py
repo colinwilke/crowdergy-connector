@@ -35,7 +35,7 @@ from .const import (
     CONF_ENTITY_VEHICLE_STATUS,
     CONF_ENTITY_CURRENT_TEMP,
     CONF_ENTITY_ENERGY_TOTAL,
-    CONF_ENTITY_ENERGY_DISCHARGED_TOTAL,
+    CONF_ENTITY_ENERGY_DISCHARGED_TOTAL,  # noqa: F401 — used as slot key
     CONF_INVERT_POWER_SIGN,
     CONF_PASSWORD,
     CONF_REFRESH_TOKEN,
@@ -1424,6 +1424,25 @@ class CrowdergyConfigFlow(ConfigFlow, domain=DOMAIN):
             return await self.async_step_device_type()
         return await self.async_step_auto_confirm()
 
+    # Slot-Set das die Auto-Confirm-Form rendert + parsed. Eine Quelle
+    # — sonst stiftet ein Schema-Loop ohne match im Default-Loop einen
+    # „extra keys not allowed"-Voluptuous-Fehler. Power-2 + Discharged
+    # sind drin damit Hersteller-spezifische Zweit-Sensoren (Sonnen-
+    # Charge/Discharge, Grid-Einspeisung) im UI sichtbar sind.
+    _AUTO_SLOTS = (
+        CONF_ENTITY_POWER,
+        CONF_ENTITY_POWER_2,
+        CONF_ENTITY_ENERGY_TOTAL,
+        CONF_ENTITY_ENERGY_DISCHARGED_TOTAL,
+        CONF_ENTITY_SOC,
+        CONF_ENTITY_CURRENT_TEMP,
+        CONF_ENTITY_VEHICLE_STATUS,
+        CONF_ENTITY_CONTROL,
+        CONF_ENTITY_CHARGE_MODE,
+        CONF_ENTITY_CLIMATE,
+        CONF_ENTITY_WATER_HEATER,
+    )
+
     async def async_step_auto_confirm(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
@@ -1449,17 +1468,7 @@ class CrowdergyConfigFlow(ConfigFlow, domain=DOMAIN):
                 if not section_data.get(f"{dtype}_include", True):
                     continue
                 entity_input: dict[str, Any] = {}
-                for slot in (
-                    CONF_ENTITY_POWER,
-                    CONF_ENTITY_ENERGY_TOTAL,
-                    CONF_ENTITY_SOC,
-                    CONF_ENTITY_CURRENT_TEMP,
-                    CONF_ENTITY_VEHICLE_STATUS,
-                    CONF_ENTITY_CONTROL,
-                    CONF_ENTITY_CHARGE_MODE,
-                    CONF_ENTITY_CLIMATE,
-                    CONF_ENTITY_WATER_HEATER,
-                ):
+                for slot in self._AUTO_SLOTS:
                     val = section_data.get(f"{dtype}_{slot}", "")
                     if val:
                         entity_input[slot] = val
@@ -1491,6 +1500,13 @@ class CrowdergyConfigFlow(ConfigFlow, domain=DOMAIN):
         # erkannt wurde, bevor er ins Detail klappt.
         schema_dict: dict[Any, Any] = {}
         summary_lines: list[str] = []
+        # Pro-Section-Description-Placeholder. `solar_conf` / `battery_
+        # _conf` etc. werden in strings.json sections.<type>.description
+        # referenziert, sodass die Confidence direkt unter der Section-
+        # Überschrift steht (sichtbarer als nur oben in der Summary).
+        section_placeholders: dict[str, str] = {
+            f"{dtype}_conf": "—" for dtype in DEVICE_TYPES
+        }
 
         for dtype, group in groups_by_type.items():
             slot_map = group.slot_map()
@@ -1503,36 +1519,26 @@ class CrowdergyConfigFlow(ConfigFlow, domain=DOMAIN):
                     f"{dtype}_type", default=group.suggested_type
                 ): vol.In(DEVICE_TYPES),
             }
-            for slot in (
-                CONF_ENTITY_POWER,
-                CONF_ENTITY_ENERGY_TOTAL,
-                CONF_ENTITY_SOC,
-                CONF_ENTITY_CURRENT_TEMP,
-                CONF_ENTITY_VEHICLE_STATUS,
-                CONF_ENTITY_CONTROL,
-                CONF_ENTITY_CHARGE_MODE,
-                CONF_ENTITY_CLIMATE,
-                CONF_ENTITY_WATER_HEATER,
-            ):
-                default = slot_map.get(slot, "")
-                section_schema[
-                    vol.Optional(f"{dtype}_{slot}", default=default)
-                ] = selector.EntitySelector(
+            section_defaults: dict[str, Any] = {
+                f"{dtype}_include": True,
+                f"{dtype}_name": group.suggested_name,
+                f"{dtype}_type": group.suggested_type,
+            }
+            for slot in self._AUTO_SLOTS:
+                slot_key = f"{dtype}_{slot}"
+                heuristic_pick = slot_map.get(slot)
+                # vol.Optional ohne default — voluptuous-EntitySelector
+                # akzeptiert leere Strings nicht als „nicht gewählt".
+                # Wenn die Heuristik einen Pick hat, geht der ins
+                # section_defaults; sonst bleibt der Slot leer und
+                # taucht erst gar nicht im default-Dict auf.
+                section_schema[vol.Optional(slot_key)] = selector.EntitySelector(
                     selector.EntitySelectorConfig(multiple=False)
                 )
+                if heuristic_pick:
+                    section_defaults[slot_key] = heuristic_pick
             schema_dict[
-                vol.Optional(
-                    dtype,
-                    default={
-                        f"{dtype}_include": True,
-                        f"{dtype}_name": group.suggested_name,
-                        f"{dtype}_type": group.suggested_type,
-                        **{
-                            f"{dtype}_{slot}": eid
-                            for slot, eid in slot_map.items()
-                        },
-                    },
-                )
+                vol.Optional(dtype, default=section_defaults)
             ] = section(vol.Schema(section_schema), {"collapsed": False})
 
             confidence_pct = int(round(group.avg_confidence * 100))
@@ -1542,13 +1548,17 @@ class CrowdergyConfigFlow(ConfigFlow, domain=DOMAIN):
                 f"{marker} **{type_label}** — {group.suggested_name} "
                 f"({confidence_pct}%)"
             )
+            section_placeholders[f"{dtype}_conf"] = (
+                f"{marker} {group.suggested_name} · {confidence_pct}%"
+            )
 
         return self.async_show_form(
             step_id="auto_confirm",
             data_schema=vol.Schema(schema_dict),
             description_placeholders={
                 "device_count": str(len(self._auto_groups)),
-                "summary": "\n".join(summary_lines),
+                "summary": "\n\n".join(summary_lines),
+                **section_placeholders,
             },
         )
 

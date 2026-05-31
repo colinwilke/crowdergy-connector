@@ -44,14 +44,14 @@
         "description": "Wir haben deine HA-Instanz durchgescannt und folgende Kandidaten erkannt:\n\n{summary}\n\n✓ = sicher · ? = bitte prüfen. Klick eine Sektion auf um Entitäten zu bearbeiten, Einschließen-Haken raus überspringt das Gerät. Nach Bestätigung fragen wir wie gewohnt nach den geräte-spezifischen Modus-Werten (Aus/An, Lock/Solar/Power, …).",
         "submit": "Alle bestätigen",
         "sections": {
-          "solar": {"name": "Solar"},
-          "battery": {"name": "Batterie"},
-          "grid": {"name": "Netz"},
-          "heating": {"name": "Heizung"},
-          "warmwater": {"name": "Warmwasser"},
-          "wallbox": {"name": "Wallbox"},
-          "generic": {"name": "Sonstiges"},
-          "haushalt": {"name": "Haushalt"}
+          "solar":     {"name": "Solar",      "description": "{solar_conf}"},
+          "battery":   {"name": "Batterie",   "description": "{battery_conf}"},
+          "grid":      {"name": "Netz",       "description": "{grid_conf}"},
+          "heating":   {"name": "Heizung",    "description": "{heating_conf}"},
+          "warmwater": {"name": "Warmwasser", "description": "{warmwater_conf}"},
+          "wallbox":   {"name": "Wallbox",    "description": "{wallbox_conf}"},
+          "generic":   {"name": "Sonstiges",  "description": "{generic_conf}"},
+          "haushalt":  {"name": "Haushalt",   "description": "{haushalt_conf}"}
         }
       },
       "device_type": {

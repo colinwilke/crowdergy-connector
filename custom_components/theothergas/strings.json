@@ -44,14 +44,14 @@
         "description": "We scanned your HA instance and found these candidates:\n\n{summary}\n\n✓ = confident pick · ? = please review. Expand a section to edit the entity slots, uncheck \"Include\" to skip a device. After confirming, you'll be asked the device-specific mode values (Aus/An, Lock/Solar/Power, …) as usual.",
         "submit": "Confirm all",
         "sections": {
-          "solar": {"name": "Solar"},
-          "battery": {"name": "Battery"},
-          "grid": {"name": "Grid"},
-          "heating": {"name": "Heating"},
-          "warmwater": {"name": "Hot water"},
-          "wallbox": {"name": "Wallbox"},
-          "generic": {"name": "Other"},
-          "haushalt": {"name": "Household"}
+          "solar":     {"name": "Solar",     "description": "{solar_conf}"},
+          "battery":   {"name": "Battery",   "description": "{battery_conf}"},
+          "grid":      {"name": "Grid",      "description": "{grid_conf}"},
+          "heating":   {"name": "Heating",   "description": "{heating_conf}"},
+          "warmwater": {"name": "Hot water", "description": "{warmwater_conf}"},
+          "wallbox":   {"name": "Wallbox",   "description": "{wallbox_conf}"},
+          "generic":   {"name": "Other",     "description": "{generic_conf}"},
+          "haushalt":  {"name": "Household", "description": "{haushalt_conf}"}
         }
       },
       "device_type": {
