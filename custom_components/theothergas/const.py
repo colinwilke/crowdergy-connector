@@ -285,8 +285,10 @@ SETUP_MODE_AUTO = "auto"
 HEURISTIC_ACCEPT = 0.80
 HEURISTIC_REJECT = 0.40
 
-# Phase-2-Gate: solange False bleibt der Auto-Flow rein heuristisch.
-# Erst in Phase 2 wird der Backend-LLM-Call angeknipst. Kill-Switch
-# auch für Phase-2-Setups die das LLM bewusst nicht nutzen wollen.
-MAPPING_LLM_ENABLED = False
+# Phase-2-Gate (v3.2.0): Backend-LLM-Fallback ist aktiv. Wenn die
+# Heuristik Slots offen lässt UND der Backend-Endpoint einen Anthropic-
+# Key konfiguriert hat, wird Claude Haiku 4.5 die Restmenge versuchen
+# zu klassifizieren. Kill-Switch falls man rein deterministisch laufen
+# will: hier auf False setzen.
+MAPPING_LLM_ENABLED = True
 LLM_MIN_CONFIDENCE = 0.5

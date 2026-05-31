@@ -526,6 +526,213 @@ async def discover_devices(hass: HomeAssistant) -> list[DeviceGroup]:
     return group_candidates_by_device(hass, metas)
 
 
+# ─────────────────────────────────────────────────────────────────────
+# Phase 2: LLM-Fallback via Backend-Endpoint
+# ─────────────────────────────────────────────────────────────────────
+
+
+def _build_llm_payload(
+    metas: list[EntityMeta],
+    classified_entity_ids: set[str],
+    known_types: set[str],
+) -> tuple[dict[str, Any], dict[str, str]]:
+    """Erzeuge anonymisiertes LLM-Request-Payload + lokales `ref →
+    entity_id` Mapping. Wichtigste Datenschutz-Garantie: das Backend
+    bekommt KEIN raw entity_id und KEIN friendly_name — nur die
+    domain/device_class/unit/state_class/integration + tokenisierte
+    Namensbestandteile + eine UUID als ref-Token.
+    """
+    import uuid
+
+    unmapped_payload: list[dict[str, Any]] = []
+    ref_to_entity: dict[str, str] = {}
+    for meta in metas:
+        # Bereits sicher klassifiziert (Heuristik ≥ ACCEPT) → skippen
+        # damit der LLM nur die wirklich unklaren Reste sieht.
+        if meta.entity_id in classified_entity_ids:
+            continue
+        # Entities ohne mapping-fähige Domain müssen wir gar nicht
+        # erst dem Modell zumuten.
+        if meta.domain not in {
+            "sensor", "switch", "input_boolean", "number",
+            "input_number", "select", "input_select",
+            "climate", "water_heater", "light", "fan",
+        }:
+            continue
+        ref = uuid.uuid4().hex[:12]
+        ref_to_entity[ref] = meta.entity_id
+        unmapped_payload.append(
+            {
+                "ref": ref,
+                "domain": meta.domain,
+                "device_class": meta.device_class,
+                "unit": meta.unit,
+                "state_class": meta.state_class,
+                "integration": meta.platform,
+                "name_tokens": list(meta.name_tokens),
+                "device_area": None,  # Area-Versand ist Opt-in (P3)
+            }
+        )
+
+    payload = {
+        "schema_version": 1,
+        "unmapped_entities": unmapped_payload,
+        "known_devices": sorted(known_types),
+    }
+    return payload, ref_to_entity
+
+
+def merge_llm_suggestions(
+    groups: list[DeviceGroup],
+    suggestions: list[dict[str, Any]],
+    ref_to_entity: dict[str, str],
+    hass: HomeAssistant,
+) -> list[DeviceGroup]:
+    """LLM-Vorschläge in die bestehenden Heuristik-Gruppen einbauen:
+    pro LLM-Suggestion suche eine bestehende Gruppe vom selben Typ
+    und fülle den fehlenden Slot dort. Wenn noch keine Gruppe vom Typ
+    existiert, lege eine neue an.
+
+    Slot-Konflikt mit Heuristik wird IMMER zugunsten der Heuristik
+    aufgelöst (Heuristik > LLM bei gleichem Slot) — wir vertrauen
+    deterministischen Regeln mehr als Modell-Output, vor allem bei
+    bekannten Integrationen.
+    """
+    dev_reg = dr.async_get(hass)
+    by_type: dict[str, DeviceGroup] = {g.suggested_type: g for g in groups}
+    occupied_slots: dict[str, set[str]] = {
+        dtype: {c.slot for c in g.candidates if c.slot}
+        for dtype, g in by_type.items()
+    }
+
+    for sug in suggestions:
+        ref = sug.get("ref")
+        if not isinstance(ref, str):
+            continue
+        entity_id = ref_to_entity.get(ref)
+        if not entity_id:
+            continue
+        device_type = sug.get("device_type")
+        slot = sug.get("attribute")
+        if not device_type or not slot:
+            continue
+        try:
+            confidence = float(sug.get("confidence", 0.0))
+        except (TypeError, ValueError):
+            confidence = 0.0
+        if confidence <= 0.0:
+            continue
+
+        # Slot-Konflikt mit Heuristik → Heuristik gewinnt.
+        if slot in occupied_slots.get(device_type, set()):
+            continue
+
+        group = by_type.get(device_type)
+        if group is None:
+            # Neue Typ-Gruppe vom LLM erfunden — wir nehmen den HA-
+            # Device-Namen wenn vorhanden, sonst Typ-Default.
+            ent_reg = er.async_get(hass)
+            entry = ent_reg.async_get(entity_id) if ent_reg else None
+            ha_device_id = entry.device_id if entry else None
+            device_entry = dev_reg.async_get(ha_device_id) if ha_device_id else None
+            name = (
+                (device_entry.name_by_user or device_entry.name)
+                if device_entry and (device_entry.name_by_user or device_entry.name)
+                else _default_name_for_type(device_type)
+            )
+            group = DeviceGroup(
+                suggested_type=device_type,        # type: ignore[arg-type]
+                suggested_name=name,
+                ha_device_id=ha_device_id,
+                candidates=[],
+            )
+            by_type[device_type] = group
+            occupied_slots.setdefault(device_type, set())
+
+        group.candidates.append(
+            MappingCandidate(
+                entity_id=entity_id,
+                device_type=device_type,        # type: ignore[arg-type]
+                slot=slot,
+                confidence=confidence,
+                source="llm",
+                reason=str(sug.get("rationale", ""))[:200],
+            )
+        )
+        occupied_slots[device_type].add(slot)
+
+    # Stabile Sortier-Order beibehalten (siehe group_candidates_by_device).
+    order = {
+        "solar": 0, "battery": 1, "grid": 2,
+        "heating": 3, "warmwater": 4, "wallbox": 5,
+        "generic": 6, "haushalt": 7,
+    }
+    out = list(by_type.values())
+    out.sort(key=lambda g: order.get(g.suggested_type, 99))
+    return out
+
+
+async def discover_devices_with_llm(
+    hass: HomeAssistant,
+    api_url: str,
+    access_token: str,
+    user_agent: str,
+) -> list[DeviceGroup]:
+    """Heuristik + (optional) Backend-LLM-Fallback in einem Schritt.
+    Wird vom Config-Flow aufgerufen wenn `MAPPING_LLM_ENABLED=True`.
+    Bei jedem Backend-/LLM-Fehler fallen wir auf die reine Heuristik
+    zurück — Auto-Setup darf an einem Modell-Hiccup nie scheitern.
+    """
+    import httpx
+
+    from .const import LLM_MIN_CONFIDENCE
+
+    metas = collect_entity_metadata(hass)
+    heuristic_groups = group_candidates_by_device(hass, metas)
+
+    classified = {
+        c.entity_id
+        for g in heuristic_groups
+        for c in g.candidates
+        if c.confidence >= HEURISTIC_ACCEPT
+    }
+    known_types = {g.suggested_type for g in heuristic_groups}
+
+    payload, ref_to_entity = _build_llm_payload(
+        metas, classified, known_types
+    )
+    if not payload["unmapped_entities"]:
+        return heuristic_groups
+
+    try:
+        async with httpx.AsyncClient(timeout=35.0) as client:
+            resp = await client.post(
+                f"{api_url}/api/v1/mapping/suggest",
+                headers={
+                    "Authorization": f"Bearer {access_token}",
+                    "User-Agent": user_agent,
+                    "content-type": "application/json",
+                },
+                json=payload,
+            )
+            resp.raise_for_status()
+            data = resp.json()
+    except (httpx.HTTPError, ValueError):
+        # LLM-Fail: User bekommt nur die Heuristik-Vorschläge. Auto-
+        # Setup arbeitet eingeschränkt aber bricht nicht ab.
+        return heuristic_groups
+
+    suggestions = data.get("suggestions", [])
+    # Defensive: filter sub-min-confidence vorab.
+    suggestions = [
+        s for s in suggestions
+        if float(s.get("confidence", 0.0) or 0.0) >= LLM_MIN_CONFIDENCE
+    ]
+    return merge_llm_suggestions(
+        heuristic_groups, suggestions, ref_to_entity, hass
+    )
+
+
 __all__ = [
     "DeviceGroup",
     "EntityMeta",

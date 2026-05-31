@@ -64,6 +64,7 @@ from .const import (
     SETUP_MODE_AUTO,
     SETUP_MODE_MANUAL,
     HEURISTIC_ACCEPT,
+    MAPPING_LLM_ENABLED,
     ENTITY_CONTROL_HOLD_ALWAYS,
     ENTITY_CONTROL_HOLD_AUTO,
     ENTITY_CONTROL_HOLD_NEVER,
@@ -72,7 +73,7 @@ from .const import (
     DOMAIN,
     USER_AGENT,
 )
-from .entity_mapper import DeviceGroup, discover_devices
+from .entity_mapper import DeviceGroup, discover_devices, discover_devices_with_llm
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -1410,7 +1411,15 @@ class CrowdergyConfigFlow(ConfigFlow, domain=DOMAIN):
         Confirm-Page.
         """
         try:
-            groups = await discover_devices(self.hass)
+            if MAPPING_LLM_ENABLED:
+                groups = await discover_devices_with_llm(
+                    self.hass,
+                    self._data[CONF_API_URL],
+                    self._data[CONF_ACCESS_TOKEN],
+                    USER_AGENT,
+                )
+            else:
+                groups = await discover_devices(self.hass)
         except Exception:   # noqa: BLE001 — Heuristik darf den Flow nie blockieren
             _LOGGER.exception("Auto-Discover failed, falling back to manual flow")
             groups = []
