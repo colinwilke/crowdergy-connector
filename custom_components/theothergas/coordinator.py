@@ -1141,16 +1141,35 @@ class CrowdergyCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
                         )
                         dev_type = (dev or {}).get(CONF_DEVICE_TYPE, "")
                         if dev_type == "battery":
-                            # Falls battery_value_passive konfiguriert →
-                            # Inverter explizit auf passive (sonst skip,
-                            # weil ältere Setups das nicht haben).
-                            passive_val = (
-                                (dev or {}).get(CONF_BATTERY_VALUE_PASSIVE, "")
-                                or ""
+                            # Vor allem anderen den charge_mode-Hold-
+                            # Loop canceln — sonst schreibt der
+                            # periodisch den letzten AI-Wert (Laden /
+                            # Halten / Entladen) weiter, auch wenn
+                            # AI off ist. User-Report 2026-05-31:
+                            # „Battery wird immer wieder auf Halten
+                            # gesetzt obwohl AI aus."
+                            self._cancel_charge_mode_hold(device_id)
+                            # User-Erwartung 2026-05-31: AI off muss
+                            # IMMER einen sauberen Default schreiben,
+                            # nicht skippen. Priorität:
+                            #   1. battery_value_passive (= echtes
+                            #      Hand-over an Inverter-PV-Logik)
+                            #   2. battery_value_idle als Fallback
+                            #      (Halten = Battery steht still,
+                            #      kein Grid-Charge / Discharge)
+                            # Ohne diesen Fallback hatten wir mit
+                            # NULL passive_value den Bug dass die
+                            # Battery nach AI-off im letzten aktiven
+                            # Mode hing (Laden/Entladen) bis ein
+                            # neuer Frame kam — siehe project_battery_
+                            # _passive_runaway.md.
+                            ai_off_val = (
+                                ((dev or {}).get(CONF_BATTERY_VALUE_PASSIVE, "") or "")
+                                or ((dev or {}).get(CONF_BATTERY_VALUE_IDLE, "") or "")
                             )
-                            if passive_val:
+                            if ai_off_val:
                                 await self._apply_charge_mode(
-                                    device_id, passive_val
+                                    device_id, ai_off_val
                                 )
                         elif dev_type in ("heating", "warmwater", "generic"):
                             # entity_control auf value_off — sorgt
