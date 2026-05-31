@@ -41,8 +41,18 @@
       },
       "auto_confirm": {
         "title": "Erkannte Geräte ({device_count})",
-        "description": "Wir haben deine HA-Instanz durchgescannt und folgende Geräte-Kandidaten erkannt. Die Confidence pro Gruppe siehst du links — ✓ = sicher, ? = bitte prüfen. Einschließen-Haken raus überspringt das Gerät. Nach Bestätigung fragen wir wie gewohnt nach den geräte-spezifischen Modus-Werten (Aus/An, Lock/Solar/Power, …).",
-        "submit": "Alle bestätigen"
+        "description": "Wir haben deine HA-Instanz durchgescannt und folgende Kandidaten erkannt:\n\n{summary}\n\n✓ = sicher · ? = bitte prüfen. Klick eine Sektion auf um Entitäten zu bearbeiten, Einschließen-Haken raus überspringt das Gerät. Nach Bestätigung fragen wir wie gewohnt nach den geräte-spezifischen Modus-Werten (Aus/An, Lock/Solar/Power, …).",
+        "submit": "Alle bestätigen",
+        "sections": {
+          "solar": {"name": "Solar"},
+          "battery": {"name": "Batterie"},
+          "grid": {"name": "Netz"},
+          "heating": {"name": "Heizung"},
+          "warmwater": {"name": "Warmwasser"},
+          "wallbox": {"name": "Wallbox"},
+          "generic": {"name": "Sonstiges"},
+          "haushalt": {"name": "Haushalt"}
+        }
       },
       "device_type": {
         "title": "Gerät #{device_number}",

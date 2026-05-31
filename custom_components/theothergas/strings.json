@@ -41,8 +41,18 @@
       },
       "auto_confirm": {
         "title": "Detected devices ({device_count})",
-        "description": "We scanned your HA instance and found these candidates. Confidence is shown per group; uncheck \"Include\" to skip a device. After confirming, you'll be asked the device-specific mode values (Aus/An, Lock/Solar/Power, …) as usual.",
-        "submit": "Confirm all"
+        "description": "We scanned your HA instance and found these candidates:\n\n{summary}\n\n✓ = confident pick · ? = please review. Expand a section to edit the entity slots, uncheck \"Include\" to skip a device. After confirming, you'll be asked the device-specific mode values (Aus/An, Lock/Solar/Power, …) as usual.",
+        "submit": "Confirm all",
+        "sections": {
+          "solar": {"name": "Solar"},
+          "battery": {"name": "Battery"},
+          "grid": {"name": "Grid"},
+          "heating": {"name": "Heating"},
+          "warmwater": {"name": "Hot water"},
+          "wallbox": {"name": "Wallbox"},
+          "generic": {"name": "Other"},
+          "haushalt": {"name": "Household"}
+        }
       },
       "device_type": {
         "title": "Device #{device_number}",

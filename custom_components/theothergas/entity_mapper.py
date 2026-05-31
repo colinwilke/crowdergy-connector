@@ -96,6 +96,11 @@ INTEGRATION_HINTS: dict[str, frozenset[str]] = {
     "lg_thinq":             frozenset({"heating"}),
     "vaillant":             frozenset({"heating", "warmwater"}),
     "buderus":              frozenset({"heating", "warmwater"}),
+    # Panasonic / Aquarea (HACS-Community, am meisten verbreitet)
+    "aquarea_smart_cloud":  frozenset({"heating", "warmwater"}),
+    "aquarea_smart_cloud2": frozenset({"heating", "warmwater"}),
+    "aquarea":              frozenset({"heating", "warmwater"}),
+    "panasonic_smart_app":  frozenset({"heating", "warmwater"}),
     # Netz / Smart Meter
     "dsmr":                 frozenset({"grid"}),
     "p1_monitor":           frozenset({"grid"}),

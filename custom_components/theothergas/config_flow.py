@@ -1434,14 +1434,21 @@ class CrowdergyConfigFlow(ConfigFlow, domain=DOMAIN):
         Values-Steps (charge_mode, battery, vehicle_status, value_on)
         gewohnt durch, nur die Entity-Auswahl ist eben vorbelegt.
         """
+        # Stable Section-Keys: nach v3.1.1 max. 1 Gruppe pro Crowdergy-
+        # Typ — die Sections heißen einfach nach dem Typ. Das matched
+        # die statisch in strings.json hinterlegten Section-Labels.
+        groups_by_type: dict[str, DeviceGroup] = {
+            g.suggested_type: g for g in self._auto_groups
+        }
+
         if user_input is not None:
-            for idx, group in enumerate(self._auto_groups):
-                prefix = f"d{idx}_"
-                if not user_input.get(f"{prefix}include", True):
+            for dtype, group in groups_by_type.items():
+                section_data = user_input.get(dtype, {})
+                if not section_data:
+                    continue
+                if not section_data.get(f"{dtype}_include", True):
                     continue
                 entity_input: dict[str, Any] = {}
-                # Slot-Felder die wir in der Form gerendert haben (siehe
-                # unten): jedes nicht-leere Resultat ins entity_input.
                 for slot in (
                     CONF_ENTITY_POWER,
                     CONF_ENTITY_ENERGY_TOTAL,
@@ -1453,13 +1460,9 @@ class CrowdergyConfigFlow(ConfigFlow, domain=DOMAIN):
                     CONF_ENTITY_CLIMATE,
                     CONF_ENTITY_WATER_HEATER,
                 ):
-                    val = user_input.get(f"{prefix}{slot}", "")
+                    val = section_data.get(f"{dtype}_{slot}", "")
                     if val:
                         entity_input[slot] = val
-                # ConfigMode auto-detect: wenn climate.* oder water_
-                # heater.* drin sind, schalten wir auf CONFIG_MODE_
-                # CLIMATE — die Heuristik hat erkannt dass das eine
-                # gebündelte HA-Entity ist.
                 config_mode = (
                     CONFIG_MODE_CLIMATE
                     if entity_input.get(CONF_ENTITY_CLIMATE)
@@ -1468,11 +1471,11 @@ class CrowdergyConfigFlow(ConfigFlow, domain=DOMAIN):
                 )
                 self._auto_queue.append(
                     {
-                        "device_type": user_input.get(
-                            f"{prefix}type", group.suggested_type
+                        "device_type": section_data.get(
+                            f"{dtype}_type", group.suggested_type
                         ),
-                        "device_name": user_input.get(
-                            f"{prefix}name", group.suggested_name
+                        "device_name": section_data.get(
+                            f"{dtype}_name", group.suggested_name
                         ),
                         "config_mode": config_mode,
                         "entity_input": entity_input,
@@ -1480,23 +1483,24 @@ class CrowdergyConfigFlow(ConfigFlow, domain=DOMAIN):
                 )
             return await self._auto_process_next()
 
-        # Form-Schema bauen — flach, pro Gruppe ein vol.section mit
-        # include/name/type/<detected-slots>. Sections rendern in HA
-        # als zusammenklappbare Cards, das gibt uns die optische
-        # Gruppierung ohne eigenes UI-Markup.
+        # Form-Schema bauen: eine vol.section pro Crowdergy-Typ. Die
+        # Section-Header kommen aus strings.json (statisch pro Typ);
+        # die Confidence + der HA-Device-Name landen oben im Form-
+        # Description-Block via `{summary}`-Placeholder. So sieht der
+        # User auf einen Blick welche Gruppe mit welcher Confidence
+        # erkannt wurde, bevor er ins Detail klappt.
         schema_dict: dict[Any, Any] = {}
-        descriptions: dict[str, str] = {}
+        summary_lines: list[str] = []
 
-        for idx, group in enumerate(self._auto_groups):
-            prefix = f"d{idx}_"
+        for dtype, group in groups_by_type.items():
             slot_map = group.slot_map()
             section_schema: dict[Any, Any] = {
-                vol.Optional(f"{prefix}include", default=True): bool,
+                vol.Optional(f"{dtype}_include", default=True): bool,
                 vol.Required(
-                    f"{prefix}name", default=group.suggested_name
+                    f"{dtype}_name", default=group.suggested_name
                 ): str,
                 vol.Required(
-                    f"{prefix}type", default=group.suggested_type
+                    f"{dtype}_type", default=group.suggested_type
                 ): vol.In(DEVICE_TYPES),
             }
             for slot in (
@@ -1512,29 +1516,30 @@ class CrowdergyConfigFlow(ConfigFlow, domain=DOMAIN):
             ):
                 default = slot_map.get(slot, "")
                 section_schema[
-                    vol.Optional(f"{prefix}{slot}", default=default)
+                    vol.Optional(f"{dtype}_{slot}", default=default)
                 ] = selector.EntitySelector(
                     selector.EntitySelectorConfig(multiple=False)
                 )
             schema_dict[
                 vol.Optional(
-                    f"group_{idx}",
+                    dtype,
                     default={
-                        f"{prefix}include": True,
-                        f"{prefix}name": group.suggested_name,
-                        f"{prefix}type": group.suggested_type,
+                        f"{dtype}_include": True,
+                        f"{dtype}_name": group.suggested_name,
+                        f"{dtype}_type": group.suggested_type,
                         **{
-                            f"{prefix}{slot}": eid
+                            f"{dtype}_{slot}": eid
                             for slot, eid in slot_map.items()
                         },
                     },
                 )
             ] = section(vol.Schema(section_schema), {"collapsed": False})
+
             confidence_pct = int(round(group.avg_confidence * 100))
             marker = "✓" if group.avg_confidence >= HEURISTIC_ACCEPT else "?"
-            descriptions[f"group_{idx}"] = (
-                f"{marker} {group.suggested_name} · "
-                f"{DEVICE_TYPE_LABELS_DE.get(group.suggested_type, group.suggested_type)} "
+            type_label = DEVICE_TYPE_LABELS_DE.get(dtype, dtype)
+            summary_lines.append(
+                f"{marker} **{type_label}** — {group.suggested_name} "
                 f"({confidence_pct}%)"
             )
 
@@ -1543,6 +1548,7 @@ class CrowdergyConfigFlow(ConfigFlow, domain=DOMAIN):
             data_schema=vol.Schema(schema_dict),
             description_placeholders={
                 "device_count": str(len(self._auto_groups)),
+                "summary": "\n".join(summary_lines),
             },
         )
 
