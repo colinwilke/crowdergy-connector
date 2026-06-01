@@ -75,21 +75,28 @@ anything missed. Prevents storms when a power sensor updates every
 sub-second."""
 
 PER_DEVICE_HEARTBEAT_INTERVAL = 90.0
-"""Floor for the per-device "send something even when nothing changed"
-gate. Tuned via 30 s (pre-v2.5.4) → 300 s (v2.5.4 — too long,
-broke iOS DeviceTile freshness) → 90 s (v2.5.5).
+"""Soft-Heartbeat (2026-06-01+, C7): nach 90 s wird ein PATCH gesendet
+WENN der payload-Hash sich seit dem letzten Send verändert hat (z.B.
+durch klein-rauschende Werte unter SEND_THRESHOLDS). 90 s matched
+weiterhin iOS's 120-s tile-freshness threshold für aktive Geräte.
 
-90 s is the right balance: iOS's 120-s tile-freshness threshold has
-30 s of slack, AND we still get a ~3× row reduction vs the old
-30 s cadence on quiet devices. The dedicated `_heartbeat_loop`
-keeps the user-level connector_state ping at 25 s independent of
-this — that one only stamps `connector_last_seen`, no Telemetry
-row written.
+Pre-C7 (vor 2026-06-01) lief das hier als HARD-Floor, der auch
+identical-payload-PATCHes alle 90 s rausschickte — auf truly quiet
+Geräten (Solar nachts, Wallbox idle, Heizung im Sommer aus) bedeutete
+das ~960 unnötige HTTP-Calls/Tag/Gerät. Mit der Hash-Bedingung
+fällt das auf den IDENTICAL_HEARTBEAT_INTERVAL-Floor zurück."""
 
-Why not zero: an occasional row keeps the iOS-side
-`latest_telemetry` cache up-to-date and lets the backend's near-
-duplicate gate self-heal if `_should_send`'s in-memory state ever
-diverges from what the DB has."""
+IDENTICAL_HEARTBEAT_INTERVAL = 600.0
+"""Hard-Ceiling für payload-identische PATCHes (C7): auch wenn nichts
+am Payload changed, mindestens alle 10 min ein PATCH zur Backend-
+Cache-Aktualisierung + Self-Healing der near-duplicate-Gate (falls
+`_should_send`s in-memory state vom DB-Stand abdriftet).
+
+10 min ist ein Trade-off: lang genug für signifikante HTTP-Reduktion
+(~6.7× ggü. 90 s), kurz genug um iOS-Tiles auf truly-quiet Devices
+nicht „aus" wirken zu lassen — die Tile zeigt zwar „älter" als bei
+90 s, aber die device-level isOnline bleibt true durch den
+unabhängigen 25-s `_heartbeat_loop`."""
 
 HEARTBEAT_PING_INTERVAL = 25.0
 """Cadence of the lightweight liveness ping the connector POSTs to
@@ -256,6 +263,11 @@ class CrowdergyCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
         # enough to be worth a row.
         self._last_sent_payload: dict[str, dict[str, Any]] = {}
         self._last_send_at: dict[str, float] = {}
+        # C7 (2026-06-01) payload-hash dedup: stabilen content-hash
+        # des letzten gesendeten payloads pro Gerät. Wenn der neue
+        # hash identisch ist, hat der 90s-Soft-Heartbeat nichts neues
+        # zu erzählen → skip bis IDENTICAL_HEARTBEAT_INTERVAL.
+        self._last_sent_hash: dict[str, int] = {}
         # Throttle bookkeeping for the event-driven `async_refresh`
         # path. The scheduled 30 s tick is unaffected.
         self._last_event_refresh_at: float = 0.0
@@ -482,15 +494,25 @@ class CrowdergyCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
                 return None
         return self._read_entity_state(entity_id)
 
+    @staticmethod
+    def _payload_hash(payload: dict[str, Any]) -> int:
+        """Stable content-hash für payload-dedup (C7). `json.dumps` mit
+        sort_keys + default=str für mixed-type Stabilität; built-in
+        hash() ist OK weil wir nur identity-vs-difference brauchen,
+        keine kryptografische Eigenschaft."""
+        return hash(json.dumps(payload, sort_keys=True, default=str))
+
     def _should_send(self, device_id: str, payload: dict[str, Any]) -> bool:
         """Decide whether the just-computed payload differs enough
         from the last sent one to be worth a new telemetry row.
 
         Returns True if any of:
           * No previous payload exists yet for this device (first send).
-          * `PER_DEVICE_HEARTBEAT_INTERVAL` has elapsed since the last
-            send (keeps the backend's freshness signal alive even when
-            nothing's changing).
+          * `IDENTICAL_HEARTBEAT_INTERVAL` (Hard-Ceiling 10 min) seit
+            letztem Send (Backend-Cache + Self-Healing der near-dup-Gate).
+          * `PER_DEVICE_HEARTBEAT_INTERVAL` (Soft-Heartbeat 90 s) seit
+            letztem Send UND payload-Hash unterscheidet sich
+            (klein-rauschende Sub-Threshold-Werte).
           * A numeric field crossed its SEND_THRESHOLDS magnitude.
           * A categorical field (vehicle_status / charge_mode / is_on)
             differs at all from the last sent value.
@@ -500,8 +522,9 @@ class CrowdergyCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
         prev = self._last_sent_payload.get(device_id)
         if prev is None:
             return True
-        last = self._last_send_at.get(device_id, 0.0)
-        if time.time() - last >= PER_DEVICE_HEARTBEAT_INTERVAL:
+        age = time.time() - self._last_send_at.get(device_id, 0.0)
+        # Hard ceiling — Backend-Cache + Self-Healing der near-dup-Gate.
+        if age >= IDENTICAL_HEARTBEAT_INTERVAL:
             return True
         # Any non-zero energy Δ (signed for storage devices, positive
         # otherwise) is reason enough to land a row — every kWh
@@ -518,6 +541,13 @@ class CrowdergyCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
                 return True
         for key in ("vehicle_status", "charge_mode", "is_on", "cool_on"):
             if payload.get(key) != prev.get(key):
+                return True
+        # Soft heartbeat NUR wenn der payload-Hash sich vom letzten
+        # Send unterscheidet — sonst hat der 90s-Tick nichts Neues zu
+        # erzählen und wir warten auf den Hard-Ceiling. Spart auf
+        # truly-quiet Geräten ~6.7× HTTP-Calls.
+        if age >= PER_DEVICE_HEARTBEAT_INTERVAL:
+            if self._payload_hash(payload) != self._last_sent_hash.get(device_id):
                 return True
         return False
 
@@ -976,6 +1006,7 @@ class CrowdergyCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
                     # send, not against this (lost) attempt.
                     self._last_sent_payload[device_id] = payload
                     self._last_send_at[device_id] = time.time()
+                    self._last_sent_hash[device_id] = self._payload_hash(payload)
                     if energy_kwh_total is not None:
                         self._prev_energy_kwh[device_id] = energy_kwh_total
                     if energy_kwh_total_out is not None:
@@ -1812,6 +1843,7 @@ class CrowdergyCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
             self._prev_energy_kwh_discharged,
             self._last_sent_payload,
             self._last_send_at,
+            self._last_sent_hash,
             self._pre_crowdergize_charge_mode,
         ):
             d.pop(device_id, None)
