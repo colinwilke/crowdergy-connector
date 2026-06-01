@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="images/logo.png" alt="Crowdergy Connector" width="640">
+</p>
+
 # Crowdergy Connector
 
 [![hacs_badge](https://img.shields.io/badge/HACS-Custom-41BDF5.svg)](https://github.com/hacs/integration)
