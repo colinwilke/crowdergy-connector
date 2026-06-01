@@ -121,6 +121,7 @@
               "entity_climate": "Climate entity",
               "entity_control": "Control entity",
               "entity_current_temp_c": "Current temperature (optional)",
+              "entity_vorlauf_temp_c": "Supply / flow temperature (optional)",
               "entity_charge_mode": "Charge-mode entity",
               "entity_water_heater": "Water-heater entity"
             },
@@ -128,6 +129,7 @@
               "entity_climate": "Your heat-pump's climate.* entity — control, modes and current temperature are derived automatically.",
               "entity_control": "Writable entity (switch, number, select). Examples: SG-Ready select, boost switch, current-limit number.",
               "entity_current_temp_c": "Climate / water-heater mode: optional separate sensor that overrides the entity's current_temperature when it's wrong. Manual mode: your flow / room / tank sensor (required).",
+              "entity_vorlauf_temp_c": "Optional supply / flow temperature sensor of the heat pump (e.g. 'Actual Temperature HK1' on Stiebel, 'Flow temp' on Vaillant). Refines the COP estimate against the assumed W35 reference — 5-10 % better plan quality on devices with an actively-modulated curve. Leave empty if your heat pump doesn't expose one.",
               "entity_charge_mode": "Wallbox: charge-mode select (Lock/Power/Solar). Battery: mode entity (typically a number for +max / 0 / -max W).",
               "entity_water_heater": "HA's water_heater entity for your DHW heat pump. Like the climate entity — control, modes and current temperature derived automatically."
             }
@@ -489,6 +491,7 @@
               "entity_climate": "Climate entity",
               "entity_control": "Control entity",
               "entity_current_temp_c": "Current temperature (optional)",
+              "entity_vorlauf_temp_c": "Supply / flow temperature (optional)",
               "entity_charge_mode": "Charge-mode entity",
               "entity_water_heater": "Water-heater entity"
             },
@@ -496,6 +499,7 @@
               "entity_climate": "Climate.* entity — control + temperature automatic.",
               "entity_control": "Writable entity (switch, number, select).",
               "entity_current_temp_c": "Climate / water-heater mode: optional separate sensor that overrides the entity's current_temperature when it's wrong. Manual mode: your flow / room / tank sensor (required).",
+              "entity_vorlauf_temp_c": "Optional supply / flow temperature sensor (refines COP estimate, 5-10 % better plan quality).",
               "entity_charge_mode": "Wallbox: charge-mode select. Battery: mode entity.",
               "entity_water_heater": "HA's water_heater entity for your DHW heat pump. Like the climate entity — control, modes and current temperature derived automatically."
             }

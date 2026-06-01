@@ -457,10 +457,14 @@ def _entities_schema(
                 _entity_field(CONF_ENTITY_CURRENT_TEMP, d):
                     _ENTITY_SELECTORS[CONF_ENTITY_CURRENT_TEMP],
             }
-            if device_type == "heating":
-                control_fields[
-                    _entity_field(CONF_ENTITY_VORLAUF_TEMP, d)
-                ] = _ENTITY_SELECTORS[CONF_ENTITY_VORLAUF_TEMP]
+            # Vorlauf-Temp gibt's für beide heating-family-Typen: bei
+            # heating ist's der HK-Vorlauf, bei warmwater der
+            # Warmwasser-Vorlauf der WW-Erzeugung (Brauchwasser-WP
+            # liefert oft eine eigene VL-Temperatur fürs Erhitzen).
+            # In beiden Fällen verbessert es die COP-Schätzung.
+            control_fields[
+                _entity_field(CONF_ENTITY_VORLAUF_TEMP, d)
+            ] = _ENTITY_SELECTORS[CONF_ENTITY_VORLAUF_TEMP]
             control_schema = vol.Schema(control_fields)
         else:
             control_fields = {
@@ -469,10 +473,9 @@ def _entities_schema(
                 _entity_field(CONF_ENTITY_CURRENT_TEMP, d):
                     _ENTITY_SELECTORS[CONF_ENTITY_CURRENT_TEMP],
             }
-            if device_type == "heating":
-                control_fields[
-                    _entity_field(CONF_ENTITY_VORLAUF_TEMP, d)
-                ] = _ENTITY_SELECTORS[CONF_ENTITY_VORLAUF_TEMP]
+            control_fields[
+                _entity_field(CONF_ENTITY_VORLAUF_TEMP, d)
+            ] = _ENTITY_SELECTORS[CONF_ENTITY_VORLAUF_TEMP]
             control_schema = vol.Schema(control_fields)
         schema_dict[vol.Required("control_section")] = section(
             control_schema, {"collapsed": False}

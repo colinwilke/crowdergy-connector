@@ -132,6 +132,12 @@ _SOLVER_EXTRA_FIELDS: dict[str, list[tuple[str, str, str]]] = {
     "heating": [
         ("vorlauf_temp_c", CONF_ENTITY_VORLAUF_TEMP, "temp"),
     ],
+    "warmwater": [
+        # Brauchwasser-WPs liefern oft eine eigene Vorlauf-Temperatur
+        # fürs Aufheizen — typisch höher als HK-VL. Backend nutzt das
+        # gleiche cop_at_outdoor_temp(t_vorlauf_c=…) Modell auch hier.
+        ("vorlauf_temp_c", CONF_ENTITY_VORLAUF_TEMP, "temp"),
+    ],
     # Andere Gerätetypen können ihre Solver-only-Felder hier
     # anhängen ohne den eigentlichen `_async_update_data`-Loop
     # anfassen zu müssen.

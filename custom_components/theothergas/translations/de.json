@@ -122,6 +122,7 @@
               "entity_climate": "Climate-Entität",
               "entity_control": "Steuer-Entität",
               "entity_current_temp_c": "Ist-Temperatur (optional)",
+              "entity_vorlauf_temp_c": "Vorlauf-Temperatur (optional)",
               "entity_charge_mode": "Lademodus-Entität",
               "entity_water_heater": "Warmwasser-Entität"
             },
@@ -129,6 +130,7 @@
               "entity_climate": "Die climate.* Entität deiner WP — Steuerung, Modi und Ist-Temperatur kommen automatisch.",
               "entity_control": "Schreibbare Entität (Switch, Number, Select). Beispiele: SG-Ready-Select, Boost-Switch, Strom-Limit-Number.",
               "entity_current_temp_c": "Im Climate-/Water-Heater-Modus optional: separater Sensor, wenn die current_temperature der Climate-Entity falsch ist. Im Manuell-Modus: dein Vorlauf-/Raum-/Boiler-Sensor (Pflicht).",
+              "entity_vorlauf_temp_c": "Optionaler Vorlauf-Temperatur-Sensor der Heizung (z. B. 'Actual Temperature HK1' bei Stiebel, 'Vorlauf-Soll' bei Vaillant). Verfeinert die COP-Schätzung gegenüber der pauschalen W35-Annahme — 5–10 % bessere Plan-Qualität bei aktiv geregelter Heizkurve. Leer lassen wenn dein WP-Modell keinen VL-Sensor freilegt.",
               "entity_charge_mode": "Wallbox: Lademodus-Select (Lock/Power/Solar). Batterie: Modi-Entität (typisch Number für +max / 0 / -max W).",
               "entity_water_heater": "HA's water_heater-Entität für deine Brauchwasser-WP. Analog Climate-Entität — Steuerung, Modi und Ist-Temperatur kommen automatisch."
             }
@@ -339,6 +341,7 @@
               "entity_climate": "Climate-Entität",
               "entity_control": "Steuer-Entität",
               "entity_current_temp_c": "Ist-Temperatur (optional)",
+              "entity_vorlauf_temp_c": "Vorlauf-Temperatur (optional)",
               "entity_charge_mode": "Lademodus-Entität",
               "entity_water_heater": "Warmwasser-Entität"
             },
@@ -346,6 +349,7 @@
               "entity_climate": "Die climate.* Entität deiner WP — Steuerung, Modi und Ist-Temperatur kommen automatisch.",
               "entity_control": "Schreibbare Entität (Switch, Number, Select). Beispiele: SG-Ready-Select, Boost-Switch, Strom-Limit-Number.",
               "entity_current_temp_c": "Im Climate-/Water-Heater-Modus optional: separater Sensor, wenn die current_temperature der Climate-Entity falsch ist. Im Manuell-Modus: dein Vorlauf-/Raum-/Boiler-Sensor (Pflicht).",
+              "entity_vorlauf_temp_c": "Optionaler Vorlauf-Temperatur-Sensor der Heizung (z. B. 'Actual Temperature HK1' bei Stiebel, 'Vorlauf-Soll' bei Vaillant). Verfeinert die COP-Schätzung gegenüber der pauschalen W35-Annahme — 5–10 % bessere Plan-Qualität bei aktiv geregelter Heizkurve. Leer lassen wenn dein WP-Modell keinen VL-Sensor freilegt.",
               "entity_charge_mode": "Wallbox: Lademodus-Select (Lock/Power/Solar). Batterie: Modi-Entität (typisch Number für +max / 0 / -max W).",
               "entity_water_heater": "HA's water_heater-Entität für deine Brauchwasser-WP. Analog Climate-Entität — Steuerung, Modi und Ist-Temperatur kommen automatisch."
             }
@@ -489,6 +493,7 @@
               "entity_climate": "Climate-Entität",
               "entity_control": "Steuer-Entität",
               "entity_current_temp_c": "Ist-Temperatur (optional)",
+              "entity_vorlauf_temp_c": "Vorlauf-Temperatur (optional)",
               "entity_charge_mode": "Lademodus-Entität",
               "entity_water_heater": "Warmwasser-Entität"
             },
@@ -496,6 +501,7 @@
               "entity_climate": "Climate-Entität — Steuerung, Modi und Ist-Temperatur kommen automatisch.",
               "entity_control": "Schreibbare Entität (Switch, Number, Select).",
               "entity_current_temp_c": "Im Climate-/Water-Heater-Modus optional: separater Sensor, wenn die current_temperature der Climate-Entity falsch ist. Im Manuell-Modus: dein Vorlauf-/Raum-/Boiler-Sensor (Pflicht).",
+              "entity_vorlauf_temp_c": "Optionaler Vorlauf-Sensor (z. B. 'Actual Temperature HK1' bei Stiebel). Verfeinert die COP-Schätzung um 5–10 % bei aktiv geregelter Heizkurve.",
               "entity_charge_mode": "Wallbox: Lademodus-Select. Batterie: Modi-Entität.",
               "entity_water_heater": "HA's water_heater-Entität für deine Brauchwasser-WP. Analog Climate-Entität — Steuerung, Modi und Ist-Temperatur kommen automatisch."
             }
