@@ -539,11 +539,20 @@ def _apply_climate_first(entity_input: dict[str, Any]) -> dict[str, Any]:
     `water_heater.set_operation_mode` (water_heater.*) ruft —
     die Domain-Auswahl ist im Service-Adapter.
 
-    `entity_current_temp_c` gilt Override-First: hat der User
-    bereits ein separates Sensor-Feld gefüllt, behält das Vorrang;
-    sonst leiten wir aus der Primär-Entity ab (`current_temperature`
-    Attribut). Useful wenn die climate-/water_heater-Entity eine
-    falsche oder veraltete Temperatur liefert (Vendor-spezifisch).
+    **Warmwasser** (water_heater.*): die `current_temperature` der
+    primary entity IST die Tank-Temp — auto-copy nach
+    `entity_current_temp` ist semantisch korrekt.
+
+    **Heating** (climate.*): die `current_temperature` ist bei den
+    meisten WP-/FBH-Setups die VORLAUF-Temp, NICHT die Raumtemp.
+    Auto-copy nach `entity_current_temp` würde das Vorlauf-Signal
+    als Raumtemp ans Backend pushen und das Thermomodell vergiften
+    (35–45 °C als T_room interpretiert). Ab v3.4.6 daher: für
+    heating-Devices KEIN auto-copy mehr — der User muss
+    `entity_current_temp` als separaten Raumtemp-Sensor
+    konfigurieren wenn er Crowdergy-AI auf der Heizung will.
+    Coordinator routet `climate.current_temperature` separat in
+    `vorlauf_temp_c` (Solver-Extra).
 
     Mutiert das Dict in-place und gibt es zurück (chainable).
     """
@@ -553,7 +562,11 @@ def _apply_climate_first(entity_input: dict[str, Any]) -> dict[str, Any]:
     )
     if primary:
         entity_input[CONF_ENTITY_CONTROL] = primary
-        if not entity_input.get(CONF_ENTITY_CURRENT_TEMP, ""):
+        # Auto-copy nach entity_current_temp NUR für water_heater
+        # (warmwater) — bei climate (heating) ist current_temperature
+        # die Vorlauf-Temp und gehört nicht in current_temp_c.
+        is_water_heater = primary.startswith("water_heater.")
+        if is_water_heater and not entity_input.get(CONF_ENTITY_CURRENT_TEMP, ""):
             entity_input[CONF_ENTITY_CURRENT_TEMP] = primary
     return entity_input
 
