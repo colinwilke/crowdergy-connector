@@ -201,11 +201,13 @@ _ENTITY_SELECTORS: dict[str, selector.EntitySelector] = {
         selector.EntitySelectorConfig(domain=["sensor", "binary_sensor"])
     ),
     CONF_ENTITY_CURRENT_TEMP: selector.EntitySelector(
-        # sensor = klassischer Pfad; climate ist nötig, weil
-        # _apply_climate_first die climate-Entity in das Feld
-        # kopiert und der Selector beim Edit-Reload sonst die
+        # sensor = klassischer Pfad; climate / water_heater nötig weil
+        # _apply_climate_first die climate-/water_heater-Entity in das
+        # Feld kopiert und der Selector beim Edit-Reload sonst die
         # Validierung verweigert.
-        selector.EntitySelectorConfig(domain=["sensor", "climate"])
+        selector.EntitySelectorConfig(
+            domain=["sensor", "climate", "water_heater"]
+        )
     ),
     # Solver-only Vorlauf-Temperatur (v3.3+). Optional pro heating-
     # Gerät; wenn gesetzt verfeinert das Backend den COP-Schätzer
@@ -436,8 +438,29 @@ def _entities_schema(
         # Manual-Mode: klassischer Pfad mit separater Steuer- + Ist-
         # Temp-Entity. Edit-Flow erbt config_mode aus dem stored Wert
         # (Default manual für Legacy v2.x).
+        stored_mode = d.get(CONF_DEVICE_CONFIG_MODE)
+        # C1-Auto-Migration (2026-06-01): pre-v3.0 entries hatten kein
+        # CONF_DEVICE_CONFIG_MODE. Wenn die gespeicherte entity_control
+        # zufällig auf eine climate.* / water_heater.* Entity zeigt,
+        # behandeln wir das als CONFIG_MODE_CLIMATE und füllen das
+        # entity_climate-/entity_water_heater-Feld aus entity_control
+        # vor, damit der Edit-Flow defaults sinnvoll rendert.
+        if not stored_mode:
+            legacy_ctrl = d.get(CONF_ENTITY_CONTROL, "")
+            if isinstance(legacy_ctrl, str) and legacy_ctrl.startswith(
+                ("climate.", "water_heater.")
+            ):
+                stored_mode = CONFIG_MODE_CLIMATE
+                if legacy_ctrl.startswith("climate.") and not d.get(
+                    CONF_ENTITY_CLIMATE
+                ):
+                    d[CONF_ENTITY_CLIMATE] = legacy_ctrl
+                elif legacy_ctrl.startswith("water_heater.") and not d.get(
+                    CONF_ENTITY_WATER_HEATER
+                ):
+                    d[CONF_ENTITY_WATER_HEATER] = legacy_ctrl
         effective_mode = (
-            d.get(CONF_DEVICE_CONFIG_MODE) or config_mode or CONFIG_MODE_MANUAL
+            stored_mode or config_mode or CONFIG_MODE_MANUAL
         )
         if effective_mode == CONFIG_MODE_CLIMATE:
             # Heating → climate-Domain, Warmwasser → water_heater-Domain.
