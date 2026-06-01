@@ -93,10 +93,22 @@ Cache-Aktualisierung + Self-Healing der near-duplicate-Gate (falls
 `_should_send`s in-memory state vom DB-Stand abdriftet).
 
 10 min ist ein Trade-off: lang genug für signifikante HTTP-Reduktion
-(~6.7× ggü. 90 s), kurz genug um iOS-Tiles auf truly-quiet Devices
-nicht „aus" wirken zu lassen — die Tile zeigt zwar „älter" als bei
-90 s, aber die device-level isOnline bleibt true durch den
-unabhängigen 25-s `_heartbeat_loop`."""
+(~6.7× ggü. 90 s), kurz genug um die hash-dedup-gate self-heilen zu
+lassen. Per-Device-Frische auf iOS-Seite kommt NICHT von hier — das
+übernimmt der `_device_mirror_loop` mit `PER_DEVICE_MIRROR_INTERVAL`.
+Pre-v3.4.3 hat hier ein falscher Kommentar suggeriert dass der 25-s
+user-level Heartbeat die device-tiles frisch hält — der refresht aber
+nur `connector_last_seen`, nicht das per-Device telemetry-Timestamp."""
+
+PER_DEVICE_MIRROR_INTERVAL = 60.0
+"""Per-device heartbeat-mirror cadence (v3.4.3+). Pushed das zuletzt
+gesendete Payload erneut (ohne `energy_kwh_delta`, sonst würde der
+Δ-kWh doppelt landen), wenn seit dem letzten echten PATCH ≥60 s
+vergangen sind. Refresht das telemetry-row-Timestamp im Backend
+sodass iOS `Telemetry.isFresh(staleAfter: 120)` für Idle-Geräte
+weiterhin `true` zurückgibt — ohne den Mirror flippten Kaffeemaschine,
+unbenutzte Wallbox-Stellplätze, WW im Bereitschaftsmodus alle 2 min
+auf offline, weil der Hard-Ceiling-PATCH nur alle 10 min feuert."""
 
 HEARTBEAT_PING_INTERVAL = 25.0
 """Cadence of the lightweight liveness ping the connector POSTs to
@@ -192,6 +204,7 @@ class CrowdergyCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
         # has to PATCH N devices every 30 s purely to keep iOS's
         # connection dot green. See `_heartbeat_loop` docstring.
         self._heartbeat_task: asyncio.Task | None = None
+        self._device_mirror_task: asyncio.Task | None = None
         # Crowdergize state per device — authoritative source is the backend
         # (`devices.is_active`). We mirror it locally so the HA switch
         # entity can render the latest value without round-tripping each
@@ -340,6 +353,19 @@ class CrowdergyCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
             name=f"{DOMAIN}_heartbeat",
         )
 
+    def start_device_mirror(self) -> None:
+        """Start the per-device heartbeat-mirror loop (v3.4.3+).
+        Idempotent. Pusht zuletzt gesendete Payloads erneut wenn der
+        echte PATCH > PER_DEVICE_MIRROR_INTERVAL ago war, damit iOS-
+        Tiles für Idle-Geräte (Kaffeemaschine aus, Wallbox leer, WW
+        im Standby) nicht alle 2 min auf offline flippen."""
+        if self._device_mirror_task and not self._device_mirror_task.done():
+            return
+        self._device_mirror_task = self.hass.async_create_background_task(
+            self._run_device_mirror_loop(),
+            name=f"{DOMAIN}_device_mirror",
+        )
+
     async def _run_heartbeat_loop(self) -> None:
         """POST /users/me/heartbeat every HEARTBEAT_PING_INTERVAL.
 
@@ -386,6 +412,64 @@ class CrowdergyCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
                 consecutive_failures = 0
                 sleep_for = HEARTBEAT_PING_INTERVAL
             await asyncio.sleep(sleep_for)
+
+    async def _run_device_mirror_loop(self) -> None:
+        """Periodic per-device telemetry-timestamp refresh.
+
+        Pro Tick (= PER_DEVICE_MIRROR_INTERVAL): für jedes Gerät mit
+        einem zuvor gesendeten Payload PATCHen wir das letzte Payload
+        erneut, sofern der letzte echte Send ≥ PER_DEVICE_MIRROR_INTERVAL
+        her ist. `energy_kwh_delta` wird weggelassen — das hatte schon
+        beim Original-Send seine Δ-kWh ins Backend gebracht; nochmal
+        zu senden würde doppelt zählen.
+
+        Bookkeeping:
+        - `_last_send_at` wird gestempelt damit der nächste Mirror-Tick
+          das Gerät überspringt (sonst feuert jeder Tick alle Geräte).
+        - `_last_sent_payload` + `_last_sent_hash` bleiben unangetastet
+          — die spiegeln den letzten ECHTEN State; `_should_send` soll
+          den nächsten echten Tick weiterhin anhand des letzten echten
+          Hashs entscheiden, nicht anhand des Mirror-Hashs.
+
+        Failures sind DEBUG-Log + weiter — ein Mirror-Drop ist nicht
+        kritisch, der nächste Tick versucht's erneut.
+        """
+        while True:
+            try:
+                now_ts = time.time()
+                for device_id, last_payload in list(self._last_sent_payload.items()):
+                    age = now_ts - self._last_send_at.get(device_id, 0.0)
+                    if age < PER_DEVICE_MIRROR_INTERVAL:
+                        continue
+                    mirror = {
+                        k: v for k, v in last_payload.items()
+                        if k != "energy_kwh_delta"
+                    }
+                    try:
+                        response = await self._authenticated_request(
+                            "PATCH",
+                            f"/api/v1/devices/{device_id}/telemetry",
+                            json=mirror,
+                        )
+                        if response.status_code < 400:
+                            self._last_send_at[device_id] = now_ts
+                        else:
+                            _LOGGER.debug(
+                                "device-mirror PATCH %s returned %s: %s",
+                                device_id, response.status_code, response.text,
+                            )
+                    except asyncio.CancelledError:
+                        raise
+                    except Exception as err:  # noqa: BLE001
+                        _LOGGER.debug(
+                            "device-mirror PATCH failed for %s: %s",
+                            device_id, err,
+                        )
+            except asyncio.CancelledError:
+                raise
+            except Exception as err:  # noqa: BLE001
+                _LOGGER.debug("device-mirror loop iteration error: %s", err)
+            await asyncio.sleep(PER_DEVICE_MIRROR_INTERVAL)
 
     def _auth_headers(self) -> dict[str, str]:
         return {
@@ -444,6 +528,12 @@ class CrowdergyCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
             self._heartbeat_task.cancel()
             try:
                 await self._heartbeat_task
+            except (asyncio.CancelledError, Exception):  # noqa: BLE001
+                pass
+        if self._device_mirror_task and not self._device_mirror_task.done():
+            self._device_mirror_task.cancel()
+            try:
+                await self._device_mirror_task
             except (asyncio.CancelledError, Exception):  # noqa: BLE001
                 pass
         for task in list(self._hold_tasks.values()):

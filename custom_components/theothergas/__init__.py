@@ -31,6 +31,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: CrowdergyConfigEntry) ->
     coordinator.setup_listeners()
     coordinator.start_sse_listener()
     coordinator.start_heartbeat()
+    coordinator.start_device_mirror()
 
     hass.data.setdefault(DOMAIN, {})
     hass.data[DOMAIN][entry.entry_id] = coordinator
