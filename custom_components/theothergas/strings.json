@@ -139,7 +139,7 @@
       },
       "device_values": {
         "title": "{device_name} — Write values",
-        "description": "Which values should Crowdergy write to the control entity? Switch/Input-Boolean auto-fills; for Select/Climate/Number you pick from your options.",
+        "description": "Which values should Crowdergy write to the control entity? Switch/Input-Boolean auto-fills; for Select/Climate/Number you pick from your options. Note: for user-created input_select helpers the option must carry the RAW state value, not a localized display label — otherwise Crowdergy won't match on read-back.",
         "data": {
           "value_on": "Value for on",
           "value_off": "Value for off",
@@ -156,7 +156,7 @@
       },
       "device_charge_mode_values": {
         "title": "{device_name} — Charge-mode mapping",
-        "description": "Which options of \"{entity_charge_mode}\" map to which Crowdergy modes? Each filled field renders one button on the iOS tile (plus the AI button).",
+        "description": "Which options of \"{entity_charge_mode}\" map to which Crowdergy modes? Each filled field renders one button on the iOS tile (plus the AI button). Note: for user-created input_select helpers the option must carry the RAW state value, not a localized display label.",
         "data": {
           "charge_mode_value_lock": "Off",
           "charge_mode_value_power": "On",

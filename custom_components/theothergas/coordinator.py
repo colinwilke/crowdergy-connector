@@ -595,14 +595,20 @@ class CrowdergyCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
         return value
 
     def _read_string(self, entity_id: str) -> str | None:
-        """Read an entity state as a plain string (incl. friendly_name fallback)."""
+        """Read an entity state as the raw `state.state` string.
+
+        C4 (2026-06-01): docstring previously claimed a friendly_value
+        fallback, but the code never read attributes. The raw state IS
+        the right thing — friendly_value would have masked the raw
+        token the user's HA Frontend translates per locale, which
+        would silently break our downstream value-matching (e.g.
+        vehicle_status mapping). Aligned docstring to reality.
+        """
         if not entity_id:
             return None
         state = self.hass.states.get(entity_id)
         if state is None or state.state in ("unknown", "unavailable"):
             return None
-        # Prefer the friendly representation if HA exposes one (sensor entities
-        # often carry a `friendly_value` or use the raw `state`).
         text = str(state.state)
         return text if text else None
 

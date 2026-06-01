@@ -139,7 +139,7 @@
       },
       "device_values": {
         "title": "{device_name} — Werte schreiben",
-        "description": "Was soll Crowdergy auf die Steuer-Entität schreiben? Bei Switch füllt sich das automatisch, bei Select/Climate/Number wählst du aus deinen Optionen.",
+        "description": "Was soll Crowdergy auf die Steuer-Entität schreiben? Bei Switch füllt sich das automatisch, bei Select/Climate/Number wählst du aus deinen Optionen. Hinweis: bei selbst-erstellten input_select-Helpern muss die Option den ROHEN State-Wert tragen (nicht ein lokalisiertes Anzeige-Label) — sonst matched Crowdergy nicht beim Zurücklesen.",
         "submit": "Weiter",
         "data": {
           "value_on": "Wert für An",
@@ -156,7 +156,7 @@
       },
       "device_charge_mode_values": {
         "title": "{device_name} — Lademodus zuordnen",
-        "description": "Welche Optionen von „{entity_charge_mode}“ entsprechen welchen Crowdergy-Modi? Pro ausgefülltem Feld zeigt die iOS-Kachel einen Button (zusätzlich gibt es immer den AI-Button). Felder leer lassen blendet den jeweiligen Modus aus.",
+        "description": "Welche Optionen von „{entity_charge_mode}“ entsprechen welchen Crowdergy-Modi? Pro ausgefülltem Feld zeigt die iOS-Kachel einen Button (zusätzlich gibt es immer den AI-Button). Felder leer lassen blendet den jeweiligen Modus aus. Hinweis: bei selbst-erstellten input_select-Helpern muss die Option den ROHEN State-Wert tragen, nicht ein lokalisiertes Label.",
         "submit": "Weiter",
         "data": {
           "charge_mode_value_lock": "Aus",
@@ -358,7 +358,7 @@
       },
       "add_device_values": {
         "title": "{device_name} — Werte schreiben",
-        "description": "Was soll Crowdergy auf die Steuer-Entität schreiben? Bei Switch füllt sich das automatisch, bei Select/Climate/Number wählst du aus deinen Optionen.",
+        "description": "Was soll Crowdergy auf die Steuer-Entität schreiben? Bei Switch füllt sich das automatisch, bei Select/Climate/Number wählst du aus deinen Optionen. Hinweis: bei selbst-erstellten input_select-Helpern muss die Option den ROHEN State-Wert tragen (nicht ein lokalisiertes Anzeige-Label) — sonst matched Crowdergy nicht beim Zurücklesen.",
         "submit": "Weiter",
         "data": {
           "value_on": "Wert für An",
