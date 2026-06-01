@@ -34,6 +34,7 @@ from .const import (
     CONF_ENTITY_SOC,
     CONF_ENTITY_VEHICLE_STATUS,
     CONF_ENTITY_CURRENT_TEMP,
+    CONF_ENTITY_VORLAUF_TEMP,
     CONF_ENTITY_ENERGY_TOTAL,
     CONF_ENTITY_ENERGY_DISCHARGED_TOTAL,  # noqa: F401 — used as slot key
     CONF_INVERT_POWER_SIGN,
@@ -205,6 +206,14 @@ _ENTITY_SELECTORS: dict[str, selector.EntitySelector] = {
         # kopiert und der Selector beim Edit-Reload sonst die
         # Validierung verweigert.
         selector.EntitySelectorConfig(domain=["sensor", "climate"])
+    ),
+    # Solver-only Vorlauf-Temperatur (v3.3+). Optional pro heating-
+    # Gerät; wenn gesetzt verfeinert das Backend den COP-Schätzer
+    # gegenüber dem statischen W35-Annahme-Modell. Nur Sensor-Domain
+    # — die Vorlauf-Temp sitzt typisch in einer eigenen Modbus-/
+    # Number-Entity, nicht als Attribut einer Climate-Entity.
+    CONF_ENTITY_VORLAUF_TEMP: selector.EntitySelector(
+        selector.EntitySelectorConfig(domain="sensor")
     ),
     # Climate-first Pick für heating. Aus dem climate-State
     # leitet der Connector Steuerung (set_hvac_mode), Ist-Temperatur
@@ -443,18 +452,28 @@ def _entities_schema(
             else:
                 primary_field = _entity_field(CONF_ENTITY_CLIMATE, d)
                 primary_selector = _ENTITY_SELECTORS[CONF_ENTITY_CLIMATE]
-            control_schema = vol.Schema({
+            control_fields: dict[Any, Any] = {
                 primary_field: primary_selector,
                 _entity_field(CONF_ENTITY_CURRENT_TEMP, d):
                     _ENTITY_SELECTORS[CONF_ENTITY_CURRENT_TEMP],
-            })
+            }
+            if device_type == "heating":
+                control_fields[
+                    _entity_field(CONF_ENTITY_VORLAUF_TEMP, d)
+                ] = _ENTITY_SELECTORS[CONF_ENTITY_VORLAUF_TEMP]
+            control_schema = vol.Schema(control_fields)
         else:
-            control_schema = vol.Schema({
+            control_fields = {
                 _entity_field(CONF_ENTITY_CONTROL, d):
                     _ENTITY_SELECTORS[CONF_ENTITY_CONTROL],
                 _entity_field(CONF_ENTITY_CURRENT_TEMP, d):
                     _ENTITY_SELECTORS[CONF_ENTITY_CURRENT_TEMP],
-            })
+            }
+            if device_type == "heating":
+                control_fields[
+                    _entity_field(CONF_ENTITY_VORLAUF_TEMP, d)
+                ] = _ENTITY_SELECTORS[CONF_ENTITY_VORLAUF_TEMP]
+            control_schema = vol.Schema(control_fields)
         schema_dict[vol.Required("control_section")] = section(
             control_schema, {"collapsed": False}
         )
@@ -866,6 +885,7 @@ def _build_device_record(
             CONF_ENTITY_WATER_HEATER, ""
         ),
         CONF_ENTITY_CURRENT_TEMP: entity_input.get(CONF_ENTITY_CURRENT_TEMP, ""),
+        CONF_ENTITY_VORLAUF_TEMP: entity_input.get(CONF_ENTITY_VORLAUF_TEMP, ""),
         CONF_ENTITY_ENERGY_TOTAL: entity_input.get(CONF_ENTITY_ENERGY_TOTAL, ""),
         CONF_ENTITY_ENERGY_DISCHARGED_TOTAL: entity_input.get(
             CONF_ENTITY_ENERGY_DISCHARGED_TOTAL, ""

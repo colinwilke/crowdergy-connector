@@ -34,6 +34,7 @@ from .const import (
     CONF_INVERT_POWER_SIGN,
     CONF_ENTITY_ENERGY_DISCHARGED_TOTAL,
     CONF_ENTITY_OUTDOOR_TEMP,
+    CONF_ENTITY_VORLAUF_TEMP,
     CONF_REFRESH_TOKEN,
     CONF_USER_ID,
     CONF_VALUE_OFF,
@@ -111,6 +112,30 @@ SEND_THRESHOLDS: dict[str, float] = {
 
 SSE_RECONNECT_INITIAL = 1
 SSE_RECONNECT_MAX = 60
+
+
+# ── Solver-only Extra-Field-Registry (v3.3+) ─────────────────────────
+#
+# Pro Gerätetyp: Liste von (payload_key, conf_key, reader) Tupeln. Pro
+# Tick liest der Coordinator jede mappte Entity, packt das Resultat in
+# `payload["extra"]`. Backend filtert + validiert serverseitig
+# (app/mpc/solver_fields.py) — Single Source of Truth bleibt dort.
+#
+# Neues Solver-Feld hier hinzufügen → fertig connector-seitig. Sobald
+# der Backend-Registry-Eintrag steht, fließt das Feld pro Telemetry-
+# Tick durch zum Solver.
+#
+# `reader` muss eine der Reader-Methoden auf der Coordinator-Klasse
+# sein (siehe `_read_extra_value` im Loop). Aktuell "temp" → liest
+# °C-Sensoren oder die `current_temperature` aus climate-Attributen.
+_SOLVER_EXTRA_FIELDS: dict[str, list[tuple[str, str, str]]] = {
+    "heating": [
+        ("vorlauf_temp_c", CONF_ENTITY_VORLAUF_TEMP, "temp"),
+    ],
+    # Andere Gerätetypen können ihre Solver-only-Felder hier
+    # anhängen ohne den eigentlichen `_async_update_data`-Loop
+    # anfassen zu müssen.
+}
 
 
 def _load_manifest_version() -> str:
@@ -908,6 +933,26 @@ class CrowdergyCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
                 payload["is_on"] = is_on
             if cool_on is not None:
                 payload["cool_on"] = cool_on
+
+            # Solver-only extras (Vorlauf-Temp, später T_supply, …).
+            # JSONB-Bag im Backend; UI bekommt davon nichts mit. Nur
+            # senden wenn mindestens ein Feld einen Wert liefert,
+            # sonst Payload nicht aufblähen.
+            extra_payload: dict[str, Any] = {}
+            for payload_key, conf_key, reader in _SOLVER_EXTRA_FIELDS.get(
+                dev.get(CONF_DEVICE_TYPE, ""), []
+            ):
+                entity_id = dev.get(conf_key, "")
+                if not entity_id:
+                    continue
+                if reader == "temp":
+                    value = self._read_temp_c(entity_id)
+                else:
+                    value = self._read_entity_state(entity_id)
+                if isinstance(value, (int, float)):
+                    extra_payload[payload_key] = float(value)
+            if extra_payload:
+                payload["extra"] = extra_payload
 
             if device_id and self._should_send(device_id, payload):
                 try:

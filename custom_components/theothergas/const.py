@@ -241,6 +241,19 @@ CONF_ENTITY_COOL_CONTROL = "entity_cool_control"
 CONF_VALUE_COOL_ON = "value_cool_on"
 CONF_VALUE_COOL_OFF = "value_cool_off"
 
+# Solver-only Telemetry-Felder (v3.3+, Phase-0-Infra). Pro Gerätetyp
+# eine Liste optionaler HA-Sensor-Entities, deren Wert pro Tick als
+# `extra: {key: value, ...}` mit dem Telemetry-PATCH mitläuft.
+# Backend (app/mpc/solver_fields.py) ist Single Source of Truth für
+# Validierung — Connector schiebt locker rüber, Backend filtert
+# unbekannte/falsche Werte raus.
+#
+# Neue Solver-Eingabe = (1) Eintrag hier + (2) Registry-Eintrag im
+# Backend + (3) Worker liest via `read_extra(latest_tele.extra, key)`.
+# UI bleibt unangetastet — diese Felder sind explizit nicht für die
+# iOS-App gedacht.
+CONF_ENTITY_VORLAUF_TEMP = "entity_vorlauf_temp_c"
+
 # Hold loop timing. Initial 10 s lets the apply call's effect
 # propagate before the first rewrite. 30 s catches most auto-revert
 # cycles (Kostal's is 60 s).
