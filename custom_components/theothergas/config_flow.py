@@ -647,6 +647,7 @@ def _values_schema(
     entity_control: str,
     defaults: dict[str, Any],
     include_cooling: bool = False,
+    cooling_first: bool = False,
 ) -> vol.Schema:
     """Step C schema: value_on + value_off, typed if entity_control supports it.
 
@@ -654,6 +655,10 @@ def _values_schema(
     inline. value_cool_off entfällt im Schema, weil es bei climate-* und
     SG-Ready 1:1 identisch zu value_off ist (climate.set_hvac_mode("off"));
     _register_device leitet es daraus ab.
+
+    v3.6.1 cooling_first=True (aircon) → Reihenfolge Kühlen → Heizen
+    (optional) → Aus → Hold, weil bei einer Klimaanlage Kühlen der
+    primäre Use-Case ist und Heizen sekundär/optional bleibt.
     """
     value_sel = _value_selector(hass, entity_control)
 
@@ -678,12 +683,16 @@ def _values_schema(
 
     field_type: Any = value_sel if value_sel is not None else str
 
-    schema: dict[Any, Any] = {
-        _field(CONF_VALUE_ON): field_type,
-        _field(CONF_VALUE_OFF): field_type,
-    }
-    if include_cooling:
+    schema: dict[Any, Any] = {}
+    if cooling_first and include_cooling:
         schema[_field(CONF_VALUE_COOL_ON)] = field_type
+        schema[_field(CONF_VALUE_ON)] = field_type
+        schema[_field(CONF_VALUE_OFF)] = field_type
+    else:
+        schema[_field(CONF_VALUE_ON)] = field_type
+        schema[_field(CONF_VALUE_OFF)] = field_type
+        if include_cooling:
+            schema[_field(CONF_VALUE_COOL_ON)] = field_type
     schema[_hold_mode_field(defaults)] = _hold_mode_selector()
     return vol.Schema(schema)
 
@@ -1999,6 +2008,7 @@ class CrowdergyConfigFlow(ConfigFlow, domain=DOMAIN):
             data_schema=_values_schema(
                 self.hass, entity_control, {},
                 include_cooling=include_cooling,
+                cooling_first=device_type == "aircon",
             ),
             description_placeholders={
                 "device_type": DEVICE_TYPE_LABELS_DE.get(device_type, device_type),
@@ -2426,6 +2436,7 @@ class CrowdergyOptionsFlow(OptionsFlow):
             data_schema=_values_schema(
                 self.hass, entity_control, {},
                 include_cooling=include_cooling,
+                cooling_first=device_type == "aircon",
             ),
             description_placeholders={
                 "device_type": DEVICE_TYPE_LABELS_DE.get(device_type, device_type),
@@ -2907,6 +2918,7 @@ class CrowdergyOptionsFlow(OptionsFlow):
             data_schema=_values_schema(
                 self.hass, entity_control, target,
                 include_cooling=include_cooling,
+                cooling_first=device_type == "aircon",
             ),
             description_placeholders={
                 "device_type": DEVICE_TYPE_LABELS_DE.get(device_type, device_type),
