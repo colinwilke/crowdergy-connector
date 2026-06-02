@@ -1,7 +1,7 @@
 {
   "domain": "theothergas",
   "name": "Crowdergy Connector",
-  "version": "3.4.7",
+  "version": "3.4.8",
   "config_flow": true,
   "documentation": "https://github.com/colinwilke/crowdergy-connector",
   "issue_tracker": "https://github.com/colinwilke/crowdergy-connector/issues",
