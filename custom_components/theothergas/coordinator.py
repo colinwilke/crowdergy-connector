@@ -35,6 +35,7 @@ from .const import (
     CONF_INVERT_POWER_SIGN,
     CONF_ENTITY_ENERGY_DISCHARGED_TOTAL,
     CONF_ENTITY_OUTDOOR_TEMP,
+    CONF_ENTITY_VORLAUF_SETPOINT,
     CONF_ENTITY_VORLAUF_TEMP,
     CONF_REFRESH_TOKEN,
     CONF_USER_ID,
@@ -1558,6 +1559,18 @@ class CrowdergyCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
                     self._on_state[device_id] = new_on
                     self._sync_field_into_data(device_id, "is_on", new_on)
                     await self._apply_device_state(device_id, new_on)
+            # Phase 2b (2026-06-02): Vorlauf-Setpoint von modulierenden
+            # Heizungen. Backend sendet pro Solver-Tick °C; wir dispatchen
+            # via climate.set_temperature gegen die User-konfigurierte
+            # entity_vorlauf_setpoint. Skip wenn keine Entity gemapped
+            # ist (User darf vorerst weiter on/off-only fahren).
+            if "vorlauf_setpoint_c" in payload:
+                try:
+                    setpoint_val = float(payload["vorlauf_setpoint_c"])
+                except (ValueError, TypeError):
+                    setpoint_val = None
+                if setpoint_val is not None:
+                    await self._apply_vorlauf_setpoint(device_id, setpoint_val)
             return
 
         # `command` frames are mostly handled via the telemetry mirror
@@ -2027,6 +2040,67 @@ class CrowdergyCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
             "(entity_cool_control empty, entity_control not climate.*)",
             device_id,
         )
+
+    async def _apply_vorlauf_setpoint(
+        self, device_id: str, temperature_c: float
+    ) -> None:
+        """Phase 2b (2026-06-02): write the solver's Vorlauf-Setpoint
+        in °C to the user-configured entity_vorlauf_setpoint. Dispatch-
+        Pfad nach Domain:
+          * `climate.*` → `climate.set_temperature(temperature=°C)`
+          * `number.*` / `input_number.*` → `set_value(value=°C)`
+          * sonst → skip (User-Misconfig oder Phase-3-Entity-Domain
+            die wir noch nicht unterstützen).
+        Skip ohne Log wenn keine Entity gemapped ist — der User hat
+        sich gegen modulating-VL-Dispatch entschieden, der Solver
+        liefert weiterhin die Empfehlung für den Audit-Pfad."""
+        dev = next(
+            (d for d in self.devices if d.get(CONF_DEVICE_ID) == device_id),
+            None,
+        )
+        if dev is None:
+            return
+        entity_id = dev.get(CONF_ENTITY_VORLAUF_SETPOINT, "") or ""
+        if not entity_id:
+            return
+        domain = entity_id.split(".", 1)[0]
+        # Idempotenz: wenn HA bereits den exakten Wert reportet (≤ 0.05 °C
+        # Toleranz für Float-Rauschen), kein Re-Write — climate.set_
+        # temperature ist auf manchen WPs ebenso piepend wie set_hvac_mode.
+        actual_raw = self._read_current_state(entity_id)
+        if actual_raw is not None:
+            try:
+                if abs(float(actual_raw) - temperature_c) <= 0.05:
+                    return
+            except (ValueError, TypeError):
+                pass
+        _LOGGER.debug(
+            "set_vorlauf_setpoint: %s → %.1f °C", entity_id, temperature_c,
+        )
+        try:
+            if domain == "climate":
+                await self.hass.services.async_call(
+                    "climate", "set_temperature",
+                    {"entity_id": entity_id, "temperature": temperature_c},
+                    blocking=True,
+                )
+            elif domain in ("number", "input_number"):
+                await self.hass.services.async_call(
+                    domain, "set_value",
+                    {"entity_id": entity_id, "value": temperature_c},
+                    blocking=True,
+                )
+            else:
+                _LOGGER.warning(
+                    "Device %s entity_vorlauf_setpoint=%s domain %s nicht "
+                    "unterstützt — bitte climate / number / input_number "
+                    "wählen.",
+                    device_id, entity_id, domain,
+                )
+        except Exception as err:  # noqa: BLE001
+            _LOGGER.exception(
+                "set_vorlauf_setpoint failed for %s: %s", entity_id, err,
+            )
 
     async def _write_entity_control(
         self,

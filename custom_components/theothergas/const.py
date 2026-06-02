@@ -254,6 +254,16 @@ CONF_VALUE_COOL_OFF = "value_cool_off"
 # iOS-App gedacht.
 CONF_ENTITY_VORLAUF_TEMP = "entity_vorlauf_temp_c"
 
+# Phase 2b Refactor (2026-06-02): write-side Vorlauf-Setpoint-Entity.
+# Bei modulierenden Heizungen (Backend setzt is_modulating_heating=True
+# für device.type=heating, supports_cooling=False) sendet der Solver
+# pro Tick einen `vorlauf_setpoint_c`-Wert (°C) per SSE. Der Connector
+# dispatcht ihn via `climate.set_temperature(entity_vorlauf_setpoint,
+# temperature=°C)` an die HA-Entity die der User hier mapped. Wenn
+# leer / nicht gemapped: kein Dispatch, Solver-Empfehlung wird
+# stillschweigend ignoriert (User kann später nachpflegen).
+CONF_ENTITY_VORLAUF_SETPOINT = "entity_vorlauf_setpoint_c"
+
 # Hold loop timing. Initial 10 s lets the apply call's effect
 # propagate before the first rewrite. 30 s catches most auto-revert
 # cycles (Kostal's is 60 s).

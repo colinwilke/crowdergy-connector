@@ -34,6 +34,7 @@ from .const import (
     CONF_ENTITY_SOC,
     CONF_ENTITY_VEHICLE_STATUS,
     CONF_ENTITY_CURRENT_TEMP,
+    CONF_ENTITY_VORLAUF_SETPOINT,
     CONF_ENTITY_VORLAUF_TEMP,
     CONF_ENTITY_ENERGY_TOTAL,
     CONF_ENTITY_ENERGY_DISCHARGED_TOTAL,  # noqa: F401 — used as slot key
@@ -219,6 +220,17 @@ _ENTITY_SELECTORS: dict[str, selector.EntitySelector] = {
     # Number-Entity, nicht als Attribut einer Climate-Entity.
     CONF_ENTITY_VORLAUF_TEMP: selector.EntitySelector(
         selector.EntitySelectorConfig(domain="sensor")
+    ),
+    # Phase 2b (2026-06-02): Write-Side Vorlauf-Setpoint. Bei
+    # modulierenden Heizungen sendet der Solver pro Tick °C, der
+    # Connector dispatcht via climate.set_temperature gegen diese
+    # Entity. Domain umfasst climate (modulierende WPs mit
+    # climate.set_temperature-Service) sowie number / input_number
+    # für SG-Ready-WPs mit eigenem Setpoint-Register.
+    CONF_ENTITY_VORLAUF_SETPOINT: selector.EntitySelector(
+        selector.EntitySelectorConfig(
+            domain=["climate", "number", "input_number"]
+        )
     ),
     # Climate-first Pick für heating. Aus dem climate-State
     # leitet der Connector Steuerung (set_hvac_mode), Ist-Temperatur
@@ -491,6 +503,15 @@ def _entities_schema(
             control_fields[
                 _entity_field(CONF_ENTITY_VORLAUF_TEMP, d)
             ] = _ENTITY_SELECTORS[CONF_ENTITY_VORLAUF_TEMP]
+            # Phase 2b (2026-06-02): Write-Side Vorlauf-Setpoint. Nur
+            # für heating-Devices (Solver moduliert WP-Setpoint pro
+            # Tick). Warmwasser bleibt binary on/off, Reversibel-WP
+            # (heating+cooling) wartet auf Phase 3 mit 3-state mode +
+            # continuous VL.
+            if device_type == "heating":
+                control_fields[
+                    _entity_field(CONF_ENTITY_VORLAUF_SETPOINT, d)
+                ] = _ENTITY_SELECTORS[CONF_ENTITY_VORLAUF_SETPOINT]
             control_schema = vol.Schema(control_fields)
         else:
             control_fields = {
@@ -502,6 +523,11 @@ def _entities_schema(
             control_fields[
                 _entity_field(CONF_ENTITY_VORLAUF_TEMP, d)
             ] = _ENTITY_SELECTORS[CONF_ENTITY_VORLAUF_TEMP]
+            # Phase 2b — siehe Kommentar oben.
+            if device_type == "heating":
+                control_fields[
+                    _entity_field(CONF_ENTITY_VORLAUF_SETPOINT, d)
+                ] = _ENTITY_SELECTORS[CONF_ENTITY_VORLAUF_SETPOINT]
             control_schema = vol.Schema(control_fields)
         schema_dict[vol.Required("control_section")] = section(
             control_schema, {"collapsed": False}
@@ -948,6 +974,9 @@ def _build_device_record(
         ),
         CONF_ENTITY_CURRENT_TEMP: entity_input.get(CONF_ENTITY_CURRENT_TEMP, ""),
         CONF_ENTITY_VORLAUF_TEMP: entity_input.get(CONF_ENTITY_VORLAUF_TEMP, ""),
+        CONF_ENTITY_VORLAUF_SETPOINT: entity_input.get(
+            CONF_ENTITY_VORLAUF_SETPOINT, ""
+        ),
         CONF_ENTITY_ENERGY_TOTAL: entity_input.get(CONF_ENTITY_ENERGY_TOTAL, ""),
         CONF_ENTITY_ENERGY_DISCHARGED_TOTAL: entity_input.get(
             CONF_ENTITY_ENERGY_DISCHARGED_TOTAL, ""
