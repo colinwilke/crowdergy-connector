@@ -123,6 +123,7 @@
               "entity_control": "Steuer-Entität",
               "entity_current_temp_c": "Ist-Temperatur (optional)",
               "entity_vorlauf_temp_c": "Vorlauf-Temperatur (optional)",
+              "entity_vorlauf_setpoint_c": "Vorlauf-Setpoint (modulierende Heizung)",
               "entity_charge_mode": "Lademodus-Entität",
               "entity_water_heater": "Warmwasser-Entität"
             },
@@ -131,6 +132,7 @@
               "entity_control": "Schreibbare Entität (Switch, Number, Select). Beispiele: SG-Ready-Select, Boost-Switch, Strom-Limit-Number.",
               "entity_current_temp_c": "Heizung im Climate-Modus: separater RAUMTEMP-Sensor (Pflicht für Crowdergy-AI — ohne kann das Thermomodell die Komfortzone nicht tracken). Warmwasser im Climate-Modus: optionaler Override falls die water_heater-Entität die falsche Tank-Temp meldet. Manuell-Modus: dein Vorlauf-/Raum-/Boiler-Sensor (Pflicht).",
               "entity_vorlauf_temp_c": "Optionaler Vorlauf-Temperatur-Sensor der Heizung (z. B. 'Actual Temperature HK1' bei Stiebel, 'Vorlauf-Soll' bei Vaillant). Verfeinert die COP-Schätzung gegenüber der pauschalen W35-Annahme — 5–10 % bessere Plan-Qualität bei aktiv geregelter Heizkurve. Leer lassen wenn dein WP-Modell keinen VL-Sensor freilegt.",
+              "entity_vorlauf_setpoint_c": "Nur bei MANUELL-Modus relevant: schreibbare Entität für den Vorlauf-Setpoint deiner Heizung (typisch eine number.* oder input_number.* mit °C-Range 25–55). Crowdergy AI moduliert dann den Vorlauf statt nur AN/AUS — sanfter, kein hartes Aus mitten im Heizbetrieb, löst Stiebel-Min-Run-Time-Problem. Bei CLIMATE-Modus leer lassen: dort wird der Setpoint automatisch an die Climate-Entität geschickt (set_temperature).",
               "entity_charge_mode": "Wallbox: Lademodus-Select (Lock/Power/Solar). Batterie: Modi-Entität (typisch Number für +max / 0 / -max W).",
               "entity_water_heater": "HA's water_heater-Entität für deine Brauchwasser-WP. Analog Climate-Entität — Steuerung, Modi und Ist-Temperatur kommen automatisch."
             }
@@ -342,6 +344,7 @@
               "entity_control": "Steuer-Entität",
               "entity_current_temp_c": "Ist-Temperatur (optional)",
               "entity_vorlauf_temp_c": "Vorlauf-Temperatur (optional)",
+              "entity_vorlauf_setpoint_c": "Vorlauf-Setpoint (modulierende Heizung)",
               "entity_charge_mode": "Lademodus-Entität",
               "entity_water_heater": "Warmwasser-Entität"
             },
@@ -350,6 +353,7 @@
               "entity_control": "Schreibbare Entität (Switch, Number, Select). Beispiele: SG-Ready-Select, Boost-Switch, Strom-Limit-Number.",
               "entity_current_temp_c": "Heizung im Climate-Modus: separater RAUMTEMP-Sensor (Pflicht für Crowdergy-AI — ohne kann das Thermomodell die Komfortzone nicht tracken). Warmwasser im Climate-Modus: optionaler Override falls die water_heater-Entität die falsche Tank-Temp meldet. Manuell-Modus: dein Vorlauf-/Raum-/Boiler-Sensor (Pflicht).",
               "entity_vorlauf_temp_c": "Optionaler Vorlauf-Temperatur-Sensor der Heizung (z. B. 'Actual Temperature HK1' bei Stiebel, 'Vorlauf-Soll' bei Vaillant). Verfeinert die COP-Schätzung gegenüber der pauschalen W35-Annahme — 5–10 % bessere Plan-Qualität bei aktiv geregelter Heizkurve. Leer lassen wenn dein WP-Modell keinen VL-Sensor freilegt.",
+              "entity_vorlauf_setpoint_c": "Nur bei MANUELL-Modus relevant: schreibbare Entität für den Vorlauf-Setpoint deiner Heizung (typisch eine number.* oder input_number.* mit °C-Range 25–55). Crowdergy AI moduliert dann den Vorlauf statt nur AN/AUS — sanfter, kein hartes Aus mitten im Heizbetrieb, löst Stiebel-Min-Run-Time-Problem. Bei CLIMATE-Modus leer lassen: dort wird der Setpoint automatisch an die Climate-Entität geschickt (set_temperature).",
               "entity_charge_mode": "Wallbox: Lademodus-Select (Lock/Power/Solar). Batterie: Modi-Entität (typisch Number für +max / 0 / -max W).",
               "entity_water_heater": "HA's water_heater-Entität für deine Brauchwasser-WP. Analog Climate-Entität — Steuerung, Modi und Ist-Temperatur kommen automatisch."
             }
@@ -494,6 +498,7 @@
               "entity_control": "Steuer-Entität",
               "entity_current_temp_c": "Ist-Temperatur (optional)",
               "entity_vorlauf_temp_c": "Vorlauf-Temperatur (optional)",
+              "entity_vorlauf_setpoint_c": "Vorlauf-Setpoint (modulierende Heizung)",
               "entity_charge_mode": "Lademodus-Entität",
               "entity_water_heater": "Warmwasser-Entität"
             },
@@ -502,6 +507,7 @@
               "entity_control": "Schreibbare Entität (Switch, Number, Select).",
               "entity_current_temp_c": "Heizung im Climate-Modus: separater RAUMTEMP-Sensor (Pflicht für Crowdergy-AI — ohne kann das Thermomodell die Komfortzone nicht tracken). Warmwasser im Climate-Modus: optionaler Override falls die water_heater-Entität die falsche Tank-Temp meldet. Manuell-Modus: dein Vorlauf-/Raum-/Boiler-Sensor (Pflicht).",
               "entity_vorlauf_temp_c": "Optionaler Vorlauf-Sensor (z. B. 'Actual Temperature HK1' bei Stiebel). Verfeinert die COP-Schätzung um 5–10 % bei aktiv geregelter Heizkurve.",
+              "entity_vorlauf_setpoint_c": "Manuell-Modus: schreibbare °C-Entity für den VL-Setpoint (number.*, input_number.*) — Crowdergy AI moduliert dann den Vorlauf statt binary AN/AUS. Climate-Modus: leer lassen, geht automatisch an die Climate-Entity.",
               "entity_charge_mode": "Wallbox: Lademodus-Select. Batterie: Modi-Entität.",
               "entity_water_heater": "HA's water_heater-Entität für deine Brauchwasser-WP. Analog Climate-Entität — Steuerung, Modi und Ist-Temperatur kommen automatisch."
             }

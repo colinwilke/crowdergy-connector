@@ -2051,9 +2051,15 @@ class CrowdergyCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
           * `number.*` / `input_number.*` → `set_value(value=°C)`
           * sonst → skip (User-Misconfig oder Phase-3-Entity-Domain
             die wir noch nicht unterstützen).
-        Skip ohne Log wenn keine Entity gemapped ist — der User hat
-        sich gegen modulating-VL-Dispatch entschieden, der Solver
-        liefert weiterhin die Empfehlung für den Audit-Pfad."""
+
+        Fallback-Kaskade:
+          1. `entity_vorlauf_setpoint` explicit gemapped (Manuell-Mode-
+             User, SG-Ready-WP mit eigenem number/input_number) → nutzen.
+          2. Leer + `entity_control` ist climate.* (Climate-Mode-User,
+             v3.7.1+) → entity_control hat `set_temperature` eingebaut,
+             dispatch direkt dagegen.
+          3. Sonst (Manuell-Mode ohne expliziten Setpoint) → skip,
+             Heizung läuft weiter binary on/off."""
         dev = next(
             (d for d in self.devices if d.get(CONF_DEVICE_ID) == device_id),
             None,
@@ -2061,6 +2067,12 @@ class CrowdergyCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
         if dev is None:
             return
         entity_id = dev.get(CONF_ENTITY_VORLAUF_SETPOINT, "") or ""
+        if not entity_id:
+            # Climate-Mode-Fallback: entity_control ist die climate.*-
+            # Entity, die kennt `set_temperature` selbst.
+            control_entity = dev.get(CONF_ENTITY_CONTROL, "") or ""
+            if control_entity.startswith("climate."):
+                entity_id = control_entity
         if not entity_id:
             return
         domain = entity_id.split(".", 1)[0]

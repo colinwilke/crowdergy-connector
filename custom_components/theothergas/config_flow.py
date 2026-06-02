@@ -503,15 +503,13 @@ def _entities_schema(
             control_fields[
                 _entity_field(CONF_ENTITY_VORLAUF_TEMP, d)
             ] = _ENTITY_SELECTORS[CONF_ENTITY_VORLAUF_TEMP]
-            # Phase 2b (2026-06-02): Write-Side Vorlauf-Setpoint. Nur
-            # für heating-Devices (Solver moduliert WP-Setpoint pro
-            # Tick). Warmwasser bleibt binary on/off, Reversibel-WP
-            # (heating+cooling) wartet auf Phase 3 mit 3-state mode +
-            # continuous VL.
-            if device_type == "heating":
-                control_fields[
-                    _entity_field(CONF_ENTITY_VORLAUF_SETPOINT, d)
-                ] = _ENTITY_SELECTORS[CONF_ENTITY_VORLAUF_SETPOINT]
+            # Phase 2b (2026-06-02): Im Climate-Mode wird der Vorlauf-
+            # Setpoint NICHT separat abgefragt — die climate.*-Entity
+            # hat `set_temperature` bereits eingebaut und der Connector
+            # dispatcht direkt gegen `entity_control` (= dieselbe
+            # climate-Entity). Skip hier; Code-Pfad in coordinator
+            # `_apply_vorlauf_setpoint` fällt automatisch auf
+            # entity_control zurück wenn entity_vorlauf_setpoint leer.
             control_schema = vol.Schema(control_fields)
         else:
             control_fields = {
@@ -523,7 +521,14 @@ def _entities_schema(
             control_fields[
                 _entity_field(CONF_ENTITY_VORLAUF_TEMP, d)
             ] = _ENTITY_SELECTORS[CONF_ENTITY_VORLAUF_TEMP]
-            # Phase 2b — siehe Kommentar oben.
+            # Phase 2b (2026-06-02): Manuell-Mode für Heizung — hier ist
+            # entity_control typisch ein SG-Ready-Select oder Boost-
+            # Switch ohne eingebauten Setpoint-Service. Der User muss
+            # die VL-Setpoint-Entity separat angeben (number /
+            # input_number / climate). Solver-Output °C wird via
+            # climate.set_temperature bzw. number.set_value
+            # dispatched. Leer lassen = kein Setpoint-Dispatch, die
+            # Heizung läuft weiter binary on/off.
             if device_type == "heating":
                 control_fields[
                     _entity_field(CONF_ENTITY_VORLAUF_SETPOINT, d)
