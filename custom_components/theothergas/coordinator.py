@@ -51,6 +51,7 @@ from .const import (
     CONF_VEHICLE_STATUS_VALUE_UNPLUGGED,
     DOMAIN,
     ENTITY_CONTROL_HOLD_ALWAYS,
+    ENTITY_CONTROL_HOLD_AUTO,
     ENTITY_CONTROL_HOLD_NEVER,
     HOLD_INITIAL_DELAY,
     HOLD_POLL_INTERVAL,
@@ -1896,6 +1897,17 @@ class CrowdergyCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
         domain = entity_id.split(".", 1)[0]
         raw_value = dev.get(CONF_VALUE_ON if on else CONF_VALUE_OFF, "")
 
+        # v3.6.3: idempotent guard — wenn die Entity schon im commanded
+        # state sitzt, nicht nochmal schreiben. Heat-Pumpen tolerieren
+        # redundante Service-Calls, aber Split-AC's piepen bei jedem
+        # set_hvac_mode-Call. Drift-Repair übernimmt der Hold-Loop nach
+        # HOLD_INITIAL_DELAY falls actual doch noch != expected ist.
+        expected = self._expected_state_value(raw_value, on, domain)
+        actual = self._read_current_state(entity_id)
+        if expected is not None and actual == expected:
+            self._start_hold(device_id, entity_id, raw_value, domain, on)
+            return
+
         await self._write_entity_control(
             entity_id, domain, raw_value, on, verbose=True,
         )
@@ -1942,6 +1954,17 @@ class CrowdergyCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
         heat_entity = dev.get(CONF_ENTITY_CONTROL, "") or ""
         if heat_entity.startswith("climate."):
             mode = "cool" if cool_on else "off"
+            # v3.6.3: bei climate.* teilen Heat- und Cool-Seite dieselbe
+            # Entity. Der Heat-Side-Hold-Loop hätte sonst seinen
+            # raw_value (= value_off bei is_on=False) alle 30s gegen
+            # unser "cool" gesetzt — Endlos-Pingpong + Piep-Bestätigung
+            # bei jeder Klimaanlage. Beim Cool-Flip kapern wir die
+            # Mode-Hoheit: bisherigen Heat-Hold canceln, kein neuer
+            # Cool-Hold (set_hvac_mode ist sticky, Drift-Repair übernimmt
+            # die nächste Solver-Tick falls nötig). Beim Cool-Off-Flip
+            # startet `_apply_device_state` automatisch wieder eine
+            # Heat-Hold falls is_on=True.
+            self._cancel_hold(device_id)
             # v3.5.1: war fälschlich auf .warning gesetzt → tauchte als
             # „Fehler" in HA's Protokoll auf obwohl es eine normale
             # Operation ist. Jetzt auf .debug damit's nur bei aktivem
@@ -1949,6 +1972,13 @@ class CrowdergyCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
             _LOGGER.debug(
                 "set_hvac_mode: %s → %s (cool side)", heat_entity, mode,
             )
+            # v3.6.3: idempotent — wenn der climate-Mode schon stimmt,
+            # nicht nochmal schreiben (sonst piept die AC bei jedem
+            # SSE-Echo / Re-Tick). Drift-Repair kommt von der nächsten
+            # backend-decision, nicht von redundanten Re-Asserts hier.
+            actual = self._read_current_state(heat_entity)
+            if actual == mode:
+                return
             try:
                 await self.hass.services.async_call(
                     "climate", "set_hvac_mode",
@@ -2082,19 +2112,19 @@ class CrowdergyCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
         )
         if dev is None:
             return
-        # Hold mode: only `never` (no loop) vs everything-else (= the
-        # periodic rewrite). The legacy `auto` value left over in old
-        # config entries collapses to the rewrite path too — field-
-        # testing on 2026-05-22 showed hysteresis-laden devices
-        # (warmwasser, Kostal Modbus regs) need the periodic write to
-        # ever take effect, and the rewrite is harmless on devices
-        # that hold fine on their own.
+        # Hold-Mode-Semantik (v3.6.3+):
+        #   * NEVER  → kein Loop, sofortiges Return.
+        #   * AUTO   → smart: nur re-write bei Drift (Default). Stoppt
+        #     piepende Re-Asserts bei climate.* Devices.
+        #   * ALWAYS → blind re-write jeden Tick. Für "schwarze" Devices
+        #     wo der HA-State nicht zuverlässig reflektiert was am Gerät
+        #     passiert (Kostal Modbus Auto-Reset etc.).
         mode = dev.get(CONF_ENTITY_CONTROL_HOLD) or ENTITY_CONTROL_HOLD_AUTO
         if mode == ENTITY_CONTROL_HOLD_NEVER:
             return
 
         self._hold_tasks[device_id] = asyncio.create_task(
-            self._hold_loop(device_id, entity_id, raw_value, domain, on)
+            self._hold_loop(device_id, entity_id, raw_value, domain, on, mode)
         )
 
     def _cancel_hold(self, device_id: str) -> None:
@@ -2129,13 +2159,21 @@ class CrowdergyCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
         raw_value: Any,
         domain: str,
         on: bool,
+        hold_mode: str,
     ) -> None:
-        """Keep entity_control sticking to its commanded value: re-
-        write every HOLD_POLL_INTERVAL seconds for as long as
-        Crowdergize is active for this device. The loop also reads
-        the current HA state and surfaces an INFO log whenever the
-        entity drifted from the commanded value between rewrites —
-        useful for debugging hysteresis-prone devices.
+        """Keep entity_control sticking to its commanded value.
+
+        Hold-Mode-Semantik (v3.6.3+):
+          * `NEVER`  → kein Loop (in `_start_hold` gefiltert)
+          * `AUTO`   → smart: nur re-write wenn `actual != expected`
+            (Drift-Repair). Default seit v3.6.3. Verhindert blindes
+            Bombardieren von Devices die einen state korrekt halten —
+            insbesondere `climate.set_hvac_mode` piept bei jeder
+            Klimaanlage, redundante Re-Asserts müssen weg.
+          * `ALWAYS` → blind re-write jeden Tick. Für „schwarze"
+            Devices wo der HA-state nicht zuverlässig reflektiert was
+            wirklich am Gerät passiert (Kostal Modbus etc. — Register
+            auto-reset ohne dass HA es als state-change sieht).
 
         Bails out if Crowdergize gets switched off (the `_cancel_hold`
         path covers that) or on coordinator shutdown.
@@ -2151,10 +2189,15 @@ class CrowdergyCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
                 expected = self._expected_state_value(raw_value, on, domain)
                 actual = self._read_current_state(entity_id)
                 if (
-                    actual is not None
+                    hold_mode == ENTITY_CONTROL_HOLD_AUTO
                     and expected is not None
-                    and actual != expected
+                    and actual == expected
                 ):
+                    # AUTO + state stimmt → skip. Spart Service-Calls
+                    # und Piep-Bestätigungen bei AC.
+                    await asyncio.sleep(HOLD_POLL_INTERVAL)
+                    continue
+                if actual is not None and expected is not None and actual != expected:
                     _LOGGER.info(
                         "hold: %s reverted (%r → %r), re-writing",
                         entity_id, expected, actual,
