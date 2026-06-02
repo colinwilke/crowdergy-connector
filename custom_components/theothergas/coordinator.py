@@ -1541,24 +1541,23 @@ class CrowdergyCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
                         # wir auf das entity_control schreiben — danach
                         # ist das Gerät dem User überlassen.
                         self._cancel_hold(device_id)
-            if "is_on" in payload:
-                new_on = bool(payload["is_on"])
-                if self._on_state.get(device_id) != new_on:
-                    self._on_state[device_id] = new_on
-                    self._sync_field_into_data(device_id, "is_on", new_on)
-                    await self._apply_device_state(device_id, new_on)
-            # Cooling-side mirror. Worker emittiert cool_on-Transitions
-            # für cooling-fähige heating devices. Heat/cool-Mutex ist
-            # upstream im Solver enforced — wir vertrauen dem Paar und
-            # schreiben durch auf die konfigurierte Kühl-Entity (oder
-            # Fallback auf climate.set_hvac_mode wenn die Kühl-Seite
-            # sich entity_control teilt + climate.* ist).
+            # v3.6.4: cool_on VOR is_on verarbeiten — `_cool_state`
+            # muss gesetzt sein bevor `_apply_device_state(False)` läuft,
+            # sonst sieht der Skip-Guard auf der heat-side `_cool_state`
+            # als False und schreibt "off" auf die climate-Entity die
+            # gerade vom cool-Pfad mit "cool" gefüllt wurde.
             if "cool_on" in payload:
                 new_cool = bool(payload["cool_on"])
                 if self._cool_state.get(device_id) != new_cool:
                     self._cool_state[device_id] = new_cool
                     self._sync_field_into_data(device_id, "cool_on", new_cool)
                     await self._apply_cool_state(device_id, new_cool)
+            if "is_on" in payload:
+                new_on = bool(payload["is_on"])
+                if self._on_state.get(device_id) != new_on:
+                    self._on_state[device_id] = new_on
+                    self._sync_field_into_data(device_id, "is_on", new_on)
+                    await self._apply_device_state(device_id, new_on)
             return
 
         # `command` frames are mostly handled via the telemetry mirror
@@ -1897,6 +1896,25 @@ class CrowdergyCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
         domain = entity_id.split(".", 1)[0]
         raw_value = dev.get(CONF_VALUE_ON if on else CONF_VALUE_OFF, "")
 
+        # v3.6.4: bei climate.* teilen heat- und cool-Pfad dieselbe
+        # Entity. Wenn cool-side gerade live ist (cool_on=True), dann
+        # darf die heat-side hier KEIN "off" mehr schreiben — das war
+        # der „AC geht nach 2 Sek aus"-Bug: Backend emittiert is_on=False
+        # (oft als initial-frame für dieses Device, _on_state war None)
+        # nach dem cool-Tick, _apply_device_state(False) findet expected=
+        # "off" vs actual="cool" → schreibt "off" → AC aus.
+        if (
+            domain == "climate"
+            and not on
+            and self._cool_state.get(device_id, False)
+        ):
+            _LOGGER.debug(
+                "skip heat-off write for %s: cool_on=True owns climate entity",
+                device_id,
+            )
+            self._cancel_hold(device_id)
+            return
+
         # v3.6.3: idempotent guard — wenn die Entity schon im commanded
         # state sitzt, nicht nochmal schreiben. Heat-Pumpen tolerieren
         # redundante Service-Calls, aber Split-AC's piepen bei jedem
@@ -1953,6 +1971,20 @@ class CrowdergyCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
         # translates the mode via `climate.set_hvac_mode`.
         heat_entity = dev.get(CONF_ENTITY_CONTROL, "") or ""
         if heat_entity.startswith("climate."):
+            # v3.6.4: symmetrisch zur heat-side: cool→off darf die
+            # entity nicht überschreiben wenn heat-side gerade live ist
+            # (is_on=True). Würde sonst die heat-Mode beim cool_on=False
+            # SSE-Frame nach "off" zwingen statt heat sauber zu
+            # übernehmen.
+            if (
+                not cool_on
+                and self._on_state.get(device_id, False)
+            ):
+                _LOGGER.debug(
+                    "skip cool-off write for %s: is_on=True owns climate entity",
+                    device_id,
+                )
+                return
             mode = "cool" if cool_on else "off"
             # v3.6.3: bei climate.* teilen Heat- und Cool-Seite dieselbe
             # Entity. Der Heat-Side-Hold-Loop hätte sonst seinen
