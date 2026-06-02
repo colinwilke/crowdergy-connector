@@ -534,7 +534,9 @@ def _flatten_sections(user_input: dict[str, Any]) -> dict[str, Any]:
     return flat
 
 
-def _apply_climate_first(entity_input: dict[str, Any]) -> dict[str, Any]:
+def _apply_climate_first(
+    entity_input: dict[str, Any], device_type: str = ""
+) -> dict[str, Any]:
     """Climate-/Water-Heater-first: wenn entity_climate ODER
     entity_water_heater gesetzt ist, kopieren wir den Wert auf
     entity_control. Damit weiß der Connector im Dispatch ob er
@@ -545,6 +547,11 @@ def _apply_climate_first(entity_input: dict[str, Any]) -> dict[str, Any]:
     **Warmwasser** (water_heater.*): die `current_temperature` der
     primary entity IST die Tank-Temp — auto-copy nach
     `entity_current_temp` ist semantisch korrekt.
+
+    **Klima/aircon** (climate.*): bei Split-AC ist
+    `climate.current_temperature` die echte Raumtemp →
+    auto-copy nach `entity_current_temp` ist hier semantisch
+    ebenfalls korrekt.
 
     **Heating** (climate.*): die `current_temperature` ist bei den
     meisten WP-/FBH-Setups die VORLAUF-Temp, NICHT die Raumtemp.
@@ -565,11 +572,15 @@ def _apply_climate_first(entity_input: dict[str, Any]) -> dict[str, Any]:
     )
     if primary:
         entity_input[CONF_ENTITY_CONTROL] = primary
-        # Auto-copy nach entity_current_temp NUR für water_heater
-        # (warmwater) — bei climate (heating) ist current_temperature
-        # die Vorlauf-Temp und gehört nicht in current_temp_c.
+        # Auto-copy nach entity_current_temp für die Fälle wo die
+        # primary-entity `current_temperature` semantisch zur Raumtemp/
+        # Tanktemp passt: water_heater (Tank), aircon (Raum).
         is_water_heater = primary.startswith("water_heater.")
-        if is_water_heater and not entity_input.get(CONF_ENTITY_CURRENT_TEMP, ""):
+        is_aircon = device_type == "aircon"
+        if (
+            (is_water_heater or is_aircon)
+            and not entity_input.get(CONF_ENTITY_CURRENT_TEMP, "")
+        ):
             entity_input[CONF_ENTITY_CURRENT_TEMP] = primary
     return entity_input
 
@@ -1732,7 +1743,8 @@ class CrowdergyConfigFlow(ConfigFlow, domain=DOMAIN):
 
         if user_input is not None:
             entity_input = _apply_climate_first(
-                _flatten_sections(user_input)
+                _flatten_sections(user_input),
+                device_type=device_type,
             )
             return await self._dispatch_post_entities(entity_input)
 
@@ -2195,7 +2207,8 @@ class CrowdergyOptionsFlow(OptionsFlow):
 
         if user_input is not None:
             entity_input = _apply_climate_first(
-                _flatten_sections(user_input)
+                _flatten_sections(user_input),
+                device_type=device_type,
             )
             return await self._dispatch_add_post_entities(entity_input)
 
@@ -2556,7 +2569,8 @@ class CrowdergyOptionsFlow(OptionsFlow):
             )
             self._edit_pending_name = new_name
             entity_input = _apply_climate_first(
-                _flatten_sections(user_input)
+                _flatten_sections(user_input),
+                device_type=device_type,
             )
             # Hold-mode is invisible in the user-facing flow (every
             # device gets `always` since v1.20.0). Carry it forward

@@ -24,6 +24,7 @@ from .const import (
     CONF_DEVICE_TYPE,
     CONF_DEVICES,
     CONF_ENTITY_CHARGE_MODE,
+    CONF_ENTITY_CLIMATE,
     CONF_ENTITY_CONTROL,
     CONF_ENTITY_CONTROL_HOLD,
     CONF_ENTITY_POWER,
@@ -1077,6 +1078,17 @@ class CrowdergyCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
             entity_vehicle_status = dev.get(CONF_ENTITY_VEHICLE_STATUS, "")
             entity_charge_mode = dev.get(CONF_ENTITY_CHARGE_MODE, "")
             entity_current_temp = dev.get(CONF_ENTITY_CURRENT_TEMP, "")
+            # aircon-Fallback: bei Split-AC ist climate.current_temperature
+            # die echte Raumtemp. Geräte aus v3.6.0 (vor v3.6.2-Auto-Copy)
+            # haben entity_current_temp leer → ohne Fallback bleibt Tile
+            # ohne Temperatur. Heating (Stiebel & Co.) bleibt
+            # ausgeschlossen, weil dort climate.current_temperature die
+            # Vorlauf-Temp ist und nicht ins Thermomodell darf.
+            if (
+                not entity_current_temp
+                and dev.get(CONF_DEVICE_TYPE) == "aircon"
+            ):
+                entity_current_temp = dev.get(CONF_ENTITY_CLIMATE, "")
             entity_energy_total = dev.get(CONF_ENTITY_ENERGY_TOTAL, "")
             entity_energy_discharged_total = dev.get(
                 CONF_ENTITY_ENERGY_DISCHARGED_TOTAL, ""
