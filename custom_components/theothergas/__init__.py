@@ -26,6 +26,10 @@ type CrowdergyConfigEntry = ConfigEntry
 async def async_setup_entry(hass: HomeAssistant, entry: CrowdergyConfigEntry) -> bool:
     """Set up Crowdergy from a config entry."""
     coordinator = CrowdergyCoordinator(hass, entry)
+    # v3.5.1: blocking I/O (httpx-SSL-Cert-Load + manifest-Read) wird
+    # ins Executor verlagert — HA 2024.x meckert sonst ueber blocking
+    # calls im event loop.
+    await coordinator.async_init()
 
     await coordinator.async_config_entry_first_refresh()
     coordinator.setup_listeners()

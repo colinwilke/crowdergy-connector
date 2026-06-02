@@ -212,7 +212,12 @@ class CrowdergyCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
         self._refresh_token: str = entry.data[CONF_REFRESH_TOKEN]
         self._user_id: str = entry.data.get(CONF_USER_ID, "")
         self.devices: list[dict[str, Any]] = entry.data.get(CONF_DEVICES, [])
-        self._client = httpx.AsyncClient(base_url=self.api_url, timeout=15.0)
+        # v3.5.1: httpx.AsyncClient + manifest read sind blocking I/O
+        # (SSL-Cert-Load synchron) — HA's event-loop checker meckert
+        # ab 2024.x. Beide werden in `async_init()` deferred angelegt;
+        # bis dahin als Placeholder None / "0.0.0" damit Attribut
+        # existiert falls etwas vor async_init darauf zugreift.
+        self._client: httpx.AsyncClient | None = None  # type: ignore[assignment]
         self._unsub_listeners: list[Any] = []
         self._entity_to_devices: dict[str, list[str]] = {}
         self._sse_task: asyncio.Task | None = None
@@ -273,7 +278,8 @@ class CrowdergyCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
         self._pre_crowdergize_charge_mode: dict[str, str] = {}
         # Read once at coordinator init — never changes during a HA
         # session (a manifest bump means HACS reloads the integration).
-        self._connector_version: str = _load_manifest_version()
+        # Manifest-Read deferred (siehe Kommentar oben bei _client).
+        self._connector_version: str = "0.0.0"
         # Last SENT (not just last read) lifetime-kWh per device.
         # Used to compute Δ-since-last-PATCH on the next send. We
         # track "last sent" rather than "last read" so the per-tick
@@ -360,6 +366,27 @@ class CrowdergyCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
         self._sse_task = self.hass.async_create_background_task(
             self._run_sse_loop(),
             name=f"{DOMAIN}_sse_listener",
+        )
+
+    async def async_init(self) -> None:
+        """v3.5.1 — Defered blocking I/O aus dem event loop.
+
+        HA 2024.x flagt zwei Operationen in `__init__` als blocking:
+        - `httpx.AsyncClient(...)` laedt das CA-Bundle synchron
+          (load_verify_locations → blocking ssl-init)
+        - `_load_manifest_version()` macht `open(... manifest.json)`
+
+        Beides hier per `async_add_executor_job` in einen Worker-Thread
+        ausgelagert, sodass der event loop frei bleibt. Wird einmalig
+        in `__init__.py:async_setup_entry` direkt nach Coordinator-
+        Konstruktion aufgerufen, bevor die ersten Refreshes/Listeners
+        laufen.
+        """
+        self._client = await self.hass.async_add_executor_job(
+            lambda: httpx.AsyncClient(base_url=self.api_url, timeout=15.0)
+        )
+        self._connector_version = await self.hass.async_add_executor_job(
+            _load_manifest_version
         )
 
     def start_heartbeat(self) -> None:
@@ -1923,7 +1950,11 @@ class CrowdergyCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
         heat_entity = dev.get(CONF_ENTITY_CONTROL, "") or ""
         if heat_entity.startswith("climate."):
             mode = "cool" if cool_on else "off"
-            _LOGGER.warning(
+            # v3.5.1: war fälschlich auf .warning gesetzt → tauchte als
+            # „Fehler" in HA's Protokoll auf obwohl es eine normale
+            # Operation ist. Jetzt auf .debug damit's nur bei aktivem
+            # Debug-Logging sichtbar wird.
+            _LOGGER.debug(
                 "set_hvac_mode: %s → %s (cool side)", heat_entity, mode,
             )
             try:
