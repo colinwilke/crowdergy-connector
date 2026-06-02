@@ -1235,35 +1235,15 @@ class CrowdergyCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
                 if isinstance(value, (int, float)):
                     extra_payload[payload_key] = float(value)
 
-            # Heating + Climate-Mode: `climate.*`-Entities reportieren bei
-            # Stiebel-/FBH-typischen Setups die VORLAUF-Temperatur unter
-            # `current_temperature`, NICHT die Raumtemperatur. Pre-v3.4.6
-            # hat `_apply_climate_first` das climate-Entity automatisch
-            # nach `entity_current_temp` kopiert → coordinator hat den
-            # Vorlauf-Wert als `current_temp_c` (= T_room) ans Backend
-            # gepusht → das 1R1C-Thermomodell hat 40 °C als „Raumtemp"
-            # interpretiert. Ab v3.4.6: routen wir's um in `vorlauf_temp_c`
-            # (Solver-Extra) und canceln das vergiftete `current_temp_c`.
-            # `entity_current_temp` als SEPARATE Raumtemp-Source bleibt
-            # gültig — config_flow stellt das ab v3.4.6 nicht mehr per
-            # `_apply_climate_first` auto.
-            device_type = dev.get(CONF_DEVICE_TYPE, "")
-            entity_control = dev.get(CONF_ENTITY_CONTROL, "")
-            if (
-                device_type == "heating"
-                and entity_control.startswith("climate.")
-                and entity_current_temp == entity_control
-            ):
-                # Read climate.current_temperature one more time —
-                # `current_temp_c` oben kommt aus exakt dieser Quelle,
-                # also wiederverwenden statt Doppel-Lookup.
-                if current_temp_c is not None:
-                    extra_payload.setdefault("vorlauf_temp_c", current_temp_c)
-                current_temp_c = None
-                # current_temp_c im Payload korrigieren — wurde schon
-                # gesetzt; jetzt rauswerfen damit das Backend nicht den
-                # alten Vorlauf-Wert als T_room weiter konsumiert.
-                payload.pop("current_temp_c", None)
+            # v3.5.2: v3.4.6's Auto-Routing von `climate.current_temperature`
+            # → `vorlauf_temp_c` ist hier raus. War zu aggressiv:
+            # echte Klimaanlagen melden `current_temperature` als
+            # ECHTE RAUMTEMP, nur Stiebel-/FBH-WPs reporten dort Vorlauf.
+            # Default-Behaviour ist jetzt wieder „climate.current_temperature
+            # → current_temp_c (Raumtemp)". User mit Stiebel-Vorlauf-via-
+            # climate können einen separaten Vorlauf-Sensor unter
+            # `entity_vorlauf_temp_c` konfigurieren (typisch
+            # `sensor.warmepumpe_actual_temperature_hk1` etc.).
 
             if extra_payload:
                 payload["extra"] = extra_payload
