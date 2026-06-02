@@ -2856,6 +2856,21 @@ class CrowdergyOptionsFlow(OptionsFlow):
                     user_input.get(CONF_VALUE_COOL_ON)
                     or target.get(CONF_VALUE_COOL_ON, "")
                 )
+            # v3.4.9: stille Resets auf der Cool-Familie verhindern.
+            # `value_cool_off` + `entity_cool_control` werden vom Form
+            # nie abgefragt (climate.set_hvac_mode reicht für die meisten
+            # Setups), aber für SG-Ready / Legacy-v2.x mit explizitem
+            # Cool-Pfad muss der gespeicherte Wert beim Edit erhalten
+            # bleiben. Ohne carry-forward würde `_build_device_record`
+            # die Felder auf `""` zurücksetzen → falscher Hold-Loop-Wert.
+            entity_input.setdefault(
+                CONF_VALUE_COOL_OFF,
+                target.get(CONF_VALUE_COOL_OFF, ""),
+            )
+            entity_input.setdefault(
+                CONF_ENTITY_COOL_CONTROL,
+                target.get(CONF_ENTITY_COOL_CONTROL, ""),
+            )
             entity_input[CONF_ENTITY_CONTROL_HOLD] = user_input.get(
                 CONF_ENTITY_CONTROL_HOLD,
                 target.get(CONF_ENTITY_CONTROL_HOLD, ENTITY_CONTROL_HOLD_AUTO),
