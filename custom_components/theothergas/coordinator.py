@@ -1504,7 +1504,7 @@ class CrowdergyCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
                                 await self._apply_charge_mode(
                                     device_id, passive_val
                                 )
-                        elif dev_type in ("heating", "warmwater", "generic"):
+                        elif dev_type in ("heating", "warmwater", "aircon", "generic"):
                             # entity_control auf value_off — sorgt
                             # dafür dass das Gerät definitiv stoppt.
                             # _apply_device_state startet danach den

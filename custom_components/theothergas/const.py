@@ -29,7 +29,7 @@ CONF_DEVICE_ID = "device_id"
 # (joint-power-constraint serverseitig).
 DEVICE_TYPES = [
     "solar", "battery", "wallbox", "grid",
-    "heating", "warmwater",
+    "heating", "warmwater", "aircon",
     "generic", "haushalt",
 ]
 UPDATE_INTERVAL = 30

@@ -86,13 +86,16 @@ DEVICE_TYPE_LABELS_DE = {
     "grid": "Netz",
     "heating": "Heizung (Wärmepumpe)",
     "warmwater": "Warmwasser (Wärmepumpe)",
+    "aircon": "Klimaanlage",
     "generic": "Sonstiges",
     "haushalt": "Haushalt",
 }
 
 # Device types that the Crowdergy app can switch on/off through the
 # user-mapped entity_control. Solar / Grid / Haushalt are read-only.
-_CONTROLLABLE_TYPES = {"battery", "wallbox", "heating", "warmwater", "generic"}
+_CONTROLLABLE_TYPES = {
+    "battery", "wallbox", "heating", "warmwater", "aircon", "generic",
+}
 
 # v2.4: device types that can carry the "included in haushalt sensor"
 # flag. Classic consumers — their draw is plausibly already counted by
@@ -428,7 +431,7 @@ def _entities_schema(
         schema_dict[vol.Required("control_section")] = section(
             control_schema, {"collapsed": False}
         )
-    elif device_type in {"heating", "warmwater"}:
+    elif device_type in {"heating", "warmwater", "aircon"}:
         # v3.0: Branch nach KonfigMode aus Step 1b.
         # Climate-Mode: nur entity_climate; Ist-Temp + Steuerung
         # leitet der Connector daraus ab (set_hvac_mode + Attribut
@@ -1057,7 +1060,7 @@ async def _register_device(
     # Classic-consumer haushalt-Flag — nur für die Typen wo's Sinn
     # macht. Solar / Grid / Battery / Haushalt selbst kennen's nicht.
     if device_type in {
-        "heating", "warmwater", "wallbox", "generic",
+        "heating", "warmwater", "aircon", "wallbox", "generic",
     }:
         device_config["included_in_haushalt"] = bool(
             entity_input.get(CONF_INCLUDED_IN_HAUSHALT, False)
@@ -1068,13 +1071,18 @@ async def _register_device(
     # ist im neuen Schema nicht mehr separat — fällt auf value_off
     # zurück, weil climate.set_hvac_mode("off") für beide Richtungen
     # derselbe Aufruf ist.
-    if device_type == "heating":
+    if device_type in ("heating", "aircon"):
         cool_on = entity_input.get(CONF_VALUE_COOL_ON, "") or ""
         cool_off = entity_input.get(CONF_VALUE_COOL_OFF, "") or ""
         if cool_on and not cool_off:
             cool_off = entity_input.get(CONF_VALUE_OFF, "") or ""
-        device_config["supports_cooling"] = bool(
-            cool_on or entity_input.get(CONF_SUPPORTS_COOLING, False)
+        # aircon: supports_cooling immer true (Klimaanlage kühlt qua
+        # Definition). heating: nur wenn cool_on Mapping gesetzt.
+        device_config["supports_cooling"] = (
+            device_type == "aircon"
+            or bool(
+                cool_on or entity_input.get(CONF_SUPPORTS_COOLING, False)
+            )
         )
         cool_entity = entity_input.get(CONF_ENTITY_COOL_CONTROL, "")
         if cool_entity:
@@ -1142,13 +1150,19 @@ async def _update_device_backend(
     # ist im neuen Schema nicht mehr separat — fällt auf value_off
     # zurück, weil climate.set_hvac_mode("off") für beide Richtungen
     # derselbe Aufruf ist.
-    if entity_input is not None and device_type == "heating":
+    if entity_input is not None and device_type in ("heating", "aircon"):
         cool_on_val = entity_input.get(CONF_VALUE_COOL_ON, "") or ""
         cool_off_val = entity_input.get(CONF_VALUE_COOL_OFF, "") or ""
         if cool_on_val and not cool_off_val:
             cool_off_val = entity_input.get(CONF_VALUE_OFF, "") or ""
-        payload["supports_cooling"] = bool(
-            cool_on_val or entity_input.get(CONF_SUPPORTS_COOLING, False)
+        # aircon: supports_cooling immer true; heating: aus cool_on
+        # abgeleitet wie bisher.
+        payload["supports_cooling"] = (
+            device_type == "aircon"
+            or bool(
+                cool_on_val
+                or entity_input.get(CONF_SUPPORTS_COOLING, False)
+            )
         )
         payload["entity_cool_control"] = entity_input.get(
             CONF_ENTITY_COOL_CONTROL, ""
@@ -1663,7 +1677,7 @@ class CrowdergyConfigFlow(ConfigFlow, domain=DOMAIN):
             # v3.0: WP-Typen (heating, warmwater) bekommen einen
             # KonfigMode-Step danach. Andere Typen skippen direkt zu
             # device_entities mit implizitem config_mode = manual.
-            if self._pending_type in {"heating", "warmwater"}:
+            if self._pending_type in {"heating", "warmwater", "aircon"}:
                 return await self.async_step_device_config_mode()
             self._pending_config_mode = CONFIG_MODE_MANUAL
             return await self.async_step_device_entities()
@@ -1962,7 +1976,8 @@ class CrowdergyConfigFlow(ConfigFlow, domain=DOMAIN):
         device_name = self._pending_name or ""
         entity_input = dict(self._pending_entity_input or {})
         entity_control = entity_input.get(CONF_ENTITY_CONTROL, "")
-        include_cooling = (
+        # aircon: cooling immer aktiv. heating: nur im Climate-Mode.
+        include_cooling = device_type == "aircon" or (
             device_type == "heating"
             and self._pending_config_mode == CONFIG_MODE_CLIMATE
         )
@@ -2130,7 +2145,7 @@ class CrowdergyOptionsFlow(OptionsFlow):
         if user_input is not None:
             self._pending_type = user_input[CONF_DEVICE_TYPE]
             self._pending_name = user_input[CONF_DEVICE_NAME]
-            if self._pending_type in {"heating", "warmwater"}:
+            if self._pending_type in {"heating", "warmwater", "aircon"}:
                 return await self.async_step_add_device_config_mode()
             self._pending_config_mode = CONFIG_MODE_MANUAL
             return await self.async_step_add_device_entities()
@@ -2388,7 +2403,8 @@ class CrowdergyOptionsFlow(OptionsFlow):
         device_name = self._pending_name or ""
         entity_input = dict(self._pending_entity_input or {})
         entity_control = entity_input.get(CONF_ENTITY_CONTROL, "")
-        include_cooling = (
+        # aircon: cooling immer aktiv. heating: nur im Climate-Mode.
+        include_cooling = device_type == "aircon" or (
             device_type == "heating"
             and self._pending_config_mode == CONFIG_MODE_CLIMATE
         )
@@ -2838,7 +2854,8 @@ class CrowdergyOptionsFlow(OptionsFlow):
                 "climate."
             ):
                 config_mode = CONFIG_MODE_CLIMATE
-        include_cooling = (
+        # aircon: cooling immer aktiv. heating: nur im Climate-Mode.
+        include_cooling = device_type == "aircon" or (
             device_type == "heating" and config_mode == CONFIG_MODE_CLIMATE
         )
 
