@@ -19,7 +19,11 @@ from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 from .const import (
     CONF_ACCESS_TOKEN,
     CONF_API_URL,
-    CONF_BATTERY_VALUE_PASSIVE,
+    CONF_ENTITY_BATTERY_MODE,
+    CONF_VALUE_BATTERY_MODE_ACTIVE,
+    CONF_VALUE_BATTERY_MODE_PASSIVE,
+    CONF_ENTITY_BATTERY_POWER_SETPOINT,
+    CONF_BATTERY_SETPOINT_INVERT_SIGN,
     CONF_DEVICE_ID,
     CONF_DEVICE_TYPE,
     CONF_DEVICES,
@@ -46,7 +50,6 @@ from .const import (
     CONF_SUPPORTS_COOLING,
     CONF_VALUE_COOL_ON,
     CONF_VALUE_COOL_OFF,
-    CONF_BATTERY_VALUE_IDLE,
     CONF_VEHICLE_STATUS_VALUE_ERROR,
     CONF_VEHICLE_STATUS_VALUE_PLUGGED,
     CONF_VEHICLE_STATUS_VALUE_UNPLUGGED,
@@ -1495,29 +1498,14 @@ class CrowdergyCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
                         )
                         dev_type = (dev or {}).get(CONF_DEVICE_TYPE, "")
                         if dev_type == "battery":
-                            # AI-off Battery-Übergabe: Hold-Loop
-                            # canceln (sonst schreibt der weiter den
-                            # letzten AI-Wert), dann battery_value_
-                            # passive an HA — das übergibt die
-                            # Batterie an die PV-Eigenverbrauchs-Logik
-                            # des Wechselrichters.
-                            #
-                            # v3.2.3 (2026-05-31): passive ist ein
-                            # Pflichtfeld im Battery-Values-Step;
-                            # leere Werte können nur in pre-v3.2.3-
-                            # Setups vorkommen und werden tolerant
-                            # geskippt (kein neuer Write, kein
-                            # Hold-Loop — Inverter macht weiter was
-                            # er gerade machte).
+                            # v3.8.0 (2026-06-02) AI-off Battery-Übergabe:
+                            # Lademodus auf "Passiv" schreiben → HA-
+                            # Automation lässt den Setpoint los, WR
+                            # übernimmt PV-Native-Priority.
                             self._cancel_charge_mode_hold(device_id)
-                            passive_val = (
-                                (dev or {}).get(CONF_BATTERY_VALUE_PASSIVE, "")
-                                or ""
+                            await self._apply_battery_setpoint(
+                                device_id, "passive", 0.0,
                             )
-                            if passive_val:
-                                await self._apply_charge_mode(
-                                    device_id, passive_val
-                                )
                         elif dev_type in ("heating", "warmwater", "aircon", "generic"):
                             # entity_control auf value_off — sorgt
                             # dafür dass das Gerät definitiv stoppt.
@@ -1587,63 +1575,29 @@ class CrowdergyCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
                 action, device_id, value,
             )
             if action == "set_charge_mode" and device_id:
-                # `value is None` ist das "passive" Signal — Backend
-                # unterdrückt den Write damit die Inverter-native PV-
-                # Priorität kickt. Hold-Loop ALWAYS canceln; ob wir
-                # zusätzlich idle pre-writen hängt vom current state ab.
-                if value is None:
-                    mode_tag = data.get("mode") or "passive"
-                    _LOGGER.info(
-                        "set_charge_mode passive on %s (mode=%s)",
-                        device_id, mode_tag,
+                # Dispatch nach Device-Typ:
+                #   * battery  → Phase 3 Option D: Lademodus-Select +
+                #                Power-Setpoint-Number
+                #   * wallbox  → Lademodus-Select (Mode-String-Dispatch)
+                dev = next(
+                    (d for d in self.devices
+                     if d.get(CONF_DEVICE_ID) == device_id),
+                    None,
+                )
+                dev_type = (dev or {}).get(CONF_DEVICE_TYPE, "")
+                if dev_type == "battery":
+                    mode = data.get("mode") or "passive"
+                    setpoint_kw = data.get("setpoint_kw")
+                    await self._apply_battery_setpoint(
+                        device_id, mode,
+                        float(setpoint_kw) if setpoint_kw is not None else 0.0,
                     )
-                    self._cancel_charge_mode_hold(device_id)
-                    # Pre-write idle nur dann wenn current state der
-                    # aktive CHARGE-Wert ist — ohne das hatten wir die
-                    # v2.5.2-Regression: nach einer Charge-Session
-                    # blieb die input_select bei "Laden" hängen und
-                    # der Inverter zog nachts vom Netz weiter. Wenn
-                    # current bereits idle ist (Crowdergy hat's eben
-                    # neutral) oder die input_select gerade auf
-                    # DISCHARGE steht (typisch eine User-seitige HA-
-                    # Automation, z.B. Modbus-Discharge-Schreiber),
-                    # NICHT überschreiben — passive heißt "Crowdergy
-                    # lässt los, du kannst regeln".
-                    dev = next(
-                        (d for d in self.devices
-                         if d.get(CONF_DEVICE_ID) == device_id),
-                        None,
-                    )
-                    if dev is not None:
-                        entity_id = dev.get(CONF_ENTITY_CHARGE_MODE, "")
-                        current = (
-                            self._read_string(entity_id)
-                            if entity_id else ""
-                        )
-                        charge_value = dev.get(
-                            CONF_BATTERY_VALUE_CHARGE, ""
-                        )
-                        if (
-                            charge_value
-                            and str(current).strip() == str(charge_value).strip()
-                        ):
-                            idle_value = (
-                                dev.get(CONF_BATTERY_VALUE_IDLE)
-                                or dev.get(CONF_VALUE_OFF)
-                                or ""
-                            )
-                            if idle_value:
-                                _LOGGER.info(
-                                    "passive: clearing stuck CHARGE "
-                                    "(%s → %s) on %s",
-                                    current, idle_value, entity_id,
-                                )
-                                await self._apply_charge_mode(
-                                    device_id, str(idle_value),
-                                    schedule_hold=False,
-                                )
                 else:
-                    await self._apply_charge_mode(device_id, str(value))
+                    # Wallbox: bisher unverändert.
+                    if value is None:
+                        self._cancel_charge_mode_hold(device_id)
+                    else:
+                        await self._apply_charge_mode(device_id, str(value))
 
     async def _snapshot_and_override_charge_mode(
         self, device_id: str, override_value: str
@@ -2040,6 +1994,117 @@ class CrowdergyCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
             "(entity_cool_control empty, entity_control not climate.*)",
             device_id,
         )
+
+    async def _apply_battery_setpoint(
+        self, device_id: str, mode: str, setpoint_kw: float
+    ) -> None:
+        """Phase 3 Option D (2026-06-02): Battery-Dispatch via 2 HA-
+        Entities — Lademodus-Select (Aktiv/Passiv) + Power-Setpoint-
+        Number (signed Watts, + = laden, − = entladen).
+
+        Dispatch-Pfade:
+          * mode == "passive"  → schreibe value_battery_mode_passive an
+            entity_battery_mode. KEIN Power-Write — HA-Automation hält
+            den Setpoint nicht mehr, WR übernimmt PV-Native-Priority.
+          * mode != "passive"  → schreibe Setpoint (in Watts) an
+            entity_battery_power_setpoint, dann value_battery_mode_active
+            an entity_battery_mode. HA-Automation hält den Setpoint.
+
+        Vorzeichen: solver-intern + = laden. Wenn der User
+        `battery_setpoint_invert_sign` aktiviert hat (umgekehrter WR),
+        multipliziert der Connector mit −1.
+
+        Idempotent: skip write wenn HA-State bereits gleich (Mode-
+        Select + Setpoint-Toleranz ±10 W).
+        """
+        dev = next(
+            (d for d in self.devices if d.get(CONF_DEVICE_ID) == device_id),
+            None,
+        )
+        if dev is None:
+            return
+        mode_entity = dev.get(CONF_ENTITY_BATTERY_MODE, "") or ""
+        active_val = dev.get(CONF_VALUE_BATTERY_MODE_ACTIVE, "") or ""
+        passive_val = dev.get(CONF_VALUE_BATTERY_MODE_PASSIVE, "") or ""
+        setpoint_entity = dev.get(CONF_ENTITY_BATTERY_POWER_SETPOINT, "") or ""
+        invert = bool(dev.get(CONF_BATTERY_SETPOINT_INVERT_SIGN, False))
+
+        if not mode_entity or not active_val or not passive_val:
+            _LOGGER.debug(
+                "Battery %s: mode-entity / mode-values nicht gemapped — skip",
+                device_id,
+            )
+            return
+
+        if mode == "passive":
+            current_mode = self._read_current_state(mode_entity)
+            if current_mode != passive_val:
+                _LOGGER.info(
+                    "Battery %s passive: %s → %s",
+                    device_id, current_mode, passive_val,
+                )
+                try:
+                    await self.hass.services.async_call(
+                        mode_entity.split(".", 1)[0], "select_option",
+                        {"entity_id": mode_entity, "option": passive_val},
+                        blocking=True,
+                    )
+                except Exception as err:  # noqa: BLE001
+                    _LOGGER.exception(
+                        "Battery passive-write failed for %s: %s",
+                        mode_entity, err,
+                    )
+            return
+
+        # Aktiv-Pfad: Setpoint berechnen + schreiben, dann Mode aktivieren.
+        target_w = float(setpoint_kw) * 1000.0
+        if invert:
+            target_w = -target_w
+        if setpoint_entity:
+            actual_raw = self._read_current_state(setpoint_entity)
+            should_write = True
+            if actual_raw is not None:
+                try:
+                    if abs(float(actual_raw) - target_w) <= 10.0:
+                        should_write = False
+                except (ValueError, TypeError):
+                    pass
+            if should_write:
+                _LOGGER.info(
+                    "Battery %s setpoint %s → %.0f W (mode=%s, invert=%s)",
+                    device_id, setpoint_entity, target_w, mode, invert,
+                )
+                try:
+                    await self.hass.services.async_call(
+                        setpoint_entity.split(".", 1)[0], "set_value",
+                        {"entity_id": setpoint_entity, "value": target_w},
+                        blocking=True,
+                    )
+                except Exception as err:  # noqa: BLE001
+                    _LOGGER.exception(
+                        "Battery setpoint-write failed for %s: %s",
+                        setpoint_entity, err,
+                    )
+
+        # Mode-Select zuletzt setzen — sodass der Setpoint schon
+        # geschrieben ist wenn HA's Automation auf "Aktiv" reagiert.
+        current_mode = self._read_current_state(mode_entity)
+        if current_mode != active_val:
+            _LOGGER.info(
+                "Battery %s mode: %s → %s",
+                device_id, current_mode, active_val,
+            )
+            try:
+                await self.hass.services.async_call(
+                    mode_entity.split(".", 1)[0], "select_option",
+                    {"entity_id": mode_entity, "option": active_val},
+                    blocking=True,
+                )
+            except Exception as err:  # noqa: BLE001
+                _LOGGER.exception(
+                    "Battery active-mode-write failed for %s: %s",
+                    mode_entity, err,
+                )
 
     async def _apply_vorlauf_setpoint(
         self, device_id: str, temperature_c: float

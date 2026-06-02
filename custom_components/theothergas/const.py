@@ -152,25 +152,21 @@ CONF_CHARGE_MODE_VALUE_LOCK = "charge_mode_value_lock"
 CONF_CHARGE_MODE_VALUE_POWER = "charge_mode_value_power"
 CONF_CHARGE_MODE_VALUE_SOLAR = "charge_mode_value_solar"
 
-# Battery-only 4-mode dispatch values (v2.3+). Solver picks per slot
-# between four modes; three of them map to a written value on the
-# battery's `entity_charge_mode` (typically a number-entity taking
-# e.g. +5000 / 0 / -5000 W). The fourth (`passive`) is the absence
-# of a write — inverter falls back to its native PV-priority
-# behaviour. Internal token names track the solver's vocabulary:
-#   * charge    → force-charge from grid/PV at max power
-#   * idle      → freeze SOC (also called "Aus")
-#   * discharge → force-discharge into home/grid at max power
-# Any mode the user leaves blank simply makes the worker suppress
-# that branch — battery stays passive instead.
-CONF_BATTERY_VALUE_CHARGE = "battery_value_charge"
-CONF_BATTERY_VALUE_IDLE = "battery_value_idle"
-CONF_BATTERY_VALUE_DISCHARGE = "battery_value_discharge"
-# v3.0.8 (2026-05-30): optionaler vierter Mode für Inverter die
-# explizit auf passive umgeschaltet werden müssen. Leer = wie bisher
-# (worker skipt den Write, Inverter macht selbst); gesetzt = worker
-# schreibt diesen Wert beim Übergang in passive.
-CONF_BATTERY_VALUE_PASSIVE = "battery_value_passive"
+# Battery dispatch v3.8.0 (Phase 3 Option D, 2026-06-02). Aus den alten
+# 4 mode-string Werten wird ein 2-Entity-Setup mit kontinuierlichem
+# Power-Setpoint. Backend Solver wählt:
+#   * Mode aktiv vs passiv      → entity_battery_mode (Select)
+#   * signed Power-Setpoint kW  → entity_battery_power_setpoint (Number)
+# HA-Automation hält den Wert bei aktiv, schreibt nichts bei passiv
+# (= WR-Native-PV-Priority).
+CONF_ENTITY_BATTERY_MODE = "entity_battery_mode"
+CONF_VALUE_BATTERY_MODE_ACTIVE = "value_battery_mode_active"
+CONF_VALUE_BATTERY_MODE_PASSIVE = "value_battery_mode_passive"
+CONF_ENTITY_BATTERY_POWER_SETPOINT = "entity_battery_power_setpoint_w"
+# Sign-Convention: solver-intern + = laden, − = entladen. Wenn der
+# Inverter umgekehrt verdrahtet ist (z.B. − = laden), kann der User
+# hier invertieren — Connector multipliziert dann mit −1 vor dem Write.
+CONF_BATTERY_SETPOINT_INVERT_SIGN = "battery_setpoint_invert_sign"
 
 # Wallbox-only ternary mapping for the vehicle-status sensor (v2.0+).
 # Pre-v2.0 the connector forwarded the raw HA state string and the

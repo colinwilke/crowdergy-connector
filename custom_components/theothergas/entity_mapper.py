@@ -13,7 +13,7 @@ Confidence + Begründung, sodass die UI Marker („sicher" vs „bitte
 prüfen") setzen kann.
 
 Wichtige Designentscheidungen:
-- Werte-Strings (value_on, charge_mode_value_*, battery_value_*) sind
+- Werte-Strings (value_on, charge_mode_value_*) sind
   KEINE Entities, sondern Optionen einer Select/Number-Entity. Die
   Heuristik findet nur die *Entity*; die spätere Option-Zuordnung
   bleibt im manuellen Werte-Step.

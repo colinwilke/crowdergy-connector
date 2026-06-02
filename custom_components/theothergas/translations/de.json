@@ -174,21 +174,23 @@
         }
       },
       "device_battery_values": {
-        "title": "{device_name} — Batterie-Modi konfigurieren",
-        "description": "Welcher Wert soll auf „{entity_charge_mode}“ geschrieben werden, wenn die AI einen der vier Modi wählt? Alle vier Werte sind Pflicht. Der Passiv-Wert ist besonders wichtig: er wird bei jedem AI-Aus geschrieben, damit die Batterie zurück an den Wechselrichter übergibt und nicht im letzten aktiven Modus hängen bleibt.",
+        "title": "{device_name} — Batterie-Steuerung",
+        "description": "Crowdergy AI liefert einen signed Power-Setpoint (+ = laden, − = entladen) plus einen Mode (Aktiv / Passiv). Map die beiden auf deine HA-Entities.",
         "submit": "Speichern",
         "data": {
-          "battery_value_charge": "Aus dem Netz laden",
-          "battery_value_discharge": "Ins Haus entladen",
-          "battery_value_idle": "Einfrieren (SOC halten)",
-          "battery_value_passive": "Passiv (an Wechselrichter zurückgeben) — Pflicht, bei AI-Aus",
+          "entity_battery_mode": "Lademodus-Entität (Aktiv / Passiv)",
+          "value_battery_mode_active": "Wert für Aktiv",
+          "value_battery_mode_passive": "Wert für Passiv",
+          "entity_battery_power_setpoint_w": "Power-Setpoint-Entität (W, signed)",
+          "battery_setpoint_invert_sign": "Vorzeichen invertieren (−Setpoint statt +Setpoint)",
           "entity_control_hold": "Nachschreib-Rhythmus"
         },
         "data_description": {
-          "battery_value_charge": "Wert für Force-Laden aus dem Netz mit Max-Leistung. Number-Beispiel: +max W (z. B. +5000). Select-Beispiel: „Laden“.",
-          "battery_value_discharge": "Wert für Force-Entladen in den Haushalt mit Max-Leistung. Number-Beispiel: −max W (z. B. −5000). Select-Beispiel: „Entladen“.",
-          "battery_value_idle": "Wert zum Einfrieren der SOC — kein Laden, kein Entladen. Number-Beispiel: 0. Select-Beispiel: „Halten“. Blockiert auch den PV-Eigenverbrauch des Wechselrichters.",
-          "battery_value_passive": "Wert um die Batterie an die autonome PV-Eigenverbrauchs-Logik des Wechselrichters zurückzugeben — Crowdergy stoppt die Steuerung. **Wird bei jedem AI-Aus geschrieben**, damit die Batterie nie im letzten aktiven Modus hängen bleibt. Pflichtfeld.",
+          "entity_battery_mode": "select / input_select mit zwei Optionen: Aktiv (Crowdergy schreibt Setpoint) und Passiv (HA schreibt nicht mehr, Wechselrichter macht selber PV-Eigenverbrauch).",
+          "value_battery_mode_active": "String-Wert für „Aktiv — Setpoint anwenden“.",
+          "value_battery_mode_passive": "String-Wert für „Passiv — Wechselrichter macht sein Ding“. Wird bei jedem AI-Aus geschrieben.",
+          "entity_battery_power_setpoint_w": "number / input_number in Watt. Konvention: positiv = laden, negativ = entladen. HA / Wechselrichter clippen auf aktuelle Kapazität.",
+          "battery_setpoint_invert_sign": "Aktivieren wenn dein Wechselrichter umgekehrt arbeitet (negativ = laden). Crowdergy multipliziert dann den Setpoint mit −1.",
           "entity_control_hold": "Wie oft Crowdergy den Modus nachschreibt. Auto/Immer: alle 30 s (empfohlen — manche Wechselrichter fallen still zurück). Einmalig: nur einmal."
         }
       },
@@ -395,22 +397,24 @@
         }
       },
       "add_device_battery_values": {
-        "title": "{device_name} — Batterie-Modi konfigurieren",
-        "description": "Welcher Wert soll auf „{entity_charge_mode}“ geschrieben werden, wenn die AI einen der vier Modi wählt? Alle vier Werte sind Pflicht. Passiv wird bei jedem AI-Aus geschrieben, damit die Batterie zurück an den Wechselrichter übergibt.",
+        "title": "{device_name} — Batterie-Steuerung",
+        "description": "Crowdergy AI liefert einen signed Power-Setpoint (+ = laden, − = entladen) plus einen Mode (Aktiv / Passiv). Map die beiden auf deine HA-Entities.",
         "submit": "Speichern",
         "data": {
-          "battery_value_charge": "Aus dem Netz laden",
-          "battery_value_discharge": "Ins Haus entladen",
-          "battery_value_idle": "Einfrieren (SOC halten)",
-          "battery_value_passive": "Passiv (an Wechselrichter zurückgeben) — Pflicht, bei AI-Aus",
+          "entity_battery_mode": "Lademodus-Entität (Aktiv / Passiv)",
+          "value_battery_mode_active": "Wert für Aktiv",
+          "value_battery_mode_passive": "Wert für Passiv",
+          "entity_battery_power_setpoint_w": "Power-Setpoint-Entität (W, signed)",
+          "battery_setpoint_invert_sign": "Vorzeichen invertieren (−Setpoint statt +Setpoint)",
           "entity_control_hold": "Nachschreib-Rhythmus"
         },
         "data_description": {
-          "battery_value_charge": "Wert für Force-Laden aus dem Netz mit Max-Leistung.",
-          "battery_value_discharge": "Wert für Force-Entladen in den Haushalt mit Max-Leistung.",
-          "battery_value_idle": "Wert zum Einfrieren der SOC — kein Laden, kein Entladen.",
-          "battery_value_passive": "Wert um an die PV-Eigenverbrauchs-Logik des Wechselrichters zurückzugeben. **Wird bei jedem AI-Aus geschrieben.** Pflichtfeld.",
-          "entity_control_hold": "Auto/Immer schreibt alle 30 s nach (empfohlen). Einmalig schreibt nur einmal."
+          "entity_battery_mode": "select / input_select mit Aktiv- und Passiv-Option.",
+          "value_battery_mode_active": "String-Wert für Aktiv.",
+          "value_battery_mode_passive": "String-Wert für Passiv — wird bei AI-Aus geschrieben.",
+          "entity_battery_power_setpoint_w": "number / input_number in Watt. + = laden, − = entladen.",
+          "battery_setpoint_invert_sign": "Aktivieren wenn der Wechselrichter umgekehrt arbeitet.",
+          "entity_control_hold": "Auto/Immer schreibt alle 30 s nach. Einmalig schreibt nur einmal."
         }
       },
       "add_device_vehicle_status": {
@@ -549,22 +553,24 @@
         }
       },
       "edit_device_battery_values": {
-        "title": "{device_name} — Batterie-Modi konfigurieren",
-        "description": "Welcher Wert soll auf „{entity_charge_mode}“ geschrieben werden, wenn die AI einen der vier Modi wählt? Alle vier Werte sind Pflicht. Passiv wird bei jedem AI-Aus geschrieben, damit die Batterie zurück an den Wechselrichter übergibt.",
+        "title": "{device_name} — Batterie-Steuerung",
+        "description": "Crowdergy AI liefert einen signed Power-Setpoint (+ = laden, − = entladen) plus einen Mode (Aktiv / Passiv). Map die beiden auf deine HA-Entities.",
         "submit": "Speichern",
         "data": {
-          "battery_value_charge": "Aus dem Netz laden",
-          "battery_value_discharge": "Ins Haus entladen",
-          "battery_value_idle": "Einfrieren (SOC halten)",
-          "battery_value_passive": "Passiv (an Wechselrichter zurückgeben) — Pflicht, bei AI-Aus",
+          "entity_battery_mode": "Lademodus-Entität (Aktiv / Passiv)",
+          "value_battery_mode_active": "Wert für Aktiv",
+          "value_battery_mode_passive": "Wert für Passiv",
+          "entity_battery_power_setpoint_w": "Power-Setpoint-Entität (W, signed)",
+          "battery_setpoint_invert_sign": "Vorzeichen invertieren (−Setpoint statt +Setpoint)",
           "entity_control_hold": "Nachschreib-Rhythmus"
         },
         "data_description": {
-          "battery_value_charge": "Wert für Force-Laden aus dem Netz mit Max-Leistung.",
-          "battery_value_discharge": "Wert für Force-Entladen in den Haushalt mit Max-Leistung.",
-          "battery_value_idle": "Wert zum Einfrieren der SOC — kein Laden, kein Entladen.",
-          "battery_value_passive": "Wert um an die PV-Eigenverbrauchs-Logik des Wechselrichters zurückzugeben. **Wird bei jedem AI-Aus geschrieben.** Pflichtfeld.",
-          "entity_control_hold": "Auto/Immer schreibt alle 30 s nach (empfohlen). Einmalig schreibt nur einmal."
+          "entity_battery_mode": "select / input_select mit Aktiv- und Passiv-Option.",
+          "value_battery_mode_active": "String-Wert für Aktiv.",
+          "value_battery_mode_passive": "String-Wert für Passiv — wird bei AI-Aus geschrieben.",
+          "entity_battery_power_setpoint_w": "number / input_number in Watt. + = laden, − = entladen.",
+          "battery_setpoint_invert_sign": "Aktivieren wenn der Wechselrichter umgekehrt arbeitet.",
+          "entity_control_hold": "Auto/Immer schreibt alle 30 s nach. Einmalig schreibt nur einmal."
         }
       },
       "edit_device_vehicle_status": {

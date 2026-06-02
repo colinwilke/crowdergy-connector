@@ -174,20 +174,22 @@
         "submit": "Next"
       },
       "device_battery_values": {
-        "title": "{device_name} — Battery mode values",
-        "description": "Which value should Crowdergy write to \"{entity_charge_mode}\" for each of the four battery modes? All four are required. The Passive value is the most important — it's written every time Crowdergy AI is switched off so the inverter takes over autonomously instead of staying in the last active mode.",
+        "title": "{device_name} — Battery dispatch",
+        "description": "Crowdergy AI sets a signed power setpoint (+ = charge, − = discharge) and a mode flag (Active / Passive). Map them to the HA entities below.",
         "data": {
-          "battery_value_charge": "Charge from grid",
-          "battery_value_discharge": "Discharge to home",
-          "battery_value_idle": "Freeze (hold SOC)",
-          "battery_value_passive": "Passive (hand back to inverter) — required, used on AI-off",
+          "entity_battery_mode": "Mode select entity (Active / Passive)",
+          "value_battery_mode_active": "Active mode value",
+          "value_battery_mode_passive": "Passive mode value",
+          "entity_battery_power_setpoint_w": "Power setpoint entity (W, signed)",
+          "battery_setpoint_invert_sign": "Invert sign (write −Setpoint instead of +Setpoint)",
           "entity_control_hold": "Re-write cadence"
         },
         "data_description": {
-          "battery_value_charge": "Value that puts the inverter into force-charge from grid at max power. Number-entity example: +max W (e.g. +5000). Select-entity example: \"Charge\".",
-          "battery_value_discharge": "Value that puts the inverter into force-discharge into the home loads at max power. Number-entity example: −max W (e.g. −5000). Select-entity example: \"Discharge\".",
-          "battery_value_idle": "Value that freezes the SOC — no charge, no discharge. Number-entity example: 0. Select-entity example: \"Hold\". Blocks the inverter's autonomous PV self-consumption.",
-          "battery_value_passive": "Value that hands the battery back to the inverter's autonomous PV self-consumption logic — Crowdergy stops steering. **This value is written on every AI-off transition** so the battery never stays stuck in the last active mode. Required.",
+          "entity_battery_mode": "A select / input_select entity with two options: one for Active (Crowdergy writes setpoint) and one for Passive (HA stops writing, inverter takes over its native PV self-consumption).",
+          "value_battery_mode_active": "The option string that means \"Active — apply the Crowdergy setpoint\".",
+          "value_battery_mode_passive": "The option string that means \"Passive — let the inverter do its thing\". Used on every AI-off transition.",
+          "entity_battery_power_setpoint_w": "A number / input_number entity in Watts. Convention: positive value = charge, negative value = discharge. Crowdergy writes signed values from this slider's range — HA / inverter clip to current capability.",
+          "battery_setpoint_invert_sign": "Enable if your inverter uses the opposite convention (negative = charge, positive = discharge). Crowdergy then multiplies the setpoint by −1 before writing.",
           "entity_control_hold": "How often Crowdergy re-writes the mode. Auto/Always: every 30 s (recommended — some inverters silently auto-revert). Once: write once and stop."
         },
         "submit": "Save"
@@ -391,21 +393,23 @@
         "submit": "Next"
       },
       "add_device_battery_values": {
-        "title": "{device_name} — Battery mode values",
-        "description": "Which value should Crowdergy write to \"{entity_charge_mode}\" for each of the four battery modes? All four are required. Passive is written every time AI is switched off so the battery hands back to the inverter.",
+        "title": "{device_name} — Battery dispatch",
+        "description": "Crowdergy AI sets a signed power setpoint (+ = charge, − = discharge) and a mode flag (Active / Passive). Map them to the HA entities below.",
         "data": {
-          "battery_value_charge": "Charge from grid",
-          "battery_value_discharge": "Discharge to home",
-          "battery_value_idle": "Freeze (hold SOC)",
-          "battery_value_passive": "Passive (hand back to inverter) — required, used on AI-off",
+          "entity_battery_mode": "Mode select entity (Active / Passive)",
+          "value_battery_mode_active": "Active mode value",
+          "value_battery_mode_passive": "Passive mode value",
+          "entity_battery_power_setpoint_w": "Power setpoint entity (W, signed)",
+          "battery_setpoint_invert_sign": "Invert sign (write −Setpoint instead of +Setpoint)",
           "entity_control_hold": "Re-write cadence"
         },
         "data_description": {
-          "battery_value_charge": "Force-charge from grid at max power.",
-          "battery_value_discharge": "Force-discharge into the home at max power.",
-          "battery_value_idle": "Freeze SOC (no charge, no discharge).",
-          "battery_value_passive": "Hand back to inverter's PV self-consumption. **Written on every AI-off transition.** Required.",
-          "entity_control_hold": "Auto/Always re-writes every 30 s (recommended). Once writes only once."
+          "entity_battery_mode": "Select / input_select entity with two options: Active vs Passive.",
+          "value_battery_mode_active": "The option string that means Active.",
+          "value_battery_mode_passive": "The option string that means Passive — used on AI-off.",
+          "entity_battery_power_setpoint_w": "Number / input_number entity in Watts. + = charge, − = discharge. HA / inverter clip to current capability.",
+          "battery_setpoint_invert_sign": "Enable for inverters with the opposite convention.",
+          "entity_control_hold": "Auto/Always re-writes every 30 s. Once writes only once."
         },
         "submit": "Save"
       },
@@ -545,22 +549,24 @@
         }
       },
       "edit_device_battery_values": {
-        "title": "{device_name} — Battery mode values",
-        "description": "Adjust which value gets written to \"{entity_charge_mode}\" for each of the four battery modes. All four are required. Passive is written on every AI-off so the battery hands back to the inverter instead of staying in the last active mode.",
+        "title": "{device_name} — Battery dispatch",
+        "description": "Crowdergy AI sets a signed power setpoint (+ = charge, − = discharge) and a mode flag (Active / Passive). Map them to the HA entities below.",
         "submit": "Save",
         "data": {
-          "battery_value_charge": "Charge from grid",
-          "battery_value_discharge": "Discharge to home",
-          "battery_value_idle": "Freeze (hold SOC)",
-          "battery_value_passive": "Passive (hand back to inverter) — required, used on AI-off",
+          "entity_battery_mode": "Mode select entity (Active / Passive)",
+          "value_battery_mode_active": "Active mode value",
+          "value_battery_mode_passive": "Passive mode value",
+          "entity_battery_power_setpoint_w": "Power setpoint entity (W, signed)",
+          "battery_setpoint_invert_sign": "Invert sign (write −Setpoint instead of +Setpoint)",
           "entity_control_hold": "Re-write cadence"
         },
         "data_description": {
-          "battery_value_charge": "Force-charge from grid at max power.",
-          "battery_value_discharge": "Force-discharge into the home at max power.",
-          "battery_value_idle": "Freeze SOC (no charge, no discharge).",
-          "battery_value_passive": "Hand back to inverter's PV self-consumption. **Written on every AI-off transition.** Required.",
-          "entity_control_hold": "Auto/Always re-writes every 30 s (recommended). Once writes only once."
+          "entity_battery_mode": "Select / input_select entity with Active vs Passive options.",
+          "value_battery_mode_active": "Option string for Active.",
+          "value_battery_mode_passive": "Option string for Passive — used on AI-off.",
+          "entity_battery_power_setpoint_w": "Number / input_number entity in Watts. + = charge, − = discharge.",
+          "battery_setpoint_invert_sign": "Enable for inverters with opposite convention.",
+          "entity_control_hold": "Auto/Always re-writes every 30 s. Once writes only once."
         }
       },
       "edit_device_vehicle_status": {
