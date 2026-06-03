@@ -1212,6 +1212,23 @@ async def _update_device_backend(
             # in the connector propagates to iOS — the connector is
             # authoritative for these values.
             payload[api_field] = entity_input.get(key, "")
+    # Warmwater shares-hardware (2026-06-03 Bugfix): wurde im Edit-Flow
+    # zwar vom User abgefragt aber nie an die Backend-PUT-Payload
+    # angehängt. Effekt: Solver behielt stale shares_hardware-Werte
+    # (oder NULL wenn vor Feature angelegt). Mutex „Heizung + WW
+    # gleichzeitig" griff dann nicht. Senden inkl. None damit User
+    # auch CLEAREN kann durch leere Auswahl. Defensiver Skip wenn der
+    # Key komplett fehlt — der Edit-Flow zwingt warmwater-Edits
+    # eigentlich durch den shares-Hardware-Step, aber wenn da mal ein
+    # Edge-Case Code-Pfad das überspringt, accidentally clearen wäre
+    # destruktiv.
+    if (
+        entity_input is not None
+        and device_type == "warmwater"
+        and CONF_SHARES_HARDWARE_WITH in entity_input
+    ):
+        shares_with = entity_input.get(CONF_SHARES_HARDWARE_WITH, "") or None
+        payload["shares_hardware_with_device_id"] = shares_with
     # v3.8.0 (Phase 3 Option D): battery_value_* gibt's nicht mehr.
     # Setpoint-Dispatch ist Connector-intern (Lademodus-Select +
     # Power-Setpoint-Number); kein Backend-POST.
