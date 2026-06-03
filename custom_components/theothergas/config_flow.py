@@ -76,6 +76,7 @@ from .const import (
     DOMAIN,
     USER_AGENT,
 )
+from .device_field_spec import build_payload
 from .entity_mapper import DeviceGroup, discover_devices, discover_devices_with_llm
 
 _LOGGER = logging.getLogger(__name__)
@@ -1111,72 +1112,24 @@ async def _register_device(
     entity_input: dict[str, Any],
     location: dict[str, str],
 ) -> dict[str, Any]:
-    """Register a device on the backend and return the full device dict."""
-    device_config: dict[str, Any] = {
-        "name": device_name,
-        "type": device_type,
-        "district": location.get(CONF_DISTRICT, ""),
-        "city": location.get(CONF_CITY, ""),
-        "region": location.get(CONF_REGION, ""),
-    }
-    # Warmwater only: tell the backend which heating device shares
-    # this compressor so the joint solver can couple them. Skipped
-    # when empty (standalone WW heater).
-    shares_with = entity_input.get(CONF_SHARES_HARDWARE_WITH, "")
-    if device_type == "warmwater" and shares_with:
-        device_config["shares_hardware_with_device_id"] = shares_with
-    # Wallbox only (v2.2+): push the Lademodus mappings so iOS knows
-    # which mode buttons to render (Aus / An / Solaroptimiert). Each
-    # field is independent — omit blanks rather than overwriting with
-    # empty strings the backend would treat as "user cleared this".
-    if device_type == "wallbox":
-        for key, api_field in (
-            (CONF_CHARGE_MODE_VALUE_LOCK, "charge_mode_value_lock"),
-            (CONF_CHARGE_MODE_VALUE_POWER, "charge_mode_value_power"),
-            (CONF_CHARGE_MODE_VALUE_SOLAR, "charge_mode_value_solar"),
-        ):
-            value = entity_input.get(key, "")
-            if value:
-                device_config[api_field] = value
-    # v3.8.0 (Phase 3 Option D): Battery-Setpoint-Dispatch hält die
-    # HA-Entities und Sign-Convention lokal im Connector. Backend
-    # bekommt NUR `battery_capacity_kwh` und max-power-Werte; den
-    # Setpoint-Dispatch macht der Connector selbst, also keine
-    # HA-Entity-Felder über den DeviceCreate POSTen.
-    # Classic-consumer haushalt-Flag — nur für die Typen wo's Sinn
-    # macht. Solar / Grid / Battery / Haushalt selbst kennen's nicht.
-    if device_type in {
-        "heating", "warmwater", "aircon", "wallbox", "generic",
-    }:
-        device_config["included_in_haushalt"] = bool(
-            entity_input.get(CONF_INCLUDED_IN_HAUSHALT, False)
-        )
-    # Cooling-Capability — nur für heating POSTen. v3.0: aus
-    # bool(value_cool_on) abgeleitet (oder fallback auf den alten
-    # supports_cooling-Bool für Legacy-v2.x edit-paths). value_cool_off
-    # ist im neuen Schema nicht mehr separat — fällt auf value_off
-    # zurück, weil climate.set_hvac_mode("off") für beide Richtungen
-    # derselbe Aufruf ist.
-    if device_type in ("heating", "aircon"):
-        cool_on = entity_input.get(CONF_VALUE_COOL_ON, "") or ""
-        cool_off = entity_input.get(CONF_VALUE_COOL_OFF, "") or ""
-        if cool_on and not cool_off:
-            cool_off = entity_input.get(CONF_VALUE_OFF, "") or ""
-        # aircon: supports_cooling immer true (Klimaanlage kühlt qua
-        # Definition). heating: nur wenn cool_on Mapping gesetzt.
-        device_config["supports_cooling"] = (
-            device_type == "aircon"
-            or bool(
-                cool_on or entity_input.get(CONF_SUPPORTS_COOLING, False)
-            )
-        )
-        cool_entity = entity_input.get(CONF_ENTITY_COOL_CONTROL, "")
-        if cool_entity:
-            device_config["entity_cool_control"] = cool_entity
-        if cool_on:
-            device_config["value_cool_on"] = cool_on
-        if cool_off:
-            device_config["value_cool_off"] = cool_off
+    """Register a device on the backend and return the full device dict.
+
+    Payload-Konstruktion läuft seit 2026-06-03 über das zentrale
+    `device_field_spec.SPEC` — siehe `device_field_spec.py`. Beide
+    Pfade (POST hier, PUT in `_update_device_backend`) konsumieren
+    dieselbe Spec, damit Field-Drift ausgeschlossen ist.
+    """
+    device_config = build_payload(
+        mode="create",
+        dtype=device_type,
+        name=device_name,
+        entity_input=entity_input,
+        extra={
+            CONF_DISTRICT: location.get(CONF_DISTRICT, ""),
+            CONF_CITY: location.get(CONF_CITY, ""),
+            CONF_REGION: location.get(CONF_REGION, ""),
+        },
+    )
     async with httpx.AsyncClient(timeout=15.0) as client:
         response = await client.post(
             f"{api_url}/api/v1/devices",
@@ -1197,76 +1150,20 @@ async def _update_device_backend(
     device_name: str,
     entity_input: dict[str, Any] | None = None,
 ) -> None:
-    """PUT a device's mutable fields (name, type, and v2.2+ wallbox
-    Lademodus-Werte) to the backend. The mode-values are sent as
-    plain strings — backend treats empty string as "user cleared this"
-    and renders the button accordingly in iOS."""
-    payload: dict[str, Any] = {"name": device_name, "type": device_type}
-    if entity_input is not None and device_type == "wallbox":
-        for key, api_field in (
-            (CONF_CHARGE_MODE_VALUE_LOCK, "charge_mode_value_lock"),
-            (CONF_CHARGE_MODE_VALUE_POWER, "charge_mode_value_power"),
-            (CONF_CHARGE_MODE_VALUE_SOLAR, "charge_mode_value_solar"),
-        ):
-            # Send unconditionally (even empty) so clearing a mapping
-            # in the connector propagates to iOS — the connector is
-            # authoritative for these values.
-            payload[api_field] = entity_input.get(key, "")
-    # Warmwater shares-hardware (2026-06-03 Bugfix): wurde im Edit-Flow
-    # zwar vom User abgefragt aber nie an die Backend-PUT-Payload
-    # angehängt. Effekt: Solver behielt stale shares_hardware-Werte
-    # (oder NULL wenn vor Feature angelegt). Mutex „Heizung + WW
-    # gleichzeitig" griff dann nicht. Senden inkl. None damit User
-    # auch CLEAREN kann durch leere Auswahl. Defensiver Skip wenn der
-    # Key komplett fehlt — der Edit-Flow zwingt warmwater-Edits
-    # eigentlich durch den shares-Hardware-Step, aber wenn da mal ein
-    # Edge-Case Code-Pfad das überspringt, accidentally clearen wäre
-    # destruktiv.
-    if (
-        entity_input is not None
-        and device_type == "warmwater"
-        and CONF_SHARES_HARDWARE_WITH in entity_input
-    ):
-        shares_with = entity_input.get(CONF_SHARES_HARDWARE_WITH, "") or None
-        payload["shares_hardware_with_device_id"] = shares_with
-    # v3.8.0 (Phase 3 Option D): battery_value_* gibt's nicht mehr.
-    # Setpoint-Dispatch ist Connector-intern (Lademodus-Select +
-    # Power-Setpoint-Number); kein Backend-POST.
-    # v2.4: classic-consumer haushalt flag — mirror the edit flow
-    # selection so toggling it in the connector propagates to iOS.
-    if (
-        entity_input is not None
-        and device_type in {
-            "heating", "warmwater", "wallbox", "generic",
-        }
-    ):
-        payload["included_in_haushalt"] = bool(
-            entity_input.get(CONF_INCLUDED_IN_HAUSHALT, False)
-        )
-    # Cooling-Capability — Edit-Flow spiegelt die Auswahl. v3.0:
-    # leitet supports_cooling aus bool(value_cool_on) ab. value_cool_off
-    # ist im neuen Schema nicht mehr separat — fällt auf value_off
-    # zurück, weil climate.set_hvac_mode("off") für beide Richtungen
-    # derselbe Aufruf ist.
-    if entity_input is not None and device_type in ("heating", "aircon"):
-        cool_on_val = entity_input.get(CONF_VALUE_COOL_ON, "") or ""
-        cool_off_val = entity_input.get(CONF_VALUE_COOL_OFF, "") or ""
-        if cool_on_val and not cool_off_val:
-            cool_off_val = entity_input.get(CONF_VALUE_OFF, "") or ""
-        # aircon: supports_cooling immer true; heating: aus cool_on
-        # abgeleitet wie bisher.
-        payload["supports_cooling"] = (
-            device_type == "aircon"
-            or bool(
-                cool_on_val
-                or entity_input.get(CONF_SUPPORTS_COOLING, False)
-            )
-        )
-        payload["entity_cool_control"] = entity_input.get(
-            CONF_ENTITY_COOL_CONTROL, ""
-        )
-        payload["value_cool_on"] = cool_on_val
-        payload["value_cool_off"] = cool_off_val
+    """PUT eines Devices ans Backend. Payload kommt seit 2026-06-03
+    aus dem zentralen `device_field_spec.SPEC` — vorher hatte die
+    Update-Funktion ihre eigene Conditional-Liste, die mit der
+    Create-Liste auseinandergedriftet ist (siehe Bug-Audit-Bericht
+    2026-06-03: zillmann's shares_hardware ging im Edit-Flow nie
+    ans Backend; aircon `included_in_haushalt` fiel beim Edit
+    silent auf False).
+    """
+    payload = build_payload(
+        mode="update",
+        dtype=device_type,
+        name=device_name,
+        entity_input=entity_input or {},
+    )
     async with httpx.AsyncClient(timeout=15.0) as client:
         response = await client.put(
             f"{api_url}/api/v1/devices/{device_id}",
