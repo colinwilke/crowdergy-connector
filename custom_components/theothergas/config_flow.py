@@ -342,8 +342,13 @@ def _config_mode_schema(
 
 
 def _entity_field(key: str, defaults: dict[str, Any]) -> Any:
+    # `suggested_value` statt `default`: HA's Form-Engine re-injected
+    # `default`-Werte wenn der User das Feld auf leer setzt (X-Klick) —
+    # → entity_id taucht beim Re-Open wieder auf. `suggested_value`
+    # füllt den Initial-Wert nur in die UI, ohne ihn bei leerem Submit
+    # zurückzuschreiben.
     if defaults.get(key):
-        return vol.Optional(key, default=defaults[key])
+        return vol.Optional(key, description={"suggested_value": defaults[key]})
     return vol.Optional(key)
 
 
@@ -717,13 +722,14 @@ def _values_schema(
             return vol.Optional(key)
         if default == "":
             return vol.Optional(key)
-        # Cast for NumberSelector consistency
+        # Cast for NumberSelector consistency. `suggested_value` statt
+        # `default` — siehe _entity_field für Begründung (Clear-Klick).
         if is_number:
             try:
-                return vol.Optional(key, default=float(default))
+                return vol.Optional(key, description={"suggested_value": float(default)})
             except (TypeError, ValueError):
                 return vol.Optional(key)
-        return vol.Optional(key, default=str(default))
+        return vol.Optional(key, description={"suggested_value": str(default)})
 
     field_type: Any = value_sel if value_sel is not None else str
 
@@ -808,7 +814,10 @@ def _vehicle_status_schema(
     def _field(key: str, hint_default: str = "") -> Any:
         default = d.get(key) or hint_default
         if default:
-            return vol.Optional(key, default=default)
+            # suggested_value statt default — Clear-Klick (X) soll
+            # wirklich clearen, nicht beim Submit den alten Wert
+            # re-injecten.
+            return vol.Optional(key, description={"suggested_value": default})
         return vol.Optional(key)
 
     return vol.Schema({
@@ -853,7 +862,11 @@ def _charge_mode_values_schema(
     def _field(key: str) -> Any:
         default = d.get(key) or ""
         if default:
-            return vol.Optional(key, default=default)
+            # suggested_value statt default — siehe _entity_field.
+            # Comment oben („leaves blank simply don't get a button")
+            # versprach das User-Verhalten, der alte default-Pfad hat's
+            # gebrochen.
+            return vol.Optional(key, description={"suggested_value": default})
         return vol.Optional(key)
 
     return vol.Schema({
@@ -2111,8 +2124,12 @@ class CrowdergyOptionsFlow(OptionsFlow):
             return await self.async_step_init()
 
         current = self._entry.data.get(CONF_ENTITY_OUTDOOR_TEMP, "")
+        # suggested_value statt default — der Comment oben verspricht,
+        # dass „leaving the field empty clears the mapping" funktioniert.
+        # Mit `default` re-injected HA's Form-Engine den alten Wert,
+        # → User konnte den Sensor nicht clearen.
         field: Any = (
-            vol.Optional(CONF_ENTITY_OUTDOOR_TEMP, default=current)
+            vol.Optional(CONF_ENTITY_OUTDOOR_TEMP, description={"suggested_value": current})
             if current
             else vol.Optional(CONF_ENTITY_OUTDOOR_TEMP)
         )
