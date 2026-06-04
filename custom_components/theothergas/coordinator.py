@@ -154,6 +154,14 @@ SEND_THRESHOLDS: dict[str, float] = {
 
 SSE_RECONNECT_INITIAL = 1
 SSE_RECONNECT_MAX = 60
+# Read-Timeout im SSE-Body-Stream. Backend sendet alle 15s einen
+# Keep-Alive-Ping (siehe Z. 1442 Hold-Loop-Liveness-Comment); fehlt
+# der für SSE_READ_TIMEOUT_S Sekunden, ist die TCP-Verbindung
+# wahrscheinlich halb-tot (NAT-Drop, Proxy-Idle-Kill, Server hängt).
+# Ohne Timeout würde `async for raw in resp.content` ewig blocken
+# → User-Befehle fielen ins Leere bis Connector-Reload. Confirmed
+# 2026-06-04 mit verlorenem Kaffeemaschine-Tap.
+SSE_READ_TIMEOUT_S = 60
 
 
 # ── Solver-only Extra-Field-Registry (v3.3+) ─────────────────────────
@@ -1398,7 +1406,7 @@ class CrowdergyCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
                         "Cache-Control": "no-cache",
                         "Authorization": f"Bearer {self._access_token}",
                     },
-                    timeout=aiohttp.ClientTimeout(total=None, sock_read=None),
+                    timeout=aiohttp.ClientTimeout(total=None, sock_read=SSE_READ_TIMEOUT_S),
                 ) as resp:
                     if resp.status == 401 and await self._refresh_access_token():
                         continue
@@ -1428,8 +1436,13 @@ class CrowdergyCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
                             _LOGGER.exception("Failed to handle SSE event: %s", err)
             except asyncio.CancelledError:
                 raise
-            except aiohttp.ClientError as err:
-                _LOGGER.warning("Crowdergy SSE client error: %s — reconnecting in %ss", err, delay)
+            except (aiohttp.ClientError, asyncio.TimeoutError) as err:
+                # asyncio.TimeoutError = sock_read=SSE_READ_TIMEOUT_S
+                # ausgelöst, d.h. half-open Stream → reconnect.
+                _LOGGER.warning(
+                    "Crowdergy SSE stream stale or client-error: %s — reconnecting in %ss",
+                    err, delay,
+                )
             except Exception as err:  # noqa: BLE001
                 _LOGGER.exception("Unexpected SSE error: %s", err)
 
@@ -1453,6 +1466,19 @@ class CrowdergyCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
             payload = data.get("data") or {}
             if not device_id:
                 return
+            # v3.9.2 (2026-06-04): manuelle App-Befehle kommen als
+            # telemetry-Frames mit `is_on`/`is_active`. Ohne dieses Log
+            # war „kommt manueller Befehl durch?"-Diagnose blind —
+            # einzige Signatur war ein späterer state-resync-Reapply.
+            if any(k in payload for k in ("is_active", "is_on", "cool_on", "vorlauf_setpoint_c")):
+                _LOGGER.warning(
+                    "Crowdergy SSE telemetry frame: device=%s is_active=%s is_on=%s cool_on=%s vorlauf=%s",
+                    device_id,
+                    payload.get("is_active"),
+                    payload.get("is_on"),
+                    payload.get("cool_on"),
+                    payload.get("vorlauf_setpoint_c"),
+                )
             if "is_active" in payload:
                 new_value = bool(payload["is_active"])
                 if self._active_state.get(device_id) != new_value:
@@ -1570,10 +1596,16 @@ class CrowdergyCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
             action = data.get("action")
             device_id = data.get("device_id")
             value = data.get("value")
-            _LOGGER.warning(
-                "Crowdergy SSE command frame: action=%s device=%s value=%r",
-                action, device_id, value,
-            )
+            # Frame-Logging: alle action-relevanten Keys (außer
+            # Boilerplate). Vorgängerversion printete nur `value`, was
+            # für Battery-Frames immer None ist (Battery liest `mode` +
+            # `setpoint_kw` aus separaten Keys) — das war misleading bei
+            # „kommt Steuerung durch"-Diagnose. v3.9.2 (2026-06-04).
+            payload_keys = {
+                k: v for k, v in data.items()
+                if k not in ("type",)
+            }
+            _LOGGER.warning("Crowdergy SSE command frame: %s", payload_keys)
             if action == "set_charge_mode" and device_id:
                 # Dispatch nach Device-Typ:
                 #   * battery  → Phase 3 Option D: Lademodus-Select +
