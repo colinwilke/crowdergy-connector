@@ -107,7 +107,7 @@ _CONTROLLABLE_TYPES = {
 # meter itself, battery is bidirectional storage, haushalt is the
 # residual we're computing.
 _HAUSHALT_FLAG_TYPES = {
-    "heating", "warmwater", "wallbox", "generic",
+    "heating", "warmwater", "aircon", "wallbox", "generic",
 }
 
 # Device-Typen die einen Kühl-Modus konfigurieren können — heating-
