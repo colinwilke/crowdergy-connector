@@ -1,0 +1,19 @@
+# Connector Test-Stack (Cluster E Connector, 2026-06-09).
+#
+# Voraussetzung: Python 3.12+ (HA-Anforderung).
+#
+# Lokales Setup:
+#   python3.12 -m venv .venv && source .venv/bin/activate
+#   pip install -r requirements-test.txt
+#   pytest
+#
+# `pytest-homeassistant-custom-component` bringt eine vollständige
+# HA-Test-Harness mit (`hass`-Fixture, `MockConfigEntry`, State-
+# Setup-Helfer) ohne dass eine echte HA-Instance laufen muss.
+
+pytest>=8.0
+pytest-asyncio>=0.23
+pytest-homeassistant-custom-component>=0.13
+voluptuous>=0.13
+homeassistant>=2024.10
+aiohttp>=3.9
