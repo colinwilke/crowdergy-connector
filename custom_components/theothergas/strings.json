@@ -274,6 +274,13 @@
           "done": "Done"
         }
       },
+      "add_vendor_preset_pick": {
+        "title": "Available vendor presets",
+        "description": "{count} other Crowdergy users have already configured a {device_type} device. Pick a preset to pre-fill the entity mapping, or choose \"Configure manually\".",
+        "data": {
+          "preset_choice": "Preset"
+        }
+      },
       "contribute_preset": {
         "title": "Submit as vendor preset",
         "description": "Help the Crowdergy community: send your verified setup of this device anonymously as a vendor preset, so that other users with the same hardware can adopt it with one click.",

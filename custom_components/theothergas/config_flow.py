@@ -2251,6 +2251,13 @@ class CrowdergyOptionsFlow(OptionsFlow):
         # Contribution-Step. Hält die device_id zwischen Device-Picker-
         # Step und dem Vendor/Model-Form-Step.
         self._contribute_target_id: str | None = None
+        # FEAT-1 v0.2 (2026-06-09): Vendor-Preset-Pickup auch im
+        # Options-Flow-Add. Spiegel der entsprechenden Attrs im
+        # CrowdergyConfigFlow — Picker zeigt Presets aus dem Backend,
+        # gewählte Entity-IDs landen als suggested_values im
+        # add_device_entities-Step.
+        self._pending_preset_entity_map: dict[str, str] | None = None
+        self._pending_lookup_cache: list[dict[str, Any]] = []
 
     async def async_step_init(
         self, user_input: dict[str, Any] | None = None
@@ -2429,14 +2436,63 @@ class CrowdergyOptionsFlow(OptionsFlow):
         if user_input is not None:
             self._pending_type = user_input[CONF_DEVICE_TYPE]
             self._pending_name = user_input[CONF_DEVICE_NAME]
+            # Reset Preset-State zwischen Devices (User legt mehrere
+            # nacheinander an).
+            self._pending_preset_entity_map = None
             if self._pending_type in {"heating", "warmwater", "aircon"}:
                 return await self.async_step_add_device_config_mode()
             self._pending_config_mode = CONFIG_MODE_MANUAL
+            # FEAT-1 v0.2 (2026-06-09): Vendor-Preset-Picker auch im
+            # Options-Flow-Add für Solar.
+            if self._pending_type == "solar":
+                return await self.async_step_add_vendor_preset_pick()
             return await self.async_step_add_device_entities()
 
         return self.async_show_form(
             step_id="add_device",
             data_schema=_type_name_schema(),
+        )
+
+    async def async_step_add_vendor_preset_pick(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Options-Flow-Add Variante des Vendor-Preset-Pickers.
+        Identische Semantik zur Initial-Config-Flow-Version: 0 Treffer
+        → skip, sonst Picker mit __manual__ als Skip-Option."""
+        if user_input is not None:
+            choice = user_input.get("preset_choice", "__manual__")
+            if choice != "__manual__" and self._pending_lookup_cache:
+                for p in self._pending_lookup_cache:
+                    key = f"{p['vendor']}::{p['model']}"
+                    if key == choice:
+                        em = p.get("entity_map") or {}
+                        if isinstance(em, dict):
+                            self._pending_preset_entity_map = {
+                                k: v for k, v in em.items()
+                                if isinstance(k, str) and isinstance(v, str)
+                            }
+                        break
+            return await self.async_step_add_device_entities()
+
+        api_url = self._entry.data.get(CONF_API_URL, "")
+        token = self._entry.data.get(CONF_ACCESS_TOKEN, "")
+        presets: list[dict[str, Any]] = []
+        if api_url and token and self._pending_type:
+            presets = await _fetch_vendor_presets(
+                api_url, token, self._pending_type,
+            )
+        if not presets:
+            return await self.async_step_add_device_entities()
+        self._pending_lookup_cache = presets
+        return self.async_show_form(
+            step_id="add_vendor_preset_pick",
+            data_schema=_vendor_preset_pick_schema(presets),
+            description_placeholders={
+                "device_type": DEVICE_TYPE_LABELS_DE.get(
+                    self._pending_type or "", self._pending_type or "",
+                ),
+                "count": str(len(presets)),
+            },
         )
 
     async def async_step_add_device_config_mode(
@@ -2474,9 +2530,14 @@ class CrowdergyOptionsFlow(OptionsFlow):
             )
             return await self._dispatch_add_post_entities(entity_input)
 
+        defaults = self._pending_preset_entity_map or None
         return self.async_show_form(
             step_id="add_device_entities",
-            data_schema=_entities_schema(device_type, config_mode=self._pending_config_mode),
+            data_schema=_entities_schema(
+                device_type,
+                defaults=defaults,
+                config_mode=self._pending_config_mode,
+            ),
             description_placeholders={
                 "device_type": DEVICE_TYPE_LABELS_DE.get(device_type, device_type),
                 "device_name": device_name,
