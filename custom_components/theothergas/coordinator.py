@@ -704,6 +704,35 @@ class CrowdergyCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
                 )
         return response
 
+    async def delete_device_backend(self, device_id: str) -> bool:
+        """Backend-DELETE für ein Device, mit Auth-Refresh.
+
+        Cluster B Connector (2026-06-09): vorher hatte
+        `async_remove_config_entry_device` in `__init__.py` einen
+        eigenen httpx-Client OHNE 401-Refresh-Pfad → bei abgelaufenem
+        Token blieb das Device als Orphan im Backend. Jetzt geht's
+        durch denselben authentifizierten Pfad wie alle anderen
+        Backend-Calls.
+        """
+        try:
+            response = await self._authenticated_request(
+                "DELETE", f"/api/v1/devices/{device_id}"
+            )
+        except httpx.RequestError as err:
+            _LOGGER.warning(
+                "Backend delete request for %s failed transport: %s",
+                device_id, err,
+            )
+            return False
+        # 404 = backend hat das schon nicht mehr → für unsere Zwecke ok.
+        if response.status_code in (200, 204, 404):
+            return True
+        _LOGGER.warning(
+            "Backend delete for %s returned %s",
+            device_id, response.status_code,
+        )
+        return False
+
     async def async_shutdown(self) -> None:
         for unsub in self._unsub_listeners:
             unsub()
@@ -1575,6 +1604,17 @@ class CrowdergyCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
                             await self._apply_battery_setpoint(
                                 device_id, "passive", 0.0,
                             )
+                        elif dev_type == "wallbox":
+                            # Cluster B Connector (2026-06-09): Finding
+                            # #13 — wenn der User KEIN charge_mode_value_
+                            # crowdergy gesetzt hat, hatte AI-off keinen
+                            # Cleanup-Pfad für die Wallbox. Der Solver-
+                            # Lademodus blieb damit hängen. Charge-Mode-
+                            # Hold-Loop hier zumindest abräumen damit der
+                            # User die Wallbox manuell übernehmen kann.
+                            # (Wenn crowdergy_value gesetzt war, ist
+                            # snapshot/restore oben schon gelaufen.)
+                            self._cancel_charge_mode_hold(device_id)
                         elif dev_type in ("heating", "warmwater", "aircon", "generic"):
                             # entity_control auf value_off — sorgt
                             # dafür dass das Gerät definitiv stoppt.

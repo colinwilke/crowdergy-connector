@@ -79,21 +79,20 @@ async def async_remove_config_entry_device(
         # No Crowdergy identifier — nothing to talk to the backend about.
         return True
 
-    api_url = config_entry.data.get(CONF_API_URL)
-    token = config_entry.data.get(CONF_ACCESS_TOKEN)
-    if api_url and token:
+    # Cluster B Connector (2026-06-09): vorher hatte dieser Pfad einen
+    # eigenen httpx-Client ohne 401-Refresh — bei abgelaufenem Token
+    # blieb das Device backend-seitig als Orphan zurück. Jetzt
+    # delegiert er an `coordinator.delete_device_backend()` der den
+    # selben authentifizierten Request-Pfad nutzt wie alles andere.
+    coordinator: CrowdergyCoordinator | None = (
+        hass.data.get(DOMAIN, {}).get(config_entry.entry_id)
+    )
+    if coordinator is not None:
         try:
-            async with httpx.AsyncClient(timeout=15.0) as client:
-                response = await client.delete(
-                    f"{api_url}/api/v1/devices/{crowdergy_device_id}",
-                    headers={"Authorization": f"Bearer {token}"},
-                )
-                # 404 is fine — already gone backend-side, still safe to drop locally.
-                if response.status_code not in (200, 204, 404):
-                    response.raise_for_status()
-        except (httpx.HTTPStatusError, httpx.RequestError) as err:
+            await coordinator.delete_device_backend(crowdergy_device_id)
+        except Exception as err:  # noqa: BLE001
             _LOGGER.warning(
-                "Backend delete for %s returned %s — removing locally anyway",
+                "Backend delete for %s raised %s — removing locally anyway",
                 crowdergy_device_id, err,
             )
 
