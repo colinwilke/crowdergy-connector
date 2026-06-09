@@ -236,6 +236,13 @@ class CrowdergyCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
         self._sse_client: SSEClient | None = None
         self._sse_consumer_task: asyncio.Task | None = None
         self._SSEClient = SSEClient  # for late instantiation in async_init
+        # FEAT-5 Phase D (2026-06-09): TelemetryComposer hält die 3
+        # Background-Loops (heartbeat, device-mirror, state-resync) +
+        # bootstrap/outdoor-temp-helpers. Coordinator delegiert die
+        # vorigen `_run_*_loop`-Methoden und `_bootstrap_active_state`
+        # / `_push_outdoor_temp` an `self._composer.*`.
+        from .telemetry_composer import TelemetryComposer
+        self._composer = TelemetryComposer(self)
         # Cluster A Connector (2026-06-09): single-flight Lock + CAS für
         # _refresh_access_token. Vorher konnten parallele 401s (Telemetry-
         # PATCH + State-Resync GET + Outdoor-Temp POST treffen gleichzeitig
@@ -447,197 +454,17 @@ class CrowdergyCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
         )
 
     async def _run_heartbeat_loop(self) -> None:
-        """POST /users/me/heartbeat every HEARTBEAT_PING_INTERVAL.
-
-        Backend stamps `connector_last_seen` + `connector_version`
-        from this call — same effect as a telemetry PATCH used to
-        have, but without writing a row to the `telemetry` table.
-
-        Failures are logged at DEBUG (transient network blips are
-        expected) and the loop continues. A sustained outage just
-        means iOS will mark the connector offline after 70 s —
-        identical to pre-v2.5.4 behaviour.
-
-        Exponential backoff on consecutive failures: 25 s → 50 s →
-        ... → cap at 120 s. Resets to the base interval on the next
-        successful ping. Without this the ping kept hammering a
-        down backend at 25 s indefinitely.
-        """
-        _HEARTBEAT_BACKOFF_MAX_S = 120.0
-        consecutive_failures = 0
-        while True:
-            failed = False
-            try:
-                response = await self._authenticated_request(
-                    "POST", "/api/v1/users/me/heartbeat"
-                )
-                if response.status_code >= 400:
-                    _LOGGER.debug(
-                        "heartbeat ping returned %s: %s",
-                        response.status_code, response.text,
-                    )
-                    failed = True
-            except asyncio.CancelledError:
-                raise
-            except Exception as err:  # noqa: BLE001
-                _LOGGER.debug("heartbeat ping failed: %s", err)
-                failed = True
-            if failed:
-                consecutive_failures += 1
-                sleep_for = min(
-                    HEARTBEAT_PING_INTERVAL * (2 ** (consecutive_failures - 1)),
-                    _HEARTBEAT_BACKOFF_MAX_S,
-                )
-            else:
-                consecutive_failures = 0
-                sleep_for = HEARTBEAT_PING_INTERVAL
-            await asyncio.sleep(sleep_for)
+        """Delegate auf TelemetryComposer (FEAT-5 Phase D, 2026-06-09)."""
+        await self._composer.heartbeat_loop()
 
     async def _run_device_mirror_loop(self) -> None:
-        """Periodic per-device telemetry-timestamp refresh.
-
-        Pro Tick (= PER_DEVICE_MIRROR_INTERVAL): für jedes Gerät mit
-        einem zuvor gesendeten Payload PATCHen wir das letzte Payload
-        erneut, sofern der letzte echte Send ≥ PER_DEVICE_MIRROR_INTERVAL
-        her ist. `energy_kwh_delta` wird weggelassen — das hatte schon
-        beim Original-Send seine Δ-kWh ins Backend gebracht; nochmal
-        zu senden würde doppelt zählen.
-
-        Bookkeeping:
-        - `_last_send_at` wird gestempelt damit der nächste Mirror-Tick
-          das Gerät überspringt (sonst feuert jeder Tick alle Geräte).
-        - `_last_sent_payload` + `_last_sent_hash` bleiben unangetastet
-          — die spiegeln den letzten ECHTEN State; `_should_send` soll
-          den nächsten echten Tick weiterhin anhand des letzten echten
-          Hashs entscheiden, nicht anhand des Mirror-Hashs.
-
-        Failures sind DEBUG-Log + weiter — ein Mirror-Drop ist nicht
-        kritisch, der nächste Tick versucht's erneut.
-        """
-        while True:
-            try:
-                now_ts = time.time()
-                for device_id, last_payload in list(self._last_sent_payload.items()):
-                    age = now_ts - self._last_send_at.get(device_id, 0.0)
-                    if age < PER_DEVICE_MIRROR_INTERVAL:
-                        continue
-                    mirror = {
-                        k: v for k, v in last_payload.items()
-                        if k != "energy_kwh_delta"
-                    }
-                    try:
-                        response = await self._authenticated_request(
-                            "PATCH",
-                            f"/api/v1/devices/{device_id}/telemetry",
-                            json=mirror,
-                        )
-                        if response.status_code < 400:
-                            self._last_send_at[device_id] = now_ts
-                        else:
-                            _LOGGER.debug(
-                                "device-mirror PATCH %s returned %s: %s",
-                                device_id, response.status_code, response.text,
-                            )
-                    except asyncio.CancelledError:
-                        raise
-                    except Exception as err:  # noqa: BLE001
-                        _LOGGER.debug(
-                            "device-mirror PATCH failed for %s: %s",
-                            device_id, err,
-                        )
-            except asyncio.CancelledError:
-                raise
-            except Exception as err:  # noqa: BLE001
-                _LOGGER.debug("device-mirror loop iteration error: %s", err)
-            await asyncio.sleep(PER_DEVICE_MIRROR_INTERVAL)
+        """Delegate auf TelemetryComposer (FEAT-5 Phase D, 2026-06-09)."""
+        await self._composer.device_mirror_loop()
 
     async def _run_state_resync_loop(self) -> None:
-        """Periodischer Pull von GET /api/v1/devices als SSE-Drop-
-        Backstop. Vergleicht backend-State (is_active, is_on, cool_on)
-        mit lokalem Cache; bei Drift Cache-Update + Re-Apply via
-        _apply_device_state / _apply_cool_state.
+        """Delegate auf TelemetryComposer (FEAT-5 Phase D, 2026-06-09)."""
+        await self._composer.state_resync_loop()
 
-        SSE-Limitation: Backend publisht nur bei state-Transitions,
-        nicht idempotent. Connector kann zum Publish-Moment nicht
-        subscribed sein (Netzwerk-Flap, HA-Restart, NAT-Idle). Dann
-        ist der Solver-Befehl verloren. Polling-Backstop fängt das
-        innerhalb STATE_RESYNC_INTERVAL Sekunden ab.
-
-        Failures: DEBUG-Log + weiter (Netzwerk-Glitches sollen den
-        Loop nicht killen).
-        """
-        while True:
-            try:
-                response = await self._authenticated_request(
-                    "GET", "/api/v1/devices"
-                )
-                if response.status_code >= 400:
-                    _LOGGER.debug(
-                        "state-resync GET returned %s: %s",
-                        response.status_code, response.text,
-                    )
-                else:
-                    for d in response.json():
-                        device_id = d["id"]
-                        bk_active = bool(d.get("is_active", False))
-                        bk_on = bool(d.get("is_on", False))
-                        bk_cool = bool(d.get("cool_on", False))
-
-                        local_on = self.state.on_state.get(device_id)
-                        local_cool = self.state.cool_state.get(device_id)
-                        local_active = self.state.active_state.get(device_id)
-
-                        # Cache unkonditional aktualisieren — Backend ist
-                        # source of truth.
-                        self.state.active_state[device_id] = bk_active
-                        self.state.on_state[device_id] = bk_on
-                        self.state.cool_state[device_id] = bk_cool
-
-                        # Drift-Reparatur NUR für aktive Geräte
-                        # (Crowdergize on). Inaktive werden vom AI-off-
-                        # Pfad sauber abgeschlossen, kein periodisches
-                        # Rewriten nötig.
-                        if not bk_active:
-                            continue
-                        if local_on is not None and local_on != bk_on:
-                            _LOGGER.warning(
-                                "state-resync: %s is_on drifted "
-                                "(cache=%s, backend=%s) — reapplying",
-                                device_id, local_on, bk_on,
-                            )
-                            await self._apply_device_state(device_id, bk_on)
-                        if local_cool is not None and local_cool != bk_cool:
-                            _LOGGER.warning(
-                                "state-resync: %s cool_on drifted "
-                                "(cache=%s, backend=%s) — reapplying",
-                                device_id, local_cool, bk_cool,
-                            )
-                            try:
-                                await self._apply_cool_state(device_id, bk_cool)
-                            except Exception:  # noqa: BLE001
-                                _LOGGER.debug(
-                                    "state-resync: cool-reapply failed for %s",
-                                    device_id,
-                                )
-                        # Edge-case: local_active=False -> True (User hat
-                        # AI eingeschaltet, SSE-Event ging verloren).
-                        # AI-On-Pfad enthält Charge-Mode-Snapshot etc. —
-                        # zu komplex hier nachzuziehen, einfach loggen.
-                        # Beim nächsten echten User-Toggle löst's sich
-                        # selbst auf.
-                        if local_active is False and bk_active:
-                            _LOGGER.info(
-                                "state-resync: %s is_active drifted "
-                                "False→True (cache vs backend) — "
-                                "User-Toggle wird empfohlen für "
-                                "Charge-Mode-Snapshot",
-                                device_id,
-                            )
-            except asyncio.CancelledError:
-                raise
-            except Exception as err:  # noqa: BLE001
-                _LOGGER.debug("state-resync loop iteration error: %s", err)
-            await asyncio.sleep(STATE_RESYNC_INTERVAL)
 
     def _auth_headers(self) -> dict[str, str]:
         return {
@@ -1093,60 +920,12 @@ class CrowdergyCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
         return None
 
     async def _bootstrap_active_state(self) -> None:
-        """One-shot GET /devices to seed the Crowdergize + on/off caches.
-
-        Without this the HA switch entity boots showing `False` (the
-        coordinator-default) until the user toggles something — and a fresh
-        HA restart would silently drop a previously-on state. The backend
-        is the source of truth for both flags, so we mirror them once here.
-        """
-        try:
-            response = await self._authenticated_request("GET", "/api/v1/devices")
-            response.raise_for_status()
-            for d in response.json():
-                self.state.active_state[d["id"]] = bool(d.get("is_active", False))
-                self.state.on_state[d["id"]] = bool(d.get("is_on", False))
-                # Cluster B Connector (2026-06-09): _cool_state mit
-                # bootstrappen. Vorher blieb der Cache nach HA-Restart
-                # leer → ein SSE-Frame mit `is_on=False` triggerte
-                # _apply_device_state("off") gegen die climate-Entity
-                # die eigentlich cooling sein sollte (Skip-Guard
-                # defaultete zu False). Reincarnation des AC-geht-aus-
-                # Bugs von vor v3.6.4.
-                self.state.cool_state[d["id"]] = bool(d.get("cool_on", False))
-            self.state.active_state_bootstrapped = True
-        except (httpx.HTTPStatusError, httpx.RequestError) as err:
-            _LOGGER.warning(
-                "Bootstrap of device state failed (%s) — will retry next refresh", err,
-            )
+        """Delegate auf TelemetryComposer (FEAT-5 Phase D, 2026-06-09)."""
+        await self._composer.bootstrap_active_state()
 
     async def _push_outdoor_temp(self) -> None:
-        """Read the optional integration-wide outdoor-temp entity and
-        POST it to /users/me/outdoor. Silently skipped when the user
-        didn't configure one — the backend then falls back to its own
-        Open-Meteo poll for this user.
-        """
-        entity_id = self.entry.data.get(CONF_ENTITY_OUTDOOR_TEMP, "")
-        if not entity_id:
-            return
-        temp = self._read_entity_state(entity_id)
-        if temp is None:
-            return
-        try:
-            response = await self._authenticated_request(
-                "POST",
-                "/api/v1/users/me/outdoor",
-                json={"outdoor_temp_c": temp},
-            )
-            response.raise_for_status()
-        except httpx.HTTPStatusError as err:
-            _LOGGER.warning(
-                "Outdoor-temp push rejected (%s): %s",
-                err.response.status_code,
-                err.response.text,
-            )
-        except httpx.RequestError as err:
-            _LOGGER.warning("Outdoor-temp push failed: %s", err)
+        """Delegate auf TelemetryComposer (FEAT-5 Phase D, 2026-06-09)."""
+        await self._composer.push_outdoor_temp()
 
     async def _async_update_data(self) -> dict[str, dict[str, Any]]:
         if not self.state.active_state_bootstrapped:
