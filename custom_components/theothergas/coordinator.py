@@ -8,11 +8,11 @@ import time
 from datetime import timedelta
 from typing import Any
 
-import aiohttp
+# aiohttp + aiohttp_client raus seit FEAT-5 Phase B (2026-06-09) —
+# Stream-Reader nutzt sie drüben in sse_client.py.
 import httpx
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import Event, HomeAssistant, callback
-from homeassistant.helpers import aiohttp_client
 from homeassistant.helpers.event import async_track_state_change_event
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 
@@ -152,16 +152,8 @@ SEND_THRESHOLDS: dict[str, float] = {
     "current_temp_c": 0.3,    # 0.3 °C
 }
 
-SSE_RECONNECT_INITIAL = 1
-SSE_RECONNECT_MAX = 60
-# Read-Timeout im SSE-Body-Stream. Backend sendet alle 15s einen
-# Keep-Alive-Ping (siehe Z. 1442 Hold-Loop-Liveness-Comment); fehlt
-# der für SSE_READ_TIMEOUT_S Sekunden, ist die TCP-Verbindung
-# wahrscheinlich halb-tot (NAT-Drop, Proxy-Idle-Kill, Server hängt).
-# Ohne Timeout würde `async for raw in resp.content` ewig blocken
-# → User-Befehle fielen ins Leere bis Connector-Reload. Confirmed
-# 2026-06-04 mit verlorenem Kaffeemaschine-Tap.
-SSE_READ_TIMEOUT_S = 60
+# SSE-Konstanten (Reconnect-Backoff, Read-Timeout) leben seit FEAT-5
+# Phase B (2026-06-09) in sse_client.py.
 
 
 # ── Solver-only Extra-Field-Registry (v3.3+) ─────────────────────────
@@ -234,7 +226,16 @@ class CrowdergyCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
         self._client: httpx.AsyncClient | None = None  # type: ignore[assignment]
         self._unsub_listeners: list[Any] = []
         self._entity_to_devices: dict[str, list[str]] = {}
-        self._sse_task: asyncio.Task | None = None
+        # FEAT-5 Phase B (2026-06-09): SSE-Stream-Reader in sse_client.py
+        # extrahiert. Coordinator besitzt jetzt nur noch die SSEClient-
+        # Instanz + einen Consumer-Task der Frames aus der Queue holt
+        # und auf `_handle_ws_message` mapped. Lifecycle (start/stop)
+        # bleibt im Coordinator. Vorteile: testbar ohne Apply-Stack;
+        # Backpressure-Queue (Cap 512) statt direkter Coupling.
+        from .sse_client import SSEClient
+        self._sse_client: SSEClient | None = None
+        self._sse_consumer_task: asyncio.Task | None = None
+        self._SSEClient = SSEClient  # for late instantiation in async_init
         # Cluster A Connector (2026-06-09): single-flight Lock + CAS für
         # _refresh_access_token. Vorher konnten parallele 401s (Telemetry-
         # PATCH + State-Resync GET + Outdoor-Temp POST treffen gleichzeitig
@@ -352,16 +353,43 @@ class CrowdergyCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
         )
 
     def start_sse_listener(self) -> None:
-        """Open a WS connection to the backend and react to inbound command frames."""
+        """SSE-Reader + Message-Consumer starten. Reader liest die
+        Stream-Bytes und legt JSON-Frames in eine Queue; Consumer holt
+        sie raus und dispatcht via `_handle_ws_message`."""
         if not self._user_id:
             _LOGGER.warning("No user_id stored — skipping WS listener setup")
             return
-        if self._sse_task and not self._sse_task.done():
-            return
-        self._sse_task = self.hass.async_create_background_task(
-            self._run_sse_loop(),
-            name=f"{DOMAIN}_sse_listener",
-        )
+        if self._sse_client is None:
+            self._sse_client = self._SSEClient(
+                hass=self.hass,
+                api_url=self.api_url,
+                get_token=lambda: self._access_token,
+                refresh_token=self._refresh_access_token,
+            )
+        self._sse_client.start(task_name=f"{DOMAIN}_sse_listener")
+        if (
+            self._sse_consumer_task is None
+            or self._sse_consumer_task.done()
+        ):
+            self._sse_consumer_task = self.hass.async_create_background_task(
+                self._sse_consume_loop(),
+                name=f"{DOMAIN}_sse_consumer",
+            )
+
+    async def _sse_consume_loop(self) -> None:
+        """Consumer-Loop: nimmt Frames aus der SSEClient-Queue und
+        dispatcht jeden auf `_handle_ws_message`. Exceptions in einem
+        einzelnen Frame werden gelogged + geschluckt, damit ein
+        kaputtes Apply nicht den Stream blockt."""
+        assert self._sse_client is not None
+        while True:
+            try:
+                msg = await self._sse_client.messages.get()
+                await self._handle_ws_message(msg)
+            except asyncio.CancelledError:
+                raise
+            except Exception as err:  # noqa: BLE001
+                _LOGGER.exception("Failed to handle SSE event: %s", err)
 
     async def async_init(self) -> None:
         """v3.5.1 — Defered blocking I/O aus dem event loop.
@@ -709,12 +737,14 @@ class CrowdergyCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
         for unsub in self._unsub_listeners:
             unsub()
         self._unsub_listeners.clear()
-        if self._sse_task and not self._sse_task.done():
-            self._sse_task.cancel()
+        if self._sse_consumer_task and not self._sse_consumer_task.done():
+            self._sse_consumer_task.cancel()
             try:
-                await self._sse_task
+                await self._sse_consumer_task
             except (asyncio.CancelledError, Exception):  # noqa: BLE001
                 pass
+        if self._sse_client is not None:
+            await self._sse_client.stop()
         if self._heartbeat_task and not self._heartbeat_task.done():
             self._heartbeat_task.cancel()
             try:
@@ -1423,78 +1453,11 @@ class CrowdergyCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
 
     # ── Inbound SSE: commands pushed from the Crowdergy backend ────────────
     #
-    # Replaces the previous WebSocket-based listener on 2026-05-15. The
-    # backend now exposes /api/v1/stream as Server-Sent Events: an open
-    # HTTP/1.1 GET that yields `data: {…json…}` lines. No ping/pong
-    # protocol-level handshake, no aiohttp/Starlette idiosyncrasies — the
-    # server also emits a `{"type":"ping"}` every 15 s as application-
-    # level heartbeat.
-
-    def _sse_url(self) -> str:
-        return f"{self.api_url}/api/v1/stream"
-
-    async def _run_sse_loop(self) -> None:
-        """Reconnecting SSE listener for inbound commands from the backend.
-
-        Auth: `Authorization: Bearer …` (not `?token=…`). The query-param
-        form was deprecated 2026-05-27 because URL-embedded tokens leak
-        into nginx + reverse-proxy access logs; aiohttp can set headers
-        on streamed GETs cleanly so we get the same SSE semantics with
-        proper authentication.
-        """
-        delay = SSE_RECONNECT_INITIAL
-        session = aiohttp_client.async_get_clientsession(self.hass)
-        while True:
-            try:
-                async with session.get(
-                    self._sse_url(),
-                    headers={
-                        "Accept": "text/event-stream",
-                        "Cache-Control": "no-cache",
-                        "Authorization": f"Bearer {self._access_token}",
-                    },
-                    timeout=aiohttp.ClientTimeout(total=None, sock_read=SSE_READ_TIMEOUT_S),
-                ) as resp:
-                    if resp.status == 401 and await self._refresh_access_token():
-                        continue
-                    if resp.status != 200:
-                        _LOGGER.warning(
-                            "Crowdergy SSE handshake failed (%s) — retrying in %ss",
-                            resp.status, delay,
-                        )
-                        raise aiohttp.ClientError(f"status {resp.status}")
-                    _LOGGER.info("Crowdergy SSE connected to %s/api/v1/stream", self.api_url)
-                    # Reset the back-off only after we've actually
-                    # received data on the body stream. A handshake-
-                    # OK / immediate-disconnect cycle would otherwise
-                    # spin at the 1-s floor and hammer a down backend.
-                    saw_body = False
-                    async for raw in resp.content:
-                        if not saw_body:
-                            saw_body = True
-                            delay = SSE_RECONNECT_INITIAL
-                        line = raw.decode("utf-8", errors="replace").rstrip("\r\n")
-                        if not line.startswith("data: "):
-                            continue
-                        body = line[len("data: "):]
-                        try:
-                            await self._handle_ws_message(json.loads(body))
-                        except Exception as err:  # noqa: BLE001
-                            _LOGGER.exception("Failed to handle SSE event: %s", err)
-            except asyncio.CancelledError:
-                raise
-            except (aiohttp.ClientError, asyncio.TimeoutError) as err:
-                # asyncio.TimeoutError = sock_read=SSE_READ_TIMEOUT_S
-                # ausgelöst, d.h. half-open Stream → reconnect.
-                _LOGGER.warning(
-                    "Crowdergy SSE stream stale or client-error: %s — reconnecting in %ss",
-                    err, delay,
-                )
-            except Exception as err:  # noqa: BLE001
-                _LOGGER.exception("Unexpected SSE error: %s", err)
-
-            await asyncio.sleep(delay)
-            delay = min(delay * 2, SSE_RECONNECT_MAX)
+    # SSE-Stream-Reader extrahiert nach `sse_client.py` (FEAT-5 Phase B,
+    # 2026-06-09). Coordinator hält nur noch SSEClient-Instanz +
+    # Consumer-Task; das Stream-Reading + Reconnect-Backoff + Auth-
+    # Refresh-Trigger leben drüben. Vorteile: testbar ohne Apply-Stack,
+    # 512-Slot-Queue als Backpressure gegen hängende Apply-Calls.
 
     async def _handle_ws_message(self, data: dict[str, Any]) -> None:
         # Update liveness clock for the charge-mode hold-loop kill
