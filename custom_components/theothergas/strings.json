@@ -66,6 +66,13 @@
         },
         "submit": "Next"
       },
+      "vendor_preset_pick": {
+        "title": "Available vendor presets",
+        "description": "{count} other Crowdergy users have already configured a {device_type} device. Pick a preset to pre-fill the entity mapping, or choose \"Configure manually\".",
+        "data": {
+          "preset_choice": "Preset"
+        }
+      },
       "device_config_mode": {
         "title": "{device_name} — Control style",
         "description": "How is the heat-pump / AC integrated in HA? Climate-Entity bundles temperature, control and modes in a single entity (Daikin, Mitsubishi, generic_thermostat). Manual links each sensor and switch individually (SG-Ready, Modbus).",

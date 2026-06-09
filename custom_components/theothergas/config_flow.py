@@ -341,6 +341,60 @@ def _config_mode_schema(
     })
 
 
+async def _fetch_vendor_presets(
+    api_url: str, token: str, device_type: str,
+) -> list[dict[str, Any]]:
+    """GET /api/v1/crowd-presets/lookup für einen Device-Type.
+
+    Returns the list of presets (sorted desc by contribution_count
+    backend-seitig). Bei Netzwerk-/Backend-Fehler: leere Liste, der
+    aufrufende Step skipt den Picker und geht direkt zu device_entities.
+    """
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.get(
+                f"{api_url}/api/v1/crowd-presets/lookup",
+                params={"device_type": device_type},
+                headers={"Authorization": f"Bearer {token}"},
+            )
+            response.raise_for_status()
+            data = response.json()
+    except (httpx.HTTPStatusError, httpx.RequestError, ValueError) as err:
+        _LOGGER.debug("vendor-preset lookup failed: %s", err)
+        return []
+    presets = data.get("presets") or []
+    if not isinstance(presets, list):
+        return []
+    return [p for p in presets if isinstance(p, dict)]
+
+
+def _vendor_preset_pick_schema(presets: list[dict[str, Any]]) -> vol.Schema:
+    """Picker für Vendor-Presets. Option `__manual__` skipt das Preset
+    und führt zum klassischen manuellen Entity-Mapping. Pro Preset
+    eine Option im Format `<vendor>::<model>` als Key."""
+    options = [
+        {
+            "value": f"{p['vendor']}::{p['model']}",
+            "label": (
+                f"{p['vendor']} {p['model']} "
+                f"(Anzahl Beiträge: {p.get('contribution_count', 1)})"
+            ),
+        }
+        for p in presets
+    ]
+    options.append({"value": "__manual__", "label": "Manuell konfigurieren"})
+    return vol.Schema(
+        {
+            vol.Required("preset_choice"): selector.SelectSelector(
+                selector.SelectSelectorConfig(
+                    options=options,
+                    mode=selector.SelectSelectorMode.LIST,
+                )
+            ),
+        }
+    )
+
+
 def _contribute_form_schema(
     vendor: str | None, model: str | None, notes: str | None,
 ) -> vol.Schema:
@@ -1387,6 +1441,15 @@ class CrowdergyConfigFlow(ConfigFlow, domain=DOMAIN):
         self._pending_config_mode: str = CONFIG_MODE_MANUAL
         # Entity-mapping kept between step 2 and step 3 (values).
         self._pending_entity_input: dict[str, Any] | None = None
+        # FEAT-1 v0.1 (2026-06-09): wenn der User im
+        # `vendor_preset_pick`-Step ein Crowd-Beitrag-Preset
+        # übernimmt, landen die Entity-IDs hier und füllen den
+        # `device_entities`-Step als Suggested-Defaults vor. None =
+        # User skipped Preset oder es gab keine.
+        self._pending_preset_entity_map: dict[str, str] | None = None
+        # Backend-Response-Cache zwischen Picker-Render und Submit,
+        # damit der Submit nicht erneut zum Backend gehen muss.
+        self._pending_lookup_cache: list[dict[str, Any]] = []
         # v3.1 Auto-Setup state. Erkannte Geräte-Gruppen aus dem
         # entity_mapper-Scan + die FIFO der vom User confirm'd-Devices
         # die noch durch den klassischen Value-Step-Pfad müssen.
@@ -1707,18 +1770,72 @@ class CrowdergyConfigFlow(ConfigFlow, domain=DOMAIN):
         if user_input is not None:
             self._pending_type = user_input[CONF_DEVICE_TYPE]
             self._pending_name = user_input[CONF_DEVICE_NAME]
+            # Reset Preset-State zwischen Devices (z.B. wenn der User
+            # mehrere Geräte hintereinander anlegt).
+            self._pending_preset_entity_map = None
             # v3.0: WP-Typen (heating, warmwater) bekommen einen
             # KonfigMode-Step danach. Andere Typen skippen direkt zu
             # device_entities mit implizitem config_mode = manual.
             if self._pending_type in {"heating", "warmwater", "aircon"}:
                 return await self.async_step_device_config_mode()
             self._pending_config_mode = CONFIG_MODE_MANUAL
+            # FEAT-1 v0.1 (2026-06-09): vor dem manuellen Entity-Step
+            # prüfen ob Hersteller-Presets verfügbar sind. v0.1 nur
+            # für Solar — andere Types folgen.
+            if self._pending_type == "solar":
+                return await self.async_step_vendor_preset_pick()
             return await self.async_step_device_entities()
 
         return self.async_show_form(
             step_id="device_type",
             data_schema=_type_name_schema(),
             description_placeholders={"device_number": str(len(self._devices) + 1)},
+        )
+
+    async def async_step_vendor_preset_pick(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """FEAT-1 v0.1 (2026-06-09): zeigt verfügbare Hersteller-Presets
+        für den aktuellen Device-Type. User wählt entweder ein Preset
+        (Entity-IDs werden im nächsten Step vorausgefüllt) oder
+        „Manuell konfigurieren" → klassischer Flow."""
+        if user_input is not None:
+            choice = user_input.get("preset_choice", "__manual__")
+            if choice != "__manual__" and self._pending_lookup_cache:
+                # vendor::model — finde den vollen Preset-Eintrag
+                for p in self._pending_lookup_cache:
+                    key = f"{p['vendor']}::{p['model']}"
+                    if key == choice:
+                        em = p.get("entity_map") or {}
+                        if isinstance(em, dict):
+                            self._pending_preset_entity_map = {
+                                k: v for k, v in em.items()
+                                if isinstance(k, str) and isinstance(v, str)
+                            }
+                        break
+            return await self.async_step_device_entities()
+
+        api_url = self._data.get(CONF_API_URL, "")
+        token = self._data.get(CONF_ACCESS_TOKEN, "")
+        presets: list[dict[str, Any]] = []
+        if api_url and token and self._pending_type:
+            presets = await _fetch_vendor_presets(
+                api_url, token, self._pending_type,
+            )
+        # Wenn 0 Presets → skip diesen Step komplett, kein User-Hick-Up
+        # mit leerem Picker.
+        if not presets:
+            return await self.async_step_device_entities()
+        self._pending_lookup_cache = presets
+        return self.async_show_form(
+            step_id="vendor_preset_pick",
+            data_schema=_vendor_preset_pick_schema(presets),
+            description_placeholders={
+                "device_type": DEVICE_TYPE_LABELS_DE.get(
+                    self._pending_type or "", self._pending_type or "",
+                ),
+                "count": str(len(presets)),
+            },
         )
 
     async def async_step_device_config_mode(
@@ -1761,9 +1878,20 @@ class CrowdergyConfigFlow(ConfigFlow, domain=DOMAIN):
             )
             return await self._dispatch_post_entities(entity_input)
 
+        # FEAT-1 v0.1 (2026-06-09): wenn der User im vorigen Step ein
+        # Hersteller-Preset ausgewählt hat, sind die Entity-IDs in
+        # `_pending_preset_entity_map` und werden als Suggested-Defaults
+        # ans Schema übergeben. _entities_schema rendert sie als
+        # `suggested_value` damit der User sie sehen und ändern kann
+        # bevor er bestätigt.
+        defaults = self._pending_preset_entity_map or None
         return self.async_show_form(
             step_id="device_entities",
-            data_schema=_entities_schema(device_type, config_mode=self._pending_config_mode),
+            data_schema=_entities_schema(
+                device_type,
+                defaults=defaults,
+                config_mode=self._pending_config_mode,
+            ),
             description_placeholders={
                 "device_number": str(len(self._devices) + 1),
                 "device_type": DEVICE_TYPE_LABELS_DE.get(device_type, device_type),

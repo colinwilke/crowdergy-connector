@@ -66,6 +66,13 @@
           "device_name": "Anzeigename in der Crowdergy-App und in Home Assistant."
         }
       },
+      "vendor_preset_pick": {
+        "title": "Verfügbare Hersteller-Presets",
+        "description": "{count} weitere Crowdergy-Nutzer haben bereits ein {device_type}-Gerät konfiguriert. Wähle ein Preset um die Entity-Zuordnung vorab zu füllen, oder wähle „Manuell konfigurieren\".",
+        "data": {
+          "preset_choice": "Preset"
+        }
+      },
       "device_config_mode": {
         "title": "{device_name} — Steuerungsart",
         "description": "Wie ist die Wärmepumpe / Klimaanlage in HA eingebunden? Climate-Entity bündelt Temperatur, Steuerung und Modi in einer Entität (Daikin, Mitsubishi, generic_thermostat). Manuell verknüpfst du jeden Sensor und Schalter einzeln (SG-Ready, Modbus).",
