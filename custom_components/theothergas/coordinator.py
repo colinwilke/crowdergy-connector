@@ -235,6 +235,15 @@ class CrowdergyCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
         self._unsub_listeners: list[Any] = []
         self._entity_to_devices: dict[str, list[str]] = {}
         self._sse_task: asyncio.Task | None = None
+        # Cluster A Connector (2026-06-09): single-flight Lock + CAS für
+        # _refresh_access_token. Vorher konnten parallele 401s (Telemetry-
+        # PATCH + State-Resync GET + Outdoor-Temp POST treffen gleichzeitig
+        # nach Token-Expiry) jeweils einen eigenen /auth/refresh-Call
+        # starten — Backend invalidiert das alte Refresh-Token per Use,
+        # nur einer gewinnt, der Rest hat einen invaliden Refresh-Token →
+        # Logout-Kaskade. Mit Lock: erste Caller refresht, alle weiteren
+        # warten am Lock und sehen dann das neue Token via CAS-Check.
+        self._refresh_lock: asyncio.Lock = asyncio.Lock()
         # v2.5.4: dedicated liveness ping. Decoupled from the
         # per-device telemetry stream so a fully idle home no longer
         # has to PATCH N devices every 30 s purely to keep iOS's
@@ -640,34 +649,56 @@ class CrowdergyCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
             "X-Crowdergy-Connector-Version": self._connector_version,
         }
 
-    async def _refresh_access_token(self) -> bool:
-        try:
-            response = await self._client.post(
-                "/api/v1/auth/refresh",
-                json={"refresh_token": self._refresh_token},
-            )
-            if response.status_code == 200:
-                tokens = response.json()
-                self._access_token = tokens["access_token"]
-                self._refresh_token = tokens["refresh_token"]
-                new_data = {**self.entry.data}
-                new_data[CONF_ACCESS_TOKEN] = self._access_token
-                new_data[CONF_REFRESH_TOKEN] = self._refresh_token
-                self.hass.config_entries.async_update_entry(self.entry, data=new_data)
+    async def _refresh_access_token(self, *, seen_token: str | None = None) -> bool:
+        """Single-flight Refresh mit Compare-and-Swap.
+
+        Cluster A Connector (2026-06-09): mehrere parallele 401-Responses
+        konnten vorher jeweils ein eigenes /auth/refresh feuern → das
+        Backend invalidiert das alte Refresh-Token, nur einer gewinnt,
+        Rest hat ungültige Token → kaskadiertem Logout. Jetzt:
+
+        - `seen_token`: das `_access_token`, das der Caller bei seinem
+          401 gesehen hat. Wenn beim Lock-Aquire ein anderer Thread das
+          Token bereits rotiert hat (CAS missed), refresh wir nicht
+          nochmal — der Caller sollte sein Original-Request mit dem
+          aktuellen Token retryen.
+        """
+        async with self._refresh_lock:
+            if seen_token is not None and self._access_token != seen_token:
+                # Anderer Caller hat während des Lock-Wait bereits
+                # rotiert — wir nehmen das neue Token kommentarlos.
                 return True
-            _LOGGER.warning("Token refresh returned %s", response.status_code)
-        except httpx.RequestError as err:
-            _LOGGER.error("Token refresh failed: %s", err)
-        return False
+            try:
+                response = await self._client.post(
+                    "/api/v1/auth/refresh",
+                    json={"refresh_token": self._refresh_token},
+                )
+                if response.status_code == 200:
+                    tokens = response.json()
+                    self._access_token = tokens["access_token"]
+                    self._refresh_token = tokens["refresh_token"]
+                    new_data = {**self.entry.data}
+                    new_data[CONF_ACCESS_TOKEN] = self._access_token
+                    new_data[CONF_REFRESH_TOKEN] = self._refresh_token
+                    self.hass.config_entries.async_update_entry(self.entry, data=new_data)
+                    return True
+                _LOGGER.warning("Token refresh returned %s", response.status_code)
+            except httpx.RequestError as err:
+                _LOGGER.error("Token refresh failed: %s", err)
+            return False
 
     async def _authenticated_request(
         self, method: str, path: str, **kwargs: Any
     ) -> httpx.Response:
+        # Snapshot des aktuellen Tokens für CAS — wenn ein anderer
+        # Caller während unseres 401-Roundtrips bereits rotiert, lassen
+        # wir den nächsten Refresh dann sausen.
+        seen_token = self._access_token
         response = await self._client.request(
             method, path, headers=self._auth_headers(), **kwargs
         )
         if response.status_code == 401:
-            if await self._refresh_access_token():
+            if await self._refresh_access_token(seen_token=seen_token):
                 response = await self._client.request(
                     method, path, headers=self._auth_headers(), **kwargs
                 )
@@ -1037,6 +1068,14 @@ class CrowdergyCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
             for d in response.json():
                 self._active_state[d["id"]] = bool(d.get("is_active", False))
                 self._on_state[d["id"]] = bool(d.get("is_on", False))
+                # Cluster B Connector (2026-06-09): _cool_state mit
+                # bootstrappen. Vorher blieb der Cache nach HA-Restart
+                # leer → ein SSE-Frame mit `is_on=False` triggerte
+                # _apply_device_state("off") gegen die climate-Entity
+                # die eigentlich cooling sein sollte (Skip-Guard
+                # defaultete zu False). Reincarnation des AC-geht-aus-
+                # Bugs von vor v3.6.4.
+                self._cool_state[d["id"]] = bool(d.get("cool_on", False))
             self._active_state_bootstrapped = True
         except (httpx.HTTPStatusError, httpx.RequestError) as err:
             _LOGGER.warning(
@@ -1470,8 +1509,12 @@ class CrowdergyCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
             # telemetry-Frames mit `is_on`/`is_active`. Ohne dieses Log
             # war „kommt manueller Befehl durch?"-Diagnose blind —
             # einzige Signatur war ein späterer state-resync-Reapply.
+            # 2026-06-09 (Cluster D): von WARNING → DEBUG runter — bei
+            # 10+ Devices und 30s Heartbeat-Echos lief das auf ~1200
+            # WARNINGs/Stunde und wuchs home-assistant.log unnötig.
+            # Aktivierung via `logger:` config oder ENV `LOG_LEVEL=DEBUG`.
             if any(k in payload for k in ("is_active", "is_on", "cool_on", "vorlauf_setpoint_c")):
-                _LOGGER.warning(
+                _LOGGER.debug(
                     "Crowdergy SSE telemetry frame: device=%s is_active=%s is_on=%s cool_on=%s vorlauf=%s",
                     device_id,
                     payload.get("is_active"),
