@@ -555,15 +555,15 @@ class CrowdergyCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
                         bk_on = bool(d.get("is_on", False))
                         bk_cool = bool(d.get("cool_on", False))
 
-                        local_on = self._on_state.get(device_id)
-                        local_cool = self._cool_state.get(device_id)
-                        local_active = self._active_state.get(device_id)
+                        local_on = self.state.on_state.get(device_id)
+                        local_cool = self.state.cool_state.get(device_id)
+                        local_active = self.state.active_state.get(device_id)
 
                         # Cache unkonditional aktualisieren — Backend ist
                         # source of truth.
-                        self._active_state[device_id] = bk_active
-                        self._on_state[device_id] = bk_on
-                        self._cool_state[device_id] = bk_cool
+                        self.state.active_state[device_id] = bk_active
+                        self.state.on_state[device_id] = bk_on
+                        self.state.cool_state[device_id] = bk_cool
 
                         # Drift-Reparatur NUR für aktive Geräte
                         # (Crowdergize on). Inaktive werden vom AI-off-
@@ -733,67 +733,27 @@ class CrowdergyCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
                 await self._state_resync_task
             except (asyncio.CancelledError, Exception):  # noqa: BLE001
                 pass
-        for task in list(self._hold_tasks.values()):
+        for task in list(self.state.hold_tasks.values()):
             task.cancel()
-        self._hold_tasks.clear()
-        for task in list(self._charge_mode_hold_tasks.values()):
+        self.state.hold_tasks.clear()
+        for task in list(self.state.charge_mode_hold_tasks.values()):
             task.cancel()
-        self._charge_mode_hold_tasks.clear()
-        self._held_charge_mode.clear()
+        self.state.charge_mode_hold_tasks.clear()
+        self.state.held_charge_mode.clear()
         await self._client.aclose()
 
     @property
     def last_sse_event_at(self) -> float:
         """Public Accessor für externe Reader (z.B. binary_sensor) —
-        statt das _last_sse_event_at Privat-Attribut direkt zu lesen."""
+        bleibt als API-Stable-Surface auch nach FEAT-5 Phase-A-Migration
+        auf `self.state.last_sse_event_at`."""
         return self.state.last_sse_event_at
 
-    # ── FEAT-5 Phase A (2026-06-09) ────────────────────────────────────
-    # @property-Shims für die alten Coordinator-State-Dicts. Lesen +
-    # Schreiben (über die Dict-API der zurückgegebenen Referenz) bleibt
-    # für alle bestehenden Call-Sites identisch. Skalare (Bool/Float)
-    # brauchen explizite Setter-Shims weil Property-Access nicht
-    # in-place mutable ist.
-
-    @property
-    def _active_state(self) -> dict[str, bool]:
-        return self.state.active_state
-
-    @property
-    def _on_state(self) -> dict[str, bool]:
-        return self.state.on_state
-
-    @property
-    def _cool_state(self) -> dict[str, bool]:
-        return self.state.cool_state
-
-    @property
-    def _hold_tasks(self) -> dict[str, asyncio.Task]:
-        return self.state.hold_tasks
-
-    @property
-    def _charge_mode_hold_tasks(self) -> dict[str, asyncio.Task]:
-        return self.state.charge_mode_hold_tasks
-
-    @property
-    def _held_charge_mode(self) -> dict[str, str]:
-        return self.state.held_charge_mode
-
-    @property
-    def _active_state_bootstrapped(self) -> bool:
-        return self.state.active_state_bootstrapped
-
-    @_active_state_bootstrapped.setter
-    def _active_state_bootstrapped(self, value: bool) -> None:
-        self.state.active_state_bootstrapped = value
-
-    @property
-    def _last_sse_event_at(self) -> float:
-        return self.state.last_sse_event_at
-
-    @_last_sse_event_at.setter
-    def _last_sse_event_at(self, value: float) -> None:
-        self.state.last_sse_event_at = value
+    # FEAT-5 Phase A Finish (2026-06-09): @property-Shims für die alten
+    # Coordinator-State-Dicts entfernt. 47 Call-Sites lesen/schreiben
+    # jetzt direkt auf `self.state.*` (typed accessors auf DeviceStateMirror).
+    # Damit reduziert sich coordinator.py um ~80 Zeilen und das
+    # State-Mirror-Modul ist alleinige Source-of-Truth.
 
     def _read_entity_state(self, entity_id: str) -> Any:
         if not entity_id:
@@ -1114,8 +1074,8 @@ class CrowdergyCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
             response = await self._authenticated_request("GET", "/api/v1/devices")
             response.raise_for_status()
             for d in response.json():
-                self._active_state[d["id"]] = bool(d.get("is_active", False))
-                self._on_state[d["id"]] = bool(d.get("is_on", False))
+                self.state.active_state[d["id"]] = bool(d.get("is_active", False))
+                self.state.on_state[d["id"]] = bool(d.get("is_on", False))
                 # Cluster B Connector (2026-06-09): _cool_state mit
                 # bootstrappen. Vorher blieb der Cache nach HA-Restart
                 # leer → ein SSE-Frame mit `is_on=False` triggerte
@@ -1123,8 +1083,8 @@ class CrowdergyCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
                 # die eigentlich cooling sein sollte (Skip-Guard
                 # defaultete zu False). Reincarnation des AC-geht-aus-
                 # Bugs von vor v3.6.4.
-                self._cool_state[d["id"]] = bool(d.get("cool_on", False))
-            self._active_state_bootstrapped = True
+                self.state.cool_state[d["id"]] = bool(d.get("cool_on", False))
+            self.state.active_state_bootstrapped = True
         except (httpx.HTTPStatusError, httpx.RequestError) as err:
             _LOGGER.warning(
                 "Bootstrap of device state failed (%s) — will retry next refresh", err,
@@ -1159,7 +1119,7 @@ class CrowdergyCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
             _LOGGER.warning("Outdoor-temp push failed: %s", err)
 
     async def _async_update_data(self) -> dict[str, dict[str, Any]]:
-        if not self._active_state_bootstrapped:
+        if not self.state.active_state_bootstrapped:
             await self._bootstrap_active_state()
 
         # Integration-wide push: if the user wired an outdoor-temp
@@ -1397,8 +1357,8 @@ class CrowdergyCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
                 "current_power_kw": payload["power_kw"],
                 "soc_percent": payload.get("soc_percent"),
                 "vehicle_status": vehicle_status,
-                "is_active": self._active_state.get(device_id, False),
-                "is_on": self._on_state.get(device_id, False),
+                "is_active": self.state.active_state.get(device_id, False),
+                "is_on": self.state.on_state.get(device_id, False),
                 "is_online": True,
             }
 
@@ -1413,11 +1373,11 @@ class CrowdergyCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
         # off). Walks each Crowdergize-active device once per tick and
         # restarts the hold task if it's gone.
         for device_id in list(result.keys()):
-            if not self._active_state.get(device_id, False):
+            if not self.state.active_state.get(device_id, False):
                 continue
-            if device_id not in self._on_state:
+            if device_id not in self.state.on_state:
                 continue  # never commanded — don't synthesise a write
-            task = self._hold_tasks.get(device_id)
+            task = self.state.hold_tasks.get(device_id)
             if task is not None and not task.done():
                 continue
             dev = next(
@@ -1434,7 +1394,7 @@ class CrowdergyCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
             if mode == ENTITY_CONTROL_HOLD_NEVER:
                 continue  # user opted out of periodic rewriting
             await self._apply_device_state(
-                device_id, self._on_state[device_id]
+                device_id, self.state.on_state[device_id]
             )
 
         return result
@@ -1541,7 +1501,7 @@ class CrowdergyCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
         # switch — any received message (ping included) counts as
         # "Crowdergy still talking to us". The 15-s server ping is
         # the most common message type when nothing else is changing.
-        self._last_sse_event_at = time.time()
+        self.state.last_sse_event_at = time.time()
         # Telemetry mirror frames carry device-level state changes the user
         # may have driven from the iOS app. We watch two flags:
         #   - is_active (Crowdergize consent) — just update the local cache
@@ -1572,8 +1532,8 @@ class CrowdergyCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
                 )
             if "is_active" in payload:
                 new_value = bool(payload["is_active"])
-                if self._active_state.get(device_id) != new_value:
-                    self._active_state[device_id] = new_value
+                if self.state.active_state.get(device_id) != new_value:
+                    self.state.active_state[device_id] = new_value
                     self._sync_field_into_data(device_id, "is_active", new_value)
                     # Wallbox charge_mode snapshot/restore. Only fires
                     # for wallbox devices that have BOTH an entity_
@@ -1599,7 +1559,7 @@ class CrowdergyCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
                         # backend's "publish only on change" guard
                         # suppresses the SSE frame). Result: value_off
                         # never written, hold loop never started.
-                        desired_on = bool(self._on_state.get(device_id, False))
+                        desired_on = bool(self.state.on_state.get(device_id, False))
                         await self._apply_device_state(device_id, desired_on)
                     else:
                         # Crowdergize off → schreibe einen sicheren
@@ -1665,14 +1625,14 @@ class CrowdergyCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
             # gerade vom cool-Pfad mit "cool" gefüllt wurde.
             if "cool_on" in payload:
                 new_cool = bool(payload["cool_on"])
-                if self._cool_state.get(device_id) != new_cool:
-                    self._cool_state[device_id] = new_cool
+                if self.state.cool_state.get(device_id) != new_cool:
+                    self.state.cool_state[device_id] = new_cool
                     self._sync_field_into_data(device_id, "cool_on", new_cool)
                     await self._apply_cool_state(device_id, new_cool)
             if "is_on" in payload:
                 new_on = bool(payload["is_on"])
-                if self._on_state.get(device_id) != new_on:
-                    self._on_state[device_id] = new_on
+                if self.state.on_state.get(device_id) != new_on:
+                    self.state.on_state[device_id] = new_on
                     self._sync_field_into_data(device_id, "is_on", new_on)
                     await self._apply_device_state(device_id, new_on)
             # Phase 2b (2026-06-02): Vorlauf-Setpoint von modulierenden
@@ -1837,7 +1797,7 @@ class CrowdergyCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
         # writing the previous one. Race-safe even if `_start_charge_
         # mode_hold` below loses the cancel race.
         if schedule_hold:
-            self._held_charge_mode[device_id] = mode
+            self.state.held_charge_mode[device_id] = mode
         try:
             if domain in ("select", "input_select"):
                 await self.hass.services.async_call(
@@ -1877,7 +1837,7 @@ class CrowdergyCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
         Respektiert ENTITY_CONTROL_HOLD: auto/always → hold-loop läuft,
         never → User-Opt-Out, kein Re-Write nach dem ersten Apply.
         """
-        prev = self._charge_mode_hold_tasks.pop(device_id, None)
+        prev = self.state.charge_mode_hold_tasks.pop(device_id, None)
         if prev is not None and not prev.done():
             prev.cancel()
         dev = next(
@@ -1893,7 +1853,7 @@ class CrowdergyCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
         # async_create_task auf async_create_background_task — Symmetrie
         # mit _hold_tasks und damit HA's Shutdown-Tracker beide
         # Hold-Loop-Familien gleich behandelt.
-        self._charge_mode_hold_tasks[device_id] = self.hass.async_create_background_task(
+        self.state.charge_mode_hold_tasks[device_id] = self.hass.async_create_background_task(
             self._charge_mode_hold_loop(device_id),
             name=f"theothergas_charge_mode_hold_{device_id}",
         )
@@ -1903,8 +1863,8 @@ class CrowdergyCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
         held value. Called on `passive` commands (worker signals
         inverter should follow its own logic) and on device removal.
         """
-        self._held_charge_mode.pop(device_id, None)
-        task = self._charge_mode_hold_tasks.pop(device_id, None)
+        self.state.held_charge_mode.pop(device_id, None)
+        task = self.state.charge_mode_hold_tasks.pop(device_id, None)
         if task is not None and not task.done():
             task.cancel()
 
@@ -1928,14 +1888,14 @@ class CrowdergyCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
         try:
             await asyncio.sleep(CHARGE_MODE_HOLD_INITIAL_DELAY)
             while True:
-                mode = self._held_charge_mode.get(device_id)
+                mode = self.state.held_charge_mode.get(device_id)
                 if mode is None:
                     return
                 # Liveness check: if Crowdergy isn't talking to us,
                 # stop holding so the user's inverter can take over.
                 # When SSE reconnects, the next MPC tick re-establishes
                 # the hold via a fresh `set_charge_mode` event.
-                staleness = time.time() - self._last_sse_event_at
+                staleness = time.time() - self.state.last_sse_event_at
                 if staleness > SSE_STALE_THRESHOLD_S:
                     _LOGGER.warning(
                         "charge_mode hold: bailing for %s — Crowdergy "
@@ -1943,7 +1903,7 @@ class CrowdergyCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
                         "native logic resumes.",
                         device_id, staleness, SSE_STALE_THRESHOLD_S,
                     )
-                    self._held_charge_mode.pop(device_id, None)
+                    self.state.held_charge_mode.pop(device_id, None)
                     return
                 await self._apply_charge_mode(
                     device_id, mode, schedule_hold=False
@@ -2011,7 +1971,7 @@ class CrowdergyCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
         if (
             domain == "climate"
             and not on
-            and self._cool_state.get(device_id, False)
+            and self.state.cool_state.get(device_id, False)
         ):
             _LOGGER.debug(
                 "skip heat-off write for %s: cool_on=True owns climate entity",
@@ -2083,7 +2043,7 @@ class CrowdergyCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
             # übernehmen.
             if (
                 not cool_on
-                and self._on_state.get(device_id, False)
+                and self.state.on_state.get(device_id, False)
             ):
                 _LOGGER.debug(
                     "skip cool-off write for %s: is_on=True owns climate entity",
@@ -2427,7 +2387,7 @@ class CrowdergyCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
         Cancels any existing loop for the device first — the latest
         `_apply_device_state` is the source of truth.
         """
-        existing = self._hold_tasks.pop(device_id, None)
+        existing = self.state.hold_tasks.pop(device_id, None)
         if existing is not None and not existing.done():
             existing.cancel()
 
@@ -2454,13 +2414,13 @@ class CrowdergyCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
         # Shutdown-Edge-Cases (Exception in async_shutdown vorm Cancel)
         # blieben sie als Orphan-Tasks im Loop. SSE/Heartbeat nutzen
         # das Pattern schon — Symmetrie war hier nur noch nicht da.
-        self._hold_tasks[device_id] = self.hass.async_create_background_task(
+        self.state.hold_tasks[device_id] = self.hass.async_create_background_task(
             self._hold_loop(device_id, entity_id, raw_value, domain, on, mode),
             name=f"theothergas_entity_hold_{device_id}",
         )
 
     def _cancel_hold(self, device_id: str) -> None:
-        task = self._hold_tasks.pop(device_id, None)
+        task = self.state.hold_tasks.pop(device_id, None)
         if task is not None and not task.done():
             task.cancel()
 
@@ -2473,8 +2433,8 @@ class CrowdergyCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
         self._cancel_hold(device_id)
         self._cancel_charge_mode_hold(device_id)
         for d in (
-            self._active_state,
-            self._on_state,
+            self.state.active_state,
+            self.state.on_state,
             self._prev_energy_kwh,
             self._prev_energy_kwh_discharged,
             self._last_sent_payload,
@@ -2516,7 +2476,7 @@ class CrowdergyCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
             # service call back-to-back).
             await asyncio.sleep(HOLD_INITIAL_DELAY)
             while True:
-                if not self._active_state.get(device_id, False):
+                if not self.state.active_state.get(device_id, False):
                     return
                 # Cluster B Connector (2026-06-09): SSE-Stale-Bail
                 # mirror'd vom `_charge_mode_hold_loop`. Vorher schrieb
@@ -2525,7 +2485,7 @@ class CrowdergyCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
                 # Heizung/WP/AC während 2h SSE-Outage wurde im 30s-
                 # Tick wieder überschrieben. Bei plugged WP/SG-Ready
                 # potentiell gefährlich.
-                staleness = time.time() - self._last_sse_event_at
+                staleness = time.time() - self.state.last_sse_event_at
                 if staleness > SSE_STALE_THRESHOLD_S:
                     _LOGGER.warning(
                         "entity_control hold: bailing for %s — Crowdergy "

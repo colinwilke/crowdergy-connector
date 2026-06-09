@@ -95,7 +95,7 @@ class CrowdergyActiveSwitch(
             # Keep both the cache and the data dict in sync; the SSE
             # telemetry mirror frame will arrive shortly and re-confirm
             # this value but applying optimistically avoids UI lag.
-            self.coordinator._active_state[self._device_id] = on
+            self.coordinator.state.active_state[self._device_id] = on
             if self.coordinator.data and self._device_id in self.coordinator.data:
                 self.coordinator.data[self._device_id]["is_active"] = on
                 self.async_write_ha_state()
