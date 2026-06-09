@@ -264,14 +264,25 @@
     "step": {
       "init": {
         "title": "Crowdergy — Configuration",
-        "description": "Manage the devices you handed to Crowdergy, or change the outdoor-temperature sensor.",
+        "description": "Manage your basic settings, the devices you handed to Crowdergy, or contribute a vendor preset.",
         "menu_options": {
+          "edit_base_settings": "Basic settings (location, outdoor temp)",
           "add_device": "Add device",
           "edit_device": "Edit device",
           "remove_device": "Remove device",
-          "edit_outdoor_temp": "Outdoor-temp sensor",
           "contribute_preset": "Submit as vendor preset",
           "done": "Done"
+        }
+      },
+      "edit_base_settings": {
+        "title": "Basic settings",
+        "description": "Location is used by the Crowdwerk leaderboard + the weather fallback. The optional outdoor-temperature sensor overrides the Open-Meteo fallback for your district.",
+        "submit": "Save",
+        "data": {
+          "district": "District / Stadtteil",
+          "city": "City",
+          "region": "Federal state / Bundesland",
+          "entity_outdoor_temp_c": "Outdoor temperature sensor (optional)"
         }
       },
       "add_vendor_preset_pick": {
@@ -295,17 +306,6 @@
           "vendor": "Manufacturer",
           "model": "Model",
           "notes": "Notes (optional)"
-        }
-      },
-      "edit_outdoor_temp": {
-        "title": "Outdoor temperature sensor",
-        "description": "Optional HA sensor with the current outdoor temperature in °C. Leave empty to use Open-Meteo weather data for your district.",
-        "submit": "Save",
-        "data": {
-          "entity_outdoor_temp_c": "Outdoor temperature sensor (optional)"
-        },
-        "data_description": {
-          "entity_outdoor_temp_c": "Sensor entity with the current outdoor temperature in °C."
         }
       },
       "add_device": {

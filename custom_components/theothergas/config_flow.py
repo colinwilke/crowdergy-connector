@@ -1492,7 +1492,22 @@ class CrowdergyConfigFlow(ConfigFlow, domain=DOMAIN):
                 errors["base"] = "cannot_connect"
 
             if not errors:
-                return await self.async_step_location()
+                # FEAT-1 v0.3 (2026-06-09): Onboarding-Flow gedroppt.
+                # Nach erfolgreichem Login direkt Entry erzeugen mit
+                # leerer Device-Liste. Ort + Außentemp + alle Geräte
+                # legt der User dann im Options-Flow Hauptmenü an
+                # (Grundeinstellungen + Gerät hinzufügen). Spart 4-5
+                # Onboarding-Steps und vermeidet die Reihenfolge-
+                # Abhängigkeit „erst Ort, dann Geräte".
+                self._data[CONF_DEVICES] = []
+                self._data[CONF_DISTRICT] = ""
+                self._data[CONF_CITY] = ""
+                self._data[CONF_REGION] = ""
+                self._data[CONF_ENTITY_OUTDOOR_TEMP] = ""
+                return self.async_create_entry(
+                    title=f"Crowdergy ({email})",
+                    data=self._data,
+                )
 
         return self.async_show_form(
             step_id="user",
@@ -2262,13 +2277,17 @@ class CrowdergyOptionsFlow(OptionsFlow):
     async def async_step_init(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
+        # FEAT-1 v0.3 (2026-06-09): „Grundeinstellungen" als Top-
+        # Eintrag (Ort + Außentemp gebündelt, ersetzt
+        # edit_outdoor_temp). Reihenfolge: erst Grundkonfig, dann
+        # Devices, dann Crowd-Beitrag.
         return self.async_show_menu(
             step_id="init",
             menu_options=[
+                "edit_base_settings",
                 "add_device",
                 "edit_device",
                 "remove_device",
-                "edit_outdoor_temp",
                 "contribute_preset",
                 "done",
             ],
@@ -2392,35 +2411,71 @@ class CrowdergyOptionsFlow(OptionsFlow):
             data_schema=_contribute_form_schema(None, None, None),
         )
 
-    async def async_step_edit_outdoor_temp(
+    async def async_step_edit_base_settings(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
-        """Add or change the integration-wide outdoor-temperature sensor.
-        Stored at the top of entry.data, persisted by async_step_done.
-        Leaving the field empty clears the mapping → backend falls
-        back to Open-Meteo for this user.
+        """FEAT-1 v0.3 (2026-06-09): „Grundeinstellungen" — kombiniert
+        Ort (district / city / region) und Außentemperatur-Sensor in
+        einem Step. Ersetzt das vorige `edit_outdoor_temp` und macht
+        den Ort nachträglich editierbar (der frühere Onboarding-Flow
+        hat ihn nur einmal abgefragt).
+
+        Persistiert direkt auf `entry.data` und springt zurück ins
+        Hauptmenü. Leeres outdoor-temp-Feld setzt das Mapping zurück
+        → Backend nutzt Open-Meteo-Fallback für deinen Stadtteil.
         """
         if user_input is not None:
-            new_value = user_input.get(CONF_ENTITY_OUTDOOR_TEMP, "")
-            new_data = {**self._entry.data, CONF_ENTITY_OUTDOOR_TEMP: new_value}
-            self.hass.config_entries.async_update_entry(self._entry, data=new_data)
+            new_data = {
+                **self._entry.data,
+                CONF_DISTRICT: user_input.get(CONF_DISTRICT, "").strip(),
+                CONF_CITY: user_input.get(CONF_CITY, "").strip(),
+                CONF_REGION: user_input.get(CONF_REGION, "").strip(),
+                CONF_ENTITY_OUTDOOR_TEMP: user_input.get(
+                    CONF_ENTITY_OUTDOOR_TEMP, "",
+                ),
+            }
+            self.hass.config_entries.async_update_entry(
+                self._entry, data=new_data,
+            )
             return await self.async_step_init()
 
-        current = self._entry.data.get(CONF_ENTITY_OUTDOOR_TEMP, "")
-        # suggested_value statt default — der Comment oben verspricht,
-        # dass „leaving the field empty clears the mapping" funktioniert.
-        # Mit `default` re-injected HA's Form-Engine den alten Wert,
-        # → User konnte den Sensor nicht clearen.
-        field: Any = (
-            vol.Optional(CONF_ENTITY_OUTDOOR_TEMP, description={"suggested_value": current})
-            if current
+        current_district = self._entry.data.get(CONF_DISTRICT, "")
+        current_city = self._entry.data.get(CONF_CITY, "")
+        current_region = self._entry.data.get(CONF_REGION, "")
+        current_outdoor = self._entry.data.get(CONF_ENTITY_OUTDOOR_TEMP, "")
+
+        # Erstes Öffnen ohne irgendwelche gespeicherten Ort-Werte: HA-
+        # Defaults aus latitude/longitude pre-fillen damit der User
+        # normalerweise nur „Speichern" tippen muss.
+        if not (current_district or current_city or current_region):
+            location_defaults = await _resolve_location_defaults(self.hass)
+            current_district = location_defaults.get(CONF_DISTRICT, "")
+            current_city = location_defaults.get(CONF_CITY, "")
+            current_region = location_defaults.get(CONF_REGION, "")
+
+        def _str_field(key: str, current: str) -> Any:
+            if current:
+                return vol.Optional(
+                    key, description={"suggested_value": current},
+                )
+            return vol.Optional(key)
+
+        outdoor_field: Any = (
+            vol.Optional(
+                CONF_ENTITY_OUTDOOR_TEMP,
+                description={"suggested_value": current_outdoor},
+            )
+            if current_outdoor
             else vol.Optional(CONF_ENTITY_OUTDOOR_TEMP)
         )
         return self.async_show_form(
-            step_id="edit_outdoor_temp",
+            step_id="edit_base_settings",
             data_schema=vol.Schema(
                 {
-                    field: selector.EntitySelector(
+                    _str_field(CONF_DISTRICT, current_district): str,
+                    _str_field(CONF_CITY, current_city): str,
+                    _str_field(CONF_REGION, current_region): str,
+                    outdoor_field: selector.EntitySelector(
                         selector.EntitySelectorConfig(domain="sensor")
                     ),
                 }

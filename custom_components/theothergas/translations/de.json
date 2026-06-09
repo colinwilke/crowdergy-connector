@@ -264,14 +264,25 @@
     "step": {
       "init": {
         "title": "Crowdergy — Konfiguration",
-        "description": "Verwalte die Geräte, die du Crowdergy übergeben hast, oder ändere den Außentemperatur-Sensor.",
+        "description": "Verwalte deine Grundeinstellungen, die Geräte die du Crowdergy übergeben hast, oder trage ein Hersteller-Preset bei.",
         "menu_options": {
+          "edit_base_settings": "Grundeinstellungen (Ort, Außentemp)",
           "add_device": "Gerät hinzufügen",
           "edit_device": "Gerät bearbeiten",
           "remove_device": "Gerät entfernen",
-          "edit_outdoor_temp": "Außentemperatur-Sensor",
           "contribute_preset": "Als Hersteller-Preset beitragen",
           "done": "Fertig"
+        }
+      },
+      "edit_base_settings": {
+        "title": "Grundeinstellungen",
+        "description": "Der Ort wird für die Crowdwerk-Rangliste und die Wetter-Fallback-Logik verwendet. Der optionale Außentemperatur-Sensor überschreibt für deinen Stadtteil die Open-Meteo-Fallback-Werte.",
+        "submit": "Speichern",
+        "data": {
+          "district": "Stadtteil",
+          "city": "Stadt",
+          "region": "Bundesland",
+          "entity_outdoor_temp_c": "Außentemperatur-Sensor (optional)"
         }
       },
       "add_vendor_preset_pick": {
@@ -295,17 +306,6 @@
           "vendor": "Hersteller",
           "model": "Modell",
           "notes": "Notizen (optional)"
-        }
-      },
-      "edit_outdoor_temp": {
-        "title": "Außentemperatur-Sensor",
-        "description": "Optional: ein HA-Sensor mit der aktuellen Außentemperatur in °C. Wird im App-Header angezeigt. Leer lassen, damit Crowdergy stattdessen Open-Meteo-Wetterdaten für deinen Stadtteil nutzt.",
-        "submit": "Speichern",
-        "data": {
-          "entity_outdoor_temp_c": "Außentemperatur-Sensor (optional)"
-        },
-        "data_description": {
-          "entity_outdoor_temp_c": "Sensor-Entität mit der aktuellen Außentemperatur in °C."
         }
       },
       "add_device": {
