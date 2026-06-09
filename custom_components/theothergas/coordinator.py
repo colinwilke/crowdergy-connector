@@ -251,46 +251,18 @@ class CrowdergyCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
         self._heartbeat_task: asyncio.Task | None = None
         self._device_mirror_task: asyncio.Task | None = None
         self._state_resync_task: asyncio.Task | None = None
-        # Crowdergize state per device — authoritative source is the backend
-        # (`devices.is_active`). We mirror it locally so the HA switch
-        # entity can render the latest value without round-tripping each
-        # time. Bootstrapped from GET /devices on first refresh, kept fresh
-        # by SSE telemetry mirror frames the backend emits after every
-        # `toggle_active` (whether the toggle came from iOS or HA).
-        self._active_state: dict[str, bool] = {}
-        self._active_state_bootstrapped: bool = False
-        # Per-device on/off state — what the backend says the device
-        # should currently be set to. Updated via SSE telemetry mirror.
-        self._on_state: dict[str, bool] = {}
-        # v2.5: per-device cooling state mirror. Decoupled from
-        # `_on_state` even though the solver enforces a mutex —
-        # tracking them separately lets the connector dispatch the
-        # heating-side and cooling-side writes independently when
-        # they live on different HA entities. {True, False} only;
-        # missing keys are treated as False.
-        self._cool_state: dict[str, bool] = {}
-        # Hold-loops: one asyncio.Task per device, keyed by device_id.
-        # Started after each `_apply_device_state` if the device's
-        # configured hold mode is anything but 'never'. Cancelled on
-        # Crowdergize OFF, on shutdown, or when a fresh apply happens
-        # (the old loop is replaced).
-        self._hold_tasks: dict[str, asyncio.Task] = {}
-        # v2.4: separate hold-loop tracker for the charge_mode entity.
-        # Battery + wallbox Lademodus need a fresh write every ~15 s
-        # because some inverters reset the mode otherwise. Keyed by
-        # device_id, replaced on every fresh `_apply_charge_mode`.
-        self._charge_mode_hold_tasks: dict[str, asyncio.Task] = {}
-        # Last charge_mode value commanded per device — re-written
-        # by the hold loop. Cleared when a "passive" command arrives.
-        self._held_charge_mode: dict[str, str] = {}
-        # Wall-clock des letzten SSE-Events (any type — ping,
-        # telemetry, command). Hold-Loops gaten darauf, sodass ein
-        # Backend-Outage oder SSE-Drop die periodische Re-Write-Logik
-        # pausiert und dem Inverter die Steuerung zurückgibt statt
-        # den letzten Mode-Wert ewig zu halten. Externe Reader (z.B.
-        # binary_sensor.is_on) sollten über `last_sse_event_at`
-        # zugreifen (public property), nicht direkt aufs Private-Attr.
-        self._last_sse_event_at: float = 0.0
+        # FEAT-5 Phase A (2026-06-09): per-Device-State-Cache wandert
+        # in eine eigene `DeviceStateMirror`-Dataclass. Die alten
+        # Attribut-Namen (`_active_state`, `_on_state`, `_cool_state`,
+        # `_hold_tasks`, `_charge_mode_hold_tasks`, `_held_charge_mode`,
+        # `_last_sse_event_at`) bleiben über @property-Shims weiter
+        # zugreifbar damit die ~250 bestehenden Call-Sites unverändert
+        # laufen. Phase B migriert die Sites pro Cluster auf typed
+        # Accessor-Methoden. Siehe state_mirror.py.
+        from .state_mirror import DeviceStateMirror
+        self.state: DeviceStateMirror = DeviceStateMirror()
+        # `_last_sse_event_at` ist jetzt auch im DeviceStateMirror —
+        # siehe @property-Shim weiter unten.
         # Wallbox charge_mode snapshot per device — captures whatever
         # the user had set on entity_charge_mode BEFORE Crowdergize
         # was switched ON, so we can restore it on OFF. In-memory only;
@@ -774,7 +746,54 @@ class CrowdergyCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
     def last_sse_event_at(self) -> float:
         """Public Accessor für externe Reader (z.B. binary_sensor) —
         statt das _last_sse_event_at Privat-Attribut direkt zu lesen."""
-        return self._last_sse_event_at
+        return self.state.last_sse_event_at
+
+    # ── FEAT-5 Phase A (2026-06-09) ────────────────────────────────────
+    # @property-Shims für die alten Coordinator-State-Dicts. Lesen +
+    # Schreiben (über die Dict-API der zurückgegebenen Referenz) bleibt
+    # für alle bestehenden Call-Sites identisch. Skalare (Bool/Float)
+    # brauchen explizite Setter-Shims weil Property-Access nicht
+    # in-place mutable ist.
+
+    @property
+    def _active_state(self) -> dict[str, bool]:
+        return self.state.active_state
+
+    @property
+    def _on_state(self) -> dict[str, bool]:
+        return self.state.on_state
+
+    @property
+    def _cool_state(self) -> dict[str, bool]:
+        return self.state.cool_state
+
+    @property
+    def _hold_tasks(self) -> dict[str, asyncio.Task]:
+        return self.state.hold_tasks
+
+    @property
+    def _charge_mode_hold_tasks(self) -> dict[str, asyncio.Task]:
+        return self.state.charge_mode_hold_tasks
+
+    @property
+    def _held_charge_mode(self) -> dict[str, str]:
+        return self.state.held_charge_mode
+
+    @property
+    def _active_state_bootstrapped(self) -> bool:
+        return self.state.active_state_bootstrapped
+
+    @_active_state_bootstrapped.setter
+    def _active_state_bootstrapped(self, value: bool) -> None:
+        self.state.active_state_bootstrapped = value
+
+    @property
+    def _last_sse_event_at(self) -> float:
+        return self.state.last_sse_event_at
+
+    @_last_sse_event_at.setter
+    def _last_sse_event_at(self, value: float) -> None:
+        self.state.last_sse_event_at = value
 
     def _read_entity_state(self, entity_id: str) -> Any:
         if not entity_id:
