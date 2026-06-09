@@ -263,7 +263,24 @@
           "edit_device": "Gerät bearbeiten",
           "remove_device": "Gerät entfernen",
           "edit_outdoor_temp": "Außentemperatur-Sensor",
+          "contribute_preset": "Als Hersteller-Preset beitragen",
           "done": "Fertig"
+        }
+      },
+      "contribute_preset": {
+        "title": "Als Hersteller-Preset beitragen",
+        "description": "Hilf der Crowdergy-Community: sende dein verifiziertes Setup dieses Geräts anonymisiert als Hersteller-Preset, damit andere Nutzer mit der gleichen Hardware es per Klick übernehmen können.",
+        "data": {
+          "device_id": "Gerät"
+        }
+      },
+      "contribute_preset_form": {
+        "title": "Hersteller + Modell",
+        "description": "Hersteller und Modell genau so eingeben, wie es auf dem Gerät steht. Notizen sind optional (max 280 Zeichen) — z. B. Firmware-Version oder Besonderheiten.",
+        "data": {
+          "vendor": "Hersteller",
+          "model": "Modell",
+          "notes": "Notizen (optional)"
         }
       },
       "edit_outdoor_temp": {
@@ -624,7 +641,15 @@
       }
     },
     "error": {
-      "cannot_connect": "Verbindung zum Crowdergy-Server fehlgeschlagen."
+      "cannot_connect": "Verbindung zum Crowdergy-Server fehlgeschlagen.",
+      "vendor_model_required": "Hersteller und Modell sind Pflichtfelder."
+    },
+    "abort": {
+      "contribute_no_devices": "Noch keine Solar-Geräte konfiguriert — bitte zuerst hinzufügen.",
+      "contribute_device_missing": "Das ausgewählte Gerät ist nicht mehr in der Konfiguration vorhanden.",
+      "contribute_no_entities": "Das ausgewählte Gerät hat keine Entity-Zuordnungen, die gesendet werden könnten.",
+      "contribute_backend_error": "Der Beitrag konnte nicht übermittelt werden. {err}",
+      "contribute_success": "Danke! Dein '{vendor} {model}'-Setup hat jetzt Status='{status}' (Anzahl Beiträge: {count})."
     }
   }
 }
