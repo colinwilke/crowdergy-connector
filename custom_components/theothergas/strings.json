@@ -263,7 +263,24 @@
           "edit_device": "Edit device",
           "remove_device": "Remove device",
           "edit_outdoor_temp": "Outdoor-temp sensor",
+          "contribute_preset": "Submit as vendor preset",
           "done": "Done"
+        }
+      },
+      "contribute_preset": {
+        "title": "Submit as vendor preset",
+        "description": "Help the Crowdergy community: send your verified setup of this device anonymously as a vendor preset, so that other users with the same hardware can adopt it with one click.",
+        "data": {
+          "device_id": "Device"
+        }
+      },
+      "contribute_preset_form": {
+        "title": "Vendor + model",
+        "description": "Enter manufacturer and model exactly as printed on the device. Notes are optional (max 280 chars) — for example firmware version or quirks.",
+        "data": {
+          "vendor": "Manufacturer",
+          "model": "Model",
+          "notes": "Notes (optional)"
         }
       },
       "edit_outdoor_temp": {
@@ -620,7 +637,15 @@
       }
     },
     "error": {
-      "cannot_connect": "Failed to connect to the Crowdergy server."
+      "cannot_connect": "Failed to connect to the Crowdergy server.",
+      "vendor_model_required": "Manufacturer and model are required."
+    },
+    "abort": {
+      "contribute_no_devices": "No solar devices configured yet — add one first.",
+      "contribute_device_missing": "Selected device disappeared from the configuration.",
+      "contribute_no_entities": "Selected device has no entity mappings to submit.",
+      "contribute_backend_error": "The contribution could not be submitted. {err}",
+      "contribute_success": "Thanks! Your '{vendor} {model}' setup is now status='{status}' (count={count})."
     }
   }
 }

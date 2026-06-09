@@ -341,6 +341,31 @@ def _config_mode_schema(
     })
 
 
+def _contribute_form_schema(
+    vendor: str | None, model: str | None, notes: str | None,
+) -> vol.Schema:
+    """Schema für den Vendor-Preset-Submit-Step (FEAT-1, 2026-06-09).
+
+    Vendor + Model required; Notes optional ≤ 280 chars (Backend lehnt
+    sonst ab). `suggested_value` damit der User Fehler-Resubmits ohne
+    Re-Eingabe machen kann.
+    """
+    def _field(key: str, value: str | None, required: bool) -> Any:
+        cls = vol.Required if required else vol.Optional
+        if value:
+            return cls(key, description={"suggested_value": value})
+        return cls(key)
+    return vol.Schema(
+        {
+            _field("vendor", vendor, True): selector.TextSelector(),
+            _field("model", model, True): selector.TextSelector(),
+            _field("notes", notes, False): selector.TextSelector(
+                selector.TextSelectorConfig(multiline=True)
+            ),
+        }
+    )
+
+
 def _entity_field(key: str, defaults: dict[str, Any]) -> Any:
     # `suggested_value` statt `default`: HA's Form-Engine re-injected
     # `default`-Werte wenn der User das Feld auf leer setzt (X-Klick) —
@@ -2094,6 +2119,10 @@ class CrowdergyOptionsFlow(OptionsFlow):
         self._edit_pending_type: str | None = None
         self._edit_pending_name: str | None = None
         self._edit_pending_entity_input: dict[str, Any] | None = None
+        # FEAT-1 Sprint C v0.1 (2026-06-09): scratch für Crowd-
+        # Contribution-Step. Hält die device_id zwischen Device-Picker-
+        # Step und dem Vendor/Model-Form-Step.
+        self._contribute_target_id: str | None = None
 
     async def async_step_init(
         self, user_input: dict[str, Any] | None = None
@@ -2105,8 +2134,127 @@ class CrowdergyOptionsFlow(OptionsFlow):
                 "edit_device",
                 "remove_device",
                 "edit_outdoor_temp",
+                "contribute_preset",
                 "done",
             ],
+        )
+
+    # ── Crowd-Contribution (FEAT-1 Sprint C v0.1, 2026-06-09) ──────────────
+    #
+    # User submittet ein bereits konfiguriertes Device als Vendor-Preset.
+    # v0.1: nur Solar-Devices (read-only, kein control_status zu prüfen,
+    # Entity-IDs typischerweise nicht-PII → keine Anonymisierung nötig).
+    # Andere Device-Types folgen in späteren Iterationen.
+
+    async def async_step_contribute_preset(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Pick which configured device to contribute as a vendor preset."""
+        # Nur Solar in v0.1 — andere Types brauchen Anonymisierungs-Layer
+        # bevor sie als Crowd-Beitrag taugen.
+        candidates = [
+            d for d in self._devices if d.get(CONF_DEVICE_TYPE) == "solar"
+        ]
+        if not candidates:
+            return self.async_abort(reason="contribute_no_devices")
+
+        if user_input is not None:
+            device_id = user_input[CONF_DEVICE_ID]
+            self._contribute_target_id = device_id
+            return await self.async_step_contribute_preset_form()
+
+        options = {
+            d[CONF_DEVICE_ID]: f"{d.get(CONF_DEVICE_NAME, d[CONF_DEVICE_ID])} (solar)"
+            for d in candidates
+        }
+        return self.async_show_form(
+            step_id="contribute_preset",
+            data_schema=vol.Schema(
+                {
+                    vol.Required(CONF_DEVICE_ID): selector.SelectSelector(
+                        selector.SelectSelectorConfig(
+                            options=[
+                                {"value": k, "label": v}
+                                for k, v in options.items()
+                            ],
+                            mode=selector.SelectSelectorMode.LIST,
+                        )
+                    ),
+                }
+            ),
+        )
+
+    async def async_step_contribute_preset_form(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Form für Vendor + Model + optional Notes. Submit → POST an
+        Backend `/crowd-presets/contribute`. Zeigt Erfolg/Fehler als
+        async_abort-Screen."""
+        if user_input is not None:
+            vendor = (user_input.get("vendor") or "").strip()
+            model = (user_input.get("model") or "").strip()
+            notes = (user_input.get("notes") or "").strip() or None
+            if not vendor or not model:
+                return self.async_show_form(
+                    step_id="contribute_preset_form",
+                    data_schema=_contribute_form_schema(vendor, model, notes),
+                    errors={"base": "vendor_model_required"},
+                )
+            dev = next(
+                (d for d in self._devices
+                 if d.get(CONF_DEVICE_ID) == self._contribute_target_id),
+                None,
+            )
+            if dev is None:
+                return self.async_abort(reason="contribute_device_missing")
+
+            # entity_map aus dem Device-Record (v0.1: nur entity_* keys
+            # die NICHT-leer sind).
+            entity_map = {
+                k: v for k, v in dev.items()
+                if k.startswith("entity_") and isinstance(v, str) and v
+            }
+            if not entity_map:
+                return self.async_abort(reason="contribute_no_entities")
+
+            payload = {
+                "device_type": dev[CONF_DEVICE_TYPE],
+                "vendor": vendor,
+                "model": model,
+                "entity_map": entity_map,
+                "notes": notes,
+            }
+            api_url = self._entry.data[CONF_API_URL]
+            token = self._entry.data[CONF_ACCESS_TOKEN]
+            try:
+                async with httpx.AsyncClient(timeout=15.0) as client:
+                    response = await client.post(
+                        f"{api_url}/api/v1/crowd-presets/contribute",
+                        headers={"Authorization": f"Bearer {token}"},
+                        json=payload,
+                    )
+                    response.raise_for_status()
+                    result = response.json()
+            except (httpx.HTTPStatusError, httpx.RequestError) as err:
+                _LOGGER.warning("Crowd-Contribution POST failed: %s", err)
+                return self.async_abort(
+                    reason="contribute_backend_error",
+                    description_placeholders={"err": str(err)[:160]},
+                )
+
+            return self.async_abort(
+                reason="contribute_success",
+                description_placeholders={
+                    "vendor": vendor,
+                    "model": model,
+                    "status": result.get("status", "?"),
+                    "count": str(result.get("contribution_count", "?")),
+                },
+            )
+
+        return self.async_show_form(
+            step_id="contribute_preset_form",
+            data_schema=_contribute_form_schema(None, None, None),
         )
 
     async def async_step_edit_outdoor_temp(
