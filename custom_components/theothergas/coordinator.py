@@ -1870,7 +1870,11 @@ class CrowdergyCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
         mode = dev.get(CONF_ENTITY_CONTROL_HOLD) or ENTITY_CONTROL_HOLD_AUTO
         if mode == ENTITY_CONTROL_HOLD_NEVER:
             return
-        self._charge_mode_hold_tasks[device_id] = self.hass.async_create_task(
+        # 2026-06-09 (Cluster B Connector Review #11): von
+        # async_create_task auf async_create_background_task — Symmetrie
+        # mit _hold_tasks und damit HA's Shutdown-Tracker beide
+        # Hold-Loop-Familien gleich behandelt.
+        self._charge_mode_hold_tasks[device_id] = self.hass.async_create_background_task(
             self._charge_mode_hold_loop(device_id),
             name=f"theothergas_charge_mode_hold_{device_id}",
         )
@@ -2425,8 +2429,15 @@ class CrowdergyCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
         if mode == ENTITY_CONTROL_HOLD_NEVER:
             return
 
-        self._hold_tasks[device_id] = asyncio.create_task(
-            self._hold_loop(device_id, entity_id, raw_value, domain, on, mode)
+        # Cluster B Connector (2026-06-09, Review #11): Background-Task
+        # bei HA registrieren statt naked asyncio.create_task. Vorher
+        # wusste HA's Task-Tracker nichts von diesen Tasks → bei
+        # Shutdown-Edge-Cases (Exception in async_shutdown vorm Cancel)
+        # blieben sie als Orphan-Tasks im Loop. SSE/Heartbeat nutzen
+        # das Pattern schon — Symmetrie war hier nur noch nicht da.
+        self._hold_tasks[device_id] = self.hass.async_create_background_task(
+            self._hold_loop(device_id, entity_id, raw_value, domain, on, mode),
+            name=f"theothergas_entity_hold_{device_id}",
         )
 
     def _cancel_hold(self, device_id: str) -> None:
