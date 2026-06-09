@@ -2156,10 +2156,14 @@ class CrowdergyCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
                         blocking=True,
                     )
                 except Exception as err:  # noqa: BLE001
-                    _LOGGER.exception(
-                        "Battery setpoint-write failed for %s: %s",
-                        setpoint_entity, err,
+                    _LOGGER.error(
+                        "Battery setpoint-write FAILED for %s: %s — "
+                        "skipping subsequent mode-switch to %s damit "
+                        "der Inverter nicht mit alt/null-Setpoint auf "
+                        "Aktiv läuft (Cluster B Connector 2026-06-09).",
+                        setpoint_entity, err, active_val,
                     )
+                    return
 
         # Mode-Select zuletzt setzen — sodass der Setpoint schon
         # geschrieben ist wenn HA's Automation auf "Aktiv" reagiert.
@@ -2443,6 +2447,22 @@ class CrowdergyCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
             await asyncio.sleep(HOLD_INITIAL_DELAY)
             while True:
                 if not self._active_state.get(device_id, False):
+                    return
+                # Cluster B Connector (2026-06-09): SSE-Stale-Bail
+                # mirror'd vom `_charge_mode_hold_loop`. Vorher schrieb
+                # diese Loop blind weiter, auch wenn Crowdergy gar
+                # nicht mehr antwortet → User-Manuelle-Änderung an
+                # Heizung/WP/AC während 2h SSE-Outage wurde im 30s-
+                # Tick wieder überschrieben. Bei plugged WP/SG-Ready
+                # potentiell gefährlich.
+                staleness = time.time() - self._last_sse_event_at
+                if staleness > SSE_STALE_THRESHOLD_S:
+                    _LOGGER.warning(
+                        "entity_control hold: bailing for %s — Crowdergy "
+                        "SSE silent for %.1fs (> %ds). User regains "
+                        "manual control.",
+                        device_id, staleness, SSE_STALE_THRESHOLD_S,
+                    )
                     return
                 expected = self._expected_state_value(raw_value, on, domain)
                 actual = self._read_current_state(entity_id)
