@@ -2411,6 +2411,16 @@ class CrowdergyOptionsFlow(OptionsFlow):
                 "entity_map": entity_map,
                 "notes": notes,
             }
+            # Box-Mapping-Umbau (2026-06-10): Integration der gemappten
+            # Entities mitschicken — Pflichtbaustein für Box-taugliche
+            # Presets (siehe entity_mapper.dominant_integration_domain).
+            from .entity_mapper import dominant_integration_domain
+
+            domain = dominant_integration_domain(
+                self.hass, list(entity_map.values())
+            )
+            if domain:
+                payload["integration_domain"] = domain
             api_url = self._entry.data[CONF_API_URL]
             token = self._entry.data[CONF_ACCESS_TOKEN]
             try:

@@ -773,3 +773,33 @@ __all__ = [
     "discover_devices",
     "group_candidates_by_device",
 ]
+
+
+def dominant_integration_domain(
+    hass: HomeAssistant, entity_ids: list[str]
+) -> str | None:
+    """Häufigste Integration-Domain der Entities (Registry → Config-Entry).
+
+    Box-Mapping-Umbau (2026-06-10): beim Crowd-Contribute wird
+    mitgespeichert, WELCHE Integration die gemappten Entities liefert —
+    nur damit kann die Crowdergy Box ein approved Preset später headless
+    nachbauen (Integration provisionieren + Mapping anwenden). Template-/
+    Helper-Entities haben keinen Config-Entry und zählen nicht; bei
+    Mischungen gewinnt die häufigste Domain.
+    """
+    from collections import Counter
+
+    ent_reg = er.async_get(hass)
+    domains: list[str] = []
+    for entity_id in entity_ids:
+        reg_entry = ent_reg.async_get(entity_id)
+        if reg_entry is None or not reg_entry.config_entry_id:
+            continue
+        config_entry = hass.config_entries.async_get_entry(
+            reg_entry.config_entry_id
+        )
+        if config_entry is not None:
+            domains.append(config_entry.domain)
+    if not domains:
+        return None
+    return Counter(domains).most_common(1)[0][0]

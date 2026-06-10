@@ -1,14 +1,17 @@
-"""Box-Services (Crowdergy Box, Phase 3).
+"""Box-Services (Crowdergy Box, Phase 3 / Mapping-Umbau 2026-06-10).
 
-Zwei Services für den box-manager der Crowdergy-Appliance, damit er
-nach der KOSTAL-Provisionierung (offizieller `kostal_plenticore`-
-Config-Flow, von der Box über HAs REST-API getrieben) Geräte headless
-anlegen kann:
+Zwei Services für den box-manager der Crowdergy-Appliance:
 
-* `box_discover_devices` (response-only): führt exakt die Discovery
-  aus, die auch das interaktive Auto-Setup nutzt — Heuristik +
-  Backend-LLM-Fallback (`entity_mapper.discover_devices_with_llm`) —
-  und liefert die Vorschläge als Service-Response. Ändert nichts.
+* `box_list_presets` (response-only): liefert die approved Vendor-
+  Presets aus dem Backend (`GET /api/v1/crowd-presets/lookup`) als
+  Service-Response — inklusive `integration_domain`, sodass die Box
+  nur Presets anbietet, deren Integration sie headless provisionieren
+  kann. Die Presets stammen aus User-Beiträgen („share setup" im
+  Options-Flow) und sind durch den Promotion-Threshold kuratiert.
+  Designentscheidung: die Box bekommt KEINE freie Discovery und KEINEN
+  LLM-Mapper — der bleibt Self-Hosted-HA-Usern vorbehalten, wo ein
+  Mensch die Vorschläge bestätigt. Auf der Appliance zählt
+  Determinismus.
 * `box_add_device`: registriert EIN Gerät am Backend (zentrale
   `device_field_spec`-Payload, derselbe Pfad wie der interaktive
   Flow) und hängt es an den Config-Entry; Entry wird neu geladen.
@@ -34,8 +37,6 @@ from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import config_validation as cv
 
 from .const import (
-    CONF_ACCESS_TOKEN,
-    CONF_API_URL,
     CONF_CITY,
     CONF_DEVICE_ID,
     CONF_DEVICE_NAME,
@@ -45,16 +46,20 @@ from .const import (
     CONF_REGION,
     DEVICE_TYPES,
     DOMAIN,
-    MAPPING_LLM_ENABLED,
-    USER_AGENT,
 )
 from .device_field_spec import build_payload
-from .entity_mapper import discover_devices, discover_devices_with_llm
 
 _LOGGER = logging.getLogger(__name__)
 
-SERVICE_BOX_DISCOVER = "box_discover_devices"
+SERVICE_BOX_LIST_PRESETS = "box_list_presets"
 SERVICE_BOX_ADD_DEVICE = "box_add_device"
+
+BOX_LIST_PRESETS_SCHEMA = vol.Schema(
+    {
+        vol.Required(CONF_DEVICE_TYPE): vol.In(DEVICE_TYPES),
+        vol.Optional("vendor"): cv.string,
+    }
+)
 
 BOX_ADD_DEVICE_SCHEMA = vol.Schema(
     {
@@ -76,36 +81,22 @@ def _get_entry(hass: HomeAssistant) -> ConfigEntry:
     return entries[0]
 
 
-async def _discover(hass: HomeAssistant, entry: ConfigEntry):
-    if MAPPING_LLM_ENABLED:
-        return await discover_devices_with_llm(
-            hass,
-            entry.data[CONF_API_URL],
-            entry.data[CONF_ACCESS_TOKEN],
-            USER_AGENT,
-        )
-    return await discover_devices(hass)
-
-
 def async_register_box_services(hass: HomeAssistant) -> None:
-    async def _handle_discover(call: ServiceCall) -> ServiceResponse:
+    async def _handle_list_presets(call: ServiceCall) -> ServiceResponse:
+        from .config_flow import _authenticated_config_request
+
         entry = _get_entry(hass)
-        groups = await _discover(hass, entry)
-        already_mapped = {
-            d.get(CONF_DEVICE_NAME) for d in entry.data.get(CONF_DEVICES, [])
-        }
-        return {
-            "devices": [
-                {
-                    CONF_DEVICE_TYPE: g.suggested_type,
-                    CONF_DEVICE_NAME: g.suggested_name,
-                    "confidence": round(g.avg_confidence, 3),
-                    "entities": g.slot_map(),
-                    "already_added": g.suggested_name in already_mapped,
-                }
-                for g in groups
-            ]
-        }
+        params: dict[str, str] = {CONF_DEVICE_TYPE: call.data[CONF_DEVICE_TYPE]}
+        if call.data.get("vendor"):
+            params["vendor"] = call.data["vendor"]
+        response = await _authenticated_config_request(
+            hass, entry, "GET", "/api/v1/crowd-presets/lookup", params=params
+        )
+        if response.status_code >= 400:
+            raise HomeAssistantError(
+                f"preset lookup failed: {response.status_code}"
+            )
+        return {"presets": response.json().get("presets", [])}
 
     async def _handle_add_device(call: ServiceCall) -> ServiceResponse:
         # Import hier statt Modulkopf: config_flow ist groß und wird
@@ -156,8 +147,9 @@ def async_register_box_services(hass: HomeAssistant) -> None:
 
     hass.services.async_register(
         DOMAIN,
-        SERVICE_BOX_DISCOVER,
-        _handle_discover,
+        SERVICE_BOX_LIST_PRESETS,
+        _handle_list_presets,
+        schema=BOX_LIST_PRESETS_SCHEMA,
         supports_response=SupportsResponse.ONLY,
     )
     hass.services.async_register(

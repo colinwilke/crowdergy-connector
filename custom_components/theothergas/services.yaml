@@ -40,13 +40,27 @@ provision_box:
       selector:
         text: {}
 
-box_discover_devices:
-  name: Box device discovery
+box_list_presets:
+  name: Box list vendor presets
   description: >-
-    Run the connector's auto-discovery (heuristics + backend LLM
-    fallback) and return device suggestions as the service response.
-    Read-only; used by the Crowdergy Box after provisioning a vendor
-    integration (e.g. KOSTAL). Requires an existing config entry.
+    Return the approved vendor presets (crowd-contributed "share setup"
+    mappings, incl. integration_domain) as the service response.
+    Read-only; the Crowdergy Box uses this to offer only presets whose
+    integration it can provision headlessly. Requires an existing
+    config entry.
+  fields:
+    device_type:
+      name: Device type
+      description: Crowdergy device type to look up (e.g. solar).
+      required: true
+      selector:
+        text: {}
+    vendor:
+      name: Vendor
+      description: Optional vendor filter.
+      required: false
+      selector:
+        text: {}
 
 box_add_device:
   name: Box add device
