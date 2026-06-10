@@ -1,0 +1,36 @@
+# Legt ein Git-Tag serverseitig an (workflow_dispatch). Existiert, weil
+# Remote-Sessions nur auf ihren Arbeitsbranch pushen dürfen — Tags
+# (z.B. der Vendor-Pin der Crowdergy Box, CONNECTOR_VERSION) brauchen
+# diesen Umweg über die Actions-API.
+name: Tag release
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag-Name (z.B. v3.21.1)"
+        required: true
+      sha:
+        description: "Commit-SHA (leer = HEAD des gewählten Refs)"
+        required: false
+        default: ""
+
+permissions:
+  contents: write
+
+jobs:
+  tag:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/github-script@v7
+        with:
+          script: |
+            const tag = context.payload.inputs.tag;
+            const sha = context.payload.inputs.sha || context.sha;
+            await github.rest.git.createRef({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              ref: `refs/tags/${tag}`,
+              sha,
+            });
+            core.notice(`Tag ${tag} -> ${sha} angelegt`);
