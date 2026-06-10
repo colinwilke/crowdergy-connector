@@ -4,15 +4,22 @@ from __future__ import annotations
 import logging
 
 import httpx
-from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import HomeAssistant
+import voluptuous as vol
+from homeassistant.config_entries import SOURCE_IMPORT, ConfigEntry
+from homeassistant.core import HomeAssistant, ServiceCall
+from homeassistant.exceptions import HomeAssistantError
+from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers import device_registry as dr
+from homeassistant.helpers.typing import ConfigType
 
 from .const import (
     CONF_ACCESS_TOKEN,
     CONF_API_URL,
     CONF_DEVICE_ID,
     CONF_DEVICES,
+    CONF_EMAIL,
+    CONF_REFRESH_TOKEN,
+    CONF_USER_ID,
     DOMAIN,
     PLATFORMS,
 )
@@ -21,6 +28,56 @@ from .coordinator import CrowdergyCoordinator
 _LOGGER = logging.getLogger(__name__)
 
 type CrowdergyConfigEntry = ConfigEntry
+
+# Box-Provisioning (Phase 2): der Service existiert, damit der
+# box-manager der Crowdergy Box den Import-Flow über HAs normale
+# Service-REST-API starten kann (Import-Flows sind über
+# /api/config/config_entries/flow nicht erreichbar). Die Box aktiviert
+# ihn via `theothergas:` in ihrer configuration.yaml; normale
+# HACS-Installationen ohne YAML-Key bleiben unverändert.
+SERVICE_PROVISION_BOX = "provision_box"
+SERVICE_PROVISION_BOX_SCHEMA = vol.Schema(
+    {
+        vol.Required(CONF_ACCESS_TOKEN): cv.string,
+        vol.Required(CONF_REFRESH_TOKEN): cv.string,
+        vol.Required(CONF_USER_ID): cv.string,
+        vol.Optional(CONF_API_URL): cv.string,
+        vol.Optional(CONF_EMAIL): cv.string,
+    }
+)
+
+CONFIG_SCHEMA = vol.Schema(
+    {vol.Optional(DOMAIN): vol.Schema({})}, extra=vol.ALLOW_EXTRA
+)
+
+
+async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
+    """YAML-loses Setup — registriert nur den Provisioning-Service."""
+
+    async def _handle_provision_box(call: ServiceCall) -> None:
+        # Tokens nie loggen — auch nicht im Fehlerfall (das Schema
+        # oben hat vorher validiert; Abort-Reasons enthalten keine
+        # Token-Werte).
+        _LOGGER.info("provision_box service called, starting import flow")
+        result = await hass.config_entries.flow.async_init(
+            DOMAIN, context={"source": SOURCE_IMPORT}, data=dict(call.data)
+        )
+        # already_configured = Re-Pairing, Tokens wurden im bestehenden
+        # Entry aktualisiert — für den Aufrufer ein Erfolg.
+        if result.get("type") == "abort" and result.get("reason") != (
+            "already_configured"
+        ):
+            raise HomeAssistantError(
+                f"provisioning aborted: {result.get('reason')}"
+            )
+
+    hass.services.async_register(
+        DOMAIN,
+        SERVICE_PROVISION_BOX,
+        _handle_provision_box,
+        schema=SERVICE_PROVISION_BOX_SCHEMA,
+    )
+    return True
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: CrowdergyConfigEntry) -> bool:

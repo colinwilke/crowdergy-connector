@@ -257,7 +257,8 @@
       "unknown": "Unerwarteter Fehler. Bitte erneut versuchen; bei wiederholtem Fehlschlag siehe Home-Assistant-Logs."
     },
     "abort": {
-      "already_configured": "Dieses Crowdergy-Konto ist auf dieser Home-Assistant-Instanz schon eingerichtet."
+      "already_configured": "Dieses Crowdergy-Konto ist auf dieser Home-Assistant-Instanz schon eingerichtet.",
+      "invalid_provision_data": "Box-Provisionierung fehlgeschlagen: Die übergebenen Pairing-Daten sind unvollständig oder fehlerhaft."
     }
   },
   "options": {

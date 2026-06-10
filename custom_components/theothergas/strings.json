@@ -257,7 +257,8 @@
       "unknown": "Unexpected error."
     },
     "abort": {
-      "already_configured": "This Crowdergy account is already configured on this Home Assistant instance."
+      "already_configured": "This Crowdergy account is already configured on this Home Assistant instance.",
+      "invalid_provision_data": "Box provisioning failed: the provided pairing data is incomplete or malformed."
     }
   },
   "options": {

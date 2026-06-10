@@ -1520,6 +1520,39 @@ class CrowdergyConfigFlow(ConfigFlow, domain=DOMAIN):
             errors=errors,
         )
 
+    async def async_step_import(
+        self, import_data: dict[str, Any]
+    ) -> ConfigFlowResult:
+        """Headless provisioning durch die Crowdergy Box (Phase 2).
+
+        Der box-manager der Box hat per Pairing-Code bereits ein
+        JWT-Paar geclaimt (`POST /api/v1/box/claim`) und ruft den
+        Service `theothergas.provision_box` — der landet hier. Kein
+        Login, keine Forms; Entry-Shape wie nach dem interaktiven
+        Login (leere Geräteliste, Rest kommt aus Options-Flow bzw.
+        box-manager-Provisionierung).
+
+        unique_id = Backend-User-ID: ein Re-Pairing derselben Box/
+        desselben Accounts ersetzt die Tokens im bestehenden Entry
+        statt einen Duplikat-Entry anzulegen.
+        """
+        from .provisioning import entry_title, validate_provision_data
+
+        try:
+            data = validate_provision_data(import_data)
+        except ValueError:
+            return self.async_abort(reason="invalid_provision_data")
+
+        await self.async_set_unique_id(data[CONF_USER_ID])
+        self._abort_if_unique_id_configured(
+            updates={
+                CONF_ACCESS_TOKEN: data[CONF_ACCESS_TOKEN],
+                CONF_REFRESH_TOKEN: data[CONF_REFRESH_TOKEN],
+                CONF_API_URL: data[CONF_API_URL],
+            }
+        )
+        return self.async_create_entry(title=entry_title(data), data=data)
+
     async def async_step_location(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:

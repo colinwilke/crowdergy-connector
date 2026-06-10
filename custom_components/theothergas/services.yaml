@@ -1,0 +1,41 @@
+# Box-Provisioning (Crowdergy Box, Phase 2). Nur für den box-manager
+# der Crowdergy-Appliance gedacht — normale Nutzer richten die
+# Integration über die UI ein. Token-Werte erscheinen nie in Logs.
+provision_box:
+  name: Provision Crowdergy Box
+  description: >-
+    Headless setup of the Crowdergy integration with a token pair the
+    box claimed via pairing code (POST /api/v1/box/claim). Creates the
+    config entry without any UI steps; re-provisioning the same account
+    updates the stored tokens instead of creating a duplicate.
+  fields:
+    access_token:
+      name: Access token
+      description: Backend JWT access token from the claim response.
+      required: true
+      selector:
+        text: {}
+    refresh_token:
+      name: Refresh token
+      description: Backend JWT refresh token from the claim response.
+      required: true
+      selector:
+        text: {}
+    user_id:
+      name: User ID
+      description: Backend user id the box was paired to.
+      required: true
+      selector:
+        text: {}
+    api_url:
+      name: API URL
+      description: Backend base URL (defaults to https://api.theothergas.de).
+      required: false
+      selector:
+        text: {}
+    email:
+      name: Email
+      description: Account email, for the config entry title only.
+      required: false
+      selector:
+        text: {}
