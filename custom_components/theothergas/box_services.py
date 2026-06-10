@@ -46,6 +46,9 @@ from .const import (
     CONF_REGION,
     DEVICE_TYPES,
     DOMAIN,
+    FORBIDDEN_ENTITY_DOMAINS,
+    OPT_CONSENT_REMOTE_CONTROL,
+    OPT_CONSENT_TELEMETRY,
 )
 from .device_field_spec import build_payload
 
@@ -53,6 +56,14 @@ _LOGGER = logging.getLogger(__name__)
 
 SERVICE_BOX_LIST_PRESETS = "box_list_presets"
 SERVICE_BOX_ADD_DEVICE = "box_add_device"
+SERVICE_BOX_SET_CONSENT = "box_set_consent"
+
+BOX_SET_CONSENT_SCHEMA = vol.Schema(
+    {
+        vol.Required("telemetry"): cv.boolean,
+        vol.Required("remote_control"): cv.boolean,
+    }
+)
 
 BOX_LIST_PRESETS_SCHEMA = vol.Schema(
     {
@@ -109,6 +120,16 @@ def async_register_box_services(hass: HomeAssistant) -> None:
         device_name: str = call.data[CONF_DEVICE_NAME]
         entity_input: dict[str, Any] = dict(call.data["entities"])
 
+        # Security-Model #5 (Box): verbotene Domains werden auf Spec-
+        # Ebene geblockt — kein Mapping kann Kamera/Personen/Tracker/
+        # Media-Entities in den Telemetrie-Pfad bringen.
+        for slot, entity_id in entity_input.items():
+            domain = entity_id.split(".", 1)[0] if "." in entity_id else ""
+            if domain in FORBIDDEN_ENTITY_DOMAINS:
+                raise HomeAssistantError(
+                    f"forbidden entity domain '{domain}' in slot {slot}"
+                )
+
         payload = build_payload(
             mode="create",
             dtype=device_type,
@@ -145,12 +166,37 @@ def async_register_box_services(hass: HomeAssistant) -> None:
             CONF_DEVICE_NAME: device_name,
         }
 
+    async def _handle_set_consent(call: ServiceCall) -> None:
+        """Phase 4: Enforcement-Flags in die Entry-Options schreiben.
+        Der Coordinator gated damit Telemetrie-Push (`_async_update_data`)
+        und Remote-Steuerung (`_handle_ws_message`); Reload übernimmt
+        die neuen Options sofort."""
+        entry = _get_entry(hass)
+        options = {
+            **entry.options,
+            OPT_CONSENT_TELEMETRY: bool(call.data["telemetry"]),
+            OPT_CONSENT_REMOTE_CONTROL: bool(call.data["remote_control"]),
+        }
+        hass.config_entries.async_update_entry(entry, options=options)
+        await hass.config_entries.async_reload(entry.entry_id)
+        _LOGGER.info(
+            "box_set_consent: telemetry=%s remote_control=%s",
+            options[OPT_CONSENT_TELEMETRY],
+            options[OPT_CONSENT_REMOTE_CONTROL],
+        )
+
     hass.services.async_register(
         DOMAIN,
         SERVICE_BOX_LIST_PRESETS,
         _handle_list_presets,
         schema=BOX_LIST_PRESETS_SCHEMA,
         supports_response=SupportsResponse.ONLY,
+    )
+    hass.services.async_register(
+        DOMAIN,
+        SERVICE_BOX_SET_CONSENT,
+        _handle_set_consent,
+        schema=BOX_SET_CONSENT_SCHEMA,
     )
     hass.services.async_register(
         DOMAIN,

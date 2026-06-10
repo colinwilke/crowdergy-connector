@@ -311,3 +311,18 @@ HEURISTIC_REJECT = 0.40
 # will: hier auf False setzen.
 MAPPING_LLM_ENABLED = True
 LLM_MIN_CONFIDENCE = 0.5
+
+# ── Box-Consent (Crowdergy Box, Phase 4, 2026-06-10) ──────────────────
+# Enforcement-Flags in den Config-Entry-OPTIONS (nicht data): der
+# box-manager schreibt sie über den Service `box_set_consent`, der
+# Coordinator gated damit Telemetrie-Push und Remote-Steuerung.
+# Default True (= Flag fehlt): Self-Hosted-Installationen ohne
+# Box-Manager verhalten sich exakt wie bisher.
+OPT_CONSENT_TELEMETRY = "consent_telemetry"
+OPT_CONSENT_REMOTE_CONTROL = "consent_remote_control"
+
+# Domains, die NIE in ein Box-Geräte-Mapping dürfen (Security-Model #5
+# des Box-Repos: nur whitelisted Energiedaten verlassen die Box).
+FORBIDDEN_ENTITY_DOMAINS = frozenset(
+    {"camera", "person", "device_tracker", "media_player"}
+)

@@ -87,3 +87,25 @@ box_add_device:
       required: true
       selector:
         object: {}
+
+box_set_consent:
+  name: Box set consent flags
+  description: >-
+    Write the privacy consent enforcement flags into the config entry
+    options (Crowdergy Box, Phase 4). telemetry=false stops all
+    telemetry/outdoor-temp pushes; remote_control=false makes the
+    coordinator ignore incoming control frames. Defaults (flags absent)
+    keep self-hosted installations unchanged.
+  fields:
+    telemetry:
+      name: Telemetry consent
+      description: Allow energy telemetry to leave the box.
+      required: true
+      selector:
+        boolean: {}
+    remote_control:
+      name: Remote control consent
+      description: Allow the cloud optimizer to drive device entities.
+      required: true
+      selector:
+        boolean: {}

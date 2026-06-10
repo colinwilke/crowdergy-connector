@@ -180,3 +180,43 @@ async def test_add_device_rejects_unknown_type(hass: HomeAssistant):
             {CONF_DEVICE_TYPE: "toaster", CONF_DEVICE_NAME: "X", "entities": {}},
             blocking=True,
         )
+
+
+# ── Phase 4: Consent + Forbidden Domains ─────────────────────────────────────
+
+
+async def test_add_device_rejects_forbidden_domain(hass: HomeAssistant):
+    entry = await _setup(hass)
+    with pytest.raises(HomeAssistantError) as excinfo:
+        await hass.services.async_call(
+            DOMAIN,
+            SERVICE_BOX_ADD_DEVICE,
+            {
+                CONF_DEVICE_TYPE: "generic",
+                CONF_DEVICE_NAME: "Spion",
+                "entities": {"entity_control": "camera.wohnzimmer"},
+            },
+            blocking=True,
+            return_response=True,
+        )
+    assert "forbidden" in str(excinfo.value)
+    assert entry.data[CONF_DEVICES] == []
+
+
+async def test_set_consent_writes_entry_options(hass: HomeAssistant):
+    from custom_components.theothergas.box_services import SERVICE_BOX_SET_CONSENT
+    from custom_components.theothergas.const import (
+        OPT_CONSENT_REMOTE_CONTROL,
+        OPT_CONSENT_TELEMETRY,
+    )
+
+    entry = await _setup(hass)
+    await hass.services.async_call(
+        DOMAIN,
+        SERVICE_BOX_SET_CONSENT,
+        {"telemetry": False, "remote_control": True},
+        blocking=True,
+    )
+    await hass.async_block_till_done()
+    assert entry.options[OPT_CONSENT_TELEMETRY] is False
+    assert entry.options[OPT_CONSENT_REMOTE_CONTROL] is True
