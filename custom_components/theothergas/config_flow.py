@@ -1369,13 +1369,23 @@ async def _authenticated_config_request(
     refresh = entry.data[CONF_REFRESH_TOKEN]
 
     async def _do(token: str) -> httpx.Response:
-        async with httpx.AsyncClient(timeout=15.0) as client:
+        # Client-Konstruktion ins Executor: httpx lädt beim Erzeugen
+        # synchron die CA-Zertifikate (load_verify_locations) — im
+        # Event-Loop wirft HA dafür eine Blocking-Call-Warnung (live
+        # gesehen im Box-Smoke-Test 2026-06-10, analog Coordinator-Fix
+        # v3.5.1).
+        client = await hass.async_add_executor_job(
+            lambda: httpx.AsyncClient(timeout=15.0)
+        )
+        try:
             return await client.request(
                 method,
                 f"{api_url}{path}",
                 headers={"Authorization": f"Bearer {token}"},
                 **kwargs,
             )
+        finally:
+            await client.aclose()
 
     response = await _do(access)
     if response.status_code == 401:
