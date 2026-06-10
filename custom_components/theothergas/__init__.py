@@ -77,6 +77,11 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
         _handle_provision_box,
         schema=SERVICE_PROVISION_BOX_SCHEMA,
     )
+
+    # Phase 3: Discovery + Geräteanlage für die Box (box_services.py).
+    from .box_services import async_register_box_services
+
+    async_register_box_services(hass)
     return True
 
 
