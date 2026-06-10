@@ -1536,7 +1536,11 @@ class CrowdergyConfigFlow(ConfigFlow, domain=DOMAIN):
         desselben Accounts ersetzt die Tokens im bestehenden Entry
         statt einen Duplikat-Entry anzulegen.
         """
-        from .provisioning import entry_title, validate_provision_data
+        from .provisioning import (
+            entry_title,
+            extract_consent_options,
+            validate_provision_data,
+        )
 
         try:
             data = validate_provision_data(import_data)
@@ -1551,7 +1555,13 @@ class CrowdergyConfigFlow(ConfigFlow, domain=DOMAIN):
                 CONF_API_URL: data[CONF_API_URL],
             }
         )
-        return self.async_create_entry(title=entry_title(data), data=data)
+        # Consent-Options atomar mit dem Entry anlegen — kein Fenster,
+        # in dem der Coordinator mit Default-True pushen könnte.
+        return self.async_create_entry(
+            title=entry_title(data),
+            data=data,
+            options=extract_consent_options(import_data),
+        )
 
     async def async_step_location(
         self, user_input: dict[str, Any] | None = None

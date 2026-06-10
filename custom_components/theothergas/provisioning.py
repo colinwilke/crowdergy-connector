@@ -70,3 +70,23 @@ def entry_title(data: dict[str, Any]) -> str:
     if data.get(CONF_EMAIL):
         return f"Crowdergy ({data[CONF_EMAIL]})"
     return f"Crowdergy (Box, {data[CONF_USER_ID][:8]})"
+
+
+def extract_consent_options(raw: dict[str, Any]) -> dict[str, bool]:
+    """Consent-Flags aus dem provision_box-Payload → Entry-OPTIONS.
+
+    Der Box-Wizard erfasst Consent VOR dem Pairing (privacy-model.md);
+    damit zwischen Entry-Erzeugung und erstem box_set_consent kein
+    Fenster mit Default-True entsteht, setzt der Import-Flow die
+    Options atomar beim async_create_entry. Fehlen die Felder (ältere
+    Box, Re-Pairing), bleibt das Options-Dict leer — bestehende
+    Options/Defaults gelten weiter.
+    """
+    from .const import OPT_CONSENT_REMOTE_CONTROL, OPT_CONSENT_TELEMETRY
+
+    options: dict[str, bool] = {}
+    if "consent_telemetry" in raw:
+        options[OPT_CONSENT_TELEMETRY] = bool(raw["consent_telemetry"])
+    if "consent_remote_control" in raw:
+        options[OPT_CONSENT_REMOTE_CONTROL] = bool(raw["consent_remote_control"])
+    return options

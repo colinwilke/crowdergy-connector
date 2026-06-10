@@ -43,6 +43,11 @@ SERVICE_PROVISION_BOX_SCHEMA = vol.Schema(
         vol.Required(CONF_USER_ID): cv.string,
         vol.Optional(CONF_API_URL): cv.string,
         vol.Optional(CONF_EMAIL): cv.string,
+        # Consent-Flags (Phase 4/5): der Box-Wizard erfasst Consent vor
+        # dem Pairing; sie landen atomar als Entry-Options (siehe
+        # provisioning.extract_consent_options).
+        vol.Optional("consent_telemetry"): cv.boolean,
+        vol.Optional("consent_remote_control"): cv.boolean,
     }
 )
 

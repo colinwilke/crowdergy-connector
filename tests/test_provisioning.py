@@ -145,3 +145,31 @@ async def test_provision_box_service_surfaces_invalid_data(hass: HomeAssistant):
             blocking=True,
         )
     assert hass.config_entries.async_entries(DOMAIN) == []
+
+
+async def test_import_flow_sets_consent_options_atomically(hass: HomeAssistant):
+    from custom_components.theothergas.const import (
+        OPT_CONSENT_REMOTE_CONTROL,
+        OPT_CONSENT_TELEMETRY,
+    )
+
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN,
+        context={"source": "import"},
+        data={**CLAIM, "consent_telemetry": True, "consent_remote_control": False},
+    )
+    assert result["type"] == "create_entry"
+    assert result["options"][OPT_CONSENT_TELEMETRY] is True
+    assert result["options"][OPT_CONSENT_REMOTE_CONTROL] is False
+    # Consent-Flags gehören in die Options, nie in die Entry-Daten
+    assert "consent_telemetry" not in result["data"]
+
+
+async def test_import_flow_without_consent_flags_keeps_options_empty(
+    hass: HomeAssistant,
+):
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN, context={"source": "import"}, data=dict(CLAIM)
+    )
+    assert result["type"] == "create_entry"
+    assert result["options"] == {}
