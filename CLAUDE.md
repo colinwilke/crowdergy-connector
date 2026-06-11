@@ -42,6 +42,10 @@ dort: Cluster C (#16–#22).
 ## Tests
 
 Nur mit **Python ≥ 3.12** (`requirements-test.txt`-Kopf).
+
+**Remote-Session (Claude Code on the web):** der SessionStart-Hook
+(`.claude/hooks/session-start.sh`) baut `.venv` (Python 3.12,
+`requirements-test.txt`). Tests dann via `.venv/bin/pytest`.
 `tests/test_sse_client.py::test_start_is_idempotent` und
 `test_stop_cancels_running_task` haben einen bekannten
 umgebungsabhängigen Error (aiodns/aiohttp-Drift in frischen venvs) — auf
