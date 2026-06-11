@@ -108,8 +108,8 @@
               "entity_soc_percent": "Ladezustand",
               "entity_vehicle_status": "Fahrzeugstatus",
               "entity_current_temp_c": "Ist-Temperatur",
-              "entity_energy_total": "Energiezähler (kWh)",
-              "entity_energy_discharged_total": "Energiezähler Gegenrichtung (kWh)"
+              "entity_energy_total": "Gesamtzähler Bezug \/ Entladen (kWh)",
+              "entity_energy_discharged_total": "Gesamtzähler Einspeisung \/ Laden (kWh)"
             },
             "data_description": {
               "entity_current_power_kw": "Aktuelle Leistung in W oder kW. Bei Netz/Batterie: erste Richtung (Bezug bzw. Entladung). Bei Solar/WP/Wallbox: die einzige Richtung.",
@@ -118,8 +118,8 @@
               "entity_soc_percent": "Ladezustand in % (0–100). Pflicht bei Batterie und Wallbox.",
               "entity_vehicle_status": "Sensor, der meldet ob ein Auto an der Wallbox steckt.",
               "entity_current_temp_c": "Aktuelle Temperatur in °C — Vorlauf der WP oder Innentemp des Boilers.",
-              "entity_energy_total": "Lebensdauer-Zähler in kWh (HA state_class: total_increasing). Optional, daraus berechnet die App Tages-/Monats-/Jahresverbrauch.",
-              "entity_energy_discharged_total": "Nur bei Netz und Batterie: zweiter kWh-Zähler für die Gegenrichtung (Einspeisung / Ladung)."
+              "entity_energy_total": "Netz: kWh vom Netz INS Haus (Bezug). Batterie: kWh aus dem Akku INS Haus (Entladen). Solar/Heizung/Wallbox/Haushalt: Lebenszeit-Zähler. Optional, daraus berechnet die App Tages-/Monats-/Jahresverbrauch.",
+              "entity_energy_discharged_total": "Netz: kWh vom Haus INS Netz (Einspeisung). Batterie: kWh vom Haus IN den Akku (Laden). Bei anderen Gerätetypen leer lassen."
             }
           },
           "control_section": {
@@ -370,8 +370,8 @@
               "entity_soc_percent": "Ladezustand",
               "entity_vehicle_status": "Fahrzeugstatus",
               "entity_current_temp_c": "Ist-Temperatur",
-              "entity_energy_total": "Energiezähler (kWh)",
-              "entity_energy_discharged_total": "Energiezähler Gegenrichtung (kWh)"
+              "entity_energy_total": "Gesamtzähler Bezug \/ Entladen (kWh)",
+              "entity_energy_discharged_total": "Gesamtzähler Einspeisung \/ Laden (kWh)"
             },
             "data_description": {
               "entity_current_power_kw": "Aktuelle Leistung in W oder kW. Bei Netz/Batterie: erste Richtung (Bezug bzw. Entladung). Bei Solar/WP/Wallbox: die einzige Richtung.",
@@ -380,8 +380,8 @@
               "entity_soc_percent": "Ladezustand in % (0–100). Pflicht bei Batterie und Wallbox.",
               "entity_vehicle_status": "Sensor, der meldet ob ein Auto an der Wallbox steckt.",
               "entity_current_temp_c": "Aktuelle Temperatur in °C — Vorlauf der WP oder Innentemp des Boilers.",
-              "entity_energy_total": "Lebensdauer-Zähler in kWh. Optional, daraus berechnet die App Tages-/Monats-/Jahresverbrauch.",
-              "entity_energy_discharged_total": "Nur bei Netz und Batterie: zweiter kWh-Zähler für die Gegenrichtung."
+              "entity_energy_total": "Netz: kWh vom Netz ins Haus (Bezug). Batterie: kWh aus dem Akku ins Haus (Entladen). Solar/Heizung/Wallbox/Haushalt: Lebenszeit-Zähler. Optional, daraus berechnet die App Tages-/Monats-/Jahresverbrauch.",
+              "entity_energy_discharged_total": "Netz: kWh vom Haus ins Netz (Einspeisung). Batterie: kWh vom Haus in den Akku (Laden). Bei anderen Gerätetypen leer lassen."
             }
           },
           "control_section": {
@@ -526,8 +526,8 @@
               "entity_soc_percent": "Ladezustand",
               "entity_vehicle_status": "Fahrzeugstatus",
               "entity_current_temp_c": "Ist-Temperatur",
-              "entity_energy_total": "Energiezähler (kWh)",
-              "entity_energy_discharged_total": "Energiezähler Gegenrichtung (kWh)"
+              "entity_energy_total": "Gesamtzähler Bezug \/ Entladen (kWh)",
+              "entity_energy_discharged_total": "Gesamtzähler Einspeisung \/ Laden (kWh)"
             },
             "data_description": {
               "entity_current_power_kw": "Aktuelle Leistung in W oder kW. Bei Netz/Batterie: erste Richtung. Bei Solar/WP/Wallbox: die einzige Richtung.",
@@ -536,8 +536,8 @@
               "entity_soc_percent": "Ladezustand in % (0–100). Pflicht bei Batterie und Wallbox.",
               "entity_vehicle_status": "Sensor, der Auto-an-Wallbox meldet.",
               "entity_current_temp_c": "Aktuelle Temperatur in °C.",
-              "entity_energy_total": "Lebensdauer-Zähler in kWh. Optional.",
-              "entity_energy_discharged_total": "Nur bei Netz und Batterie: Zähler für die Gegenrichtung."
+              "entity_energy_total": "Netz: kWh vom Netz ins Haus (Bezug). Batterie: kWh aus dem Akku ins Haus (Entladen). Solar/Heizung/Wallbox/Haushalt: Lebenszeit-Zähler. Optional.",
+              "entity_energy_discharged_total": "Netz: kWh vom Haus ins Netz (Einspeisung). Batterie: kWh vom Haus in den Akku (Laden). Bei anderen Gerätetypen leer lassen."
             }
           },
           "control_section": {

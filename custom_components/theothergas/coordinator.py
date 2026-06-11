@@ -1085,21 +1085,32 @@ class CrowdergyCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
             # a negative contribution. `_prev_energy_kwh` is updated
             # ONLY after a successful PATCH below.
             # Per-tick `energy_kwh_delta`. Sign convention matches the
-            # underlying power_kw convention for the device type:
-            #   * heating / warmwater / wallbox / generic / haushalt /
-            #     solar (eine Entity gemapped) → POSITIVE consumption Δ
-            #   * battery / grid (zwei Entities gemapped)
-            #     → signed net `delivered − consumed`. Positive
-            #     when the device delivered net energy back to the
-            #     home (battery discharge, grid import). Matches the
-            #     existing battery/grid power_kw sign convention.
+            # underlying power_kw convention: POSITIVE = energy flowed
+            # FROM the device INTO the home. For one-direction devices
+            # (heating/wallbox/solar/…) the delta is just the device's
+            # consumption (always positive, except solar where the
+            # mapped counter is PV-production).
             #
-            # `entity_energy_total` is the "consumed by device"
-            # counter (battery: charged; grid: imported); the
-            # optional `entity_energy_discharged_total` is the
-            # "delivered by device" counter (battery: discharged;
-            # grid: exported; later V2G wallbox: V2G-out). The
-            # backend stores whatever signed value we emit here.
+            # **E2E-Konvention 2026-06-11 (Connector v3.21.3):** für
+            # Grid + Battery sind die beiden Counter explizit:
+            #   * `entity_energy_total`           = Bezug-Zähler (Grid)
+            #                                       Entladen-Zähler (Battery)
+            #     = kWh die VOM Gerät INS HAUS geflossen sind
+            #   * `entity_energy_discharged_total` = Einspeisung-Zähler (Grid)
+            #                                        Laden-Zähler (Battery)
+            #     = kWh die AUS DEM HAUS INS Gerät geflossen sind
+            #
+            # `delta = in_delta − out_delta` → positiv = Bezug/Entladen
+            # (Energie kam ins Haus), negativ = Einspeisung/Laden
+            # (Energie ging raus). Backend speichert das signed delta;
+            # `kwh_in`-Sum = Bezug, `kwh_out`-Sum = Einspeisung.
+            #
+            # **Breaking-Hinweis für Bestand (vor v3.21.3):** die Labels
+            # waren vorher generisch („Energy counter (kWh)"), die Math
+            # war `out − in`. User müssen ihre Entity-Mappings einmalig
+            # tauschen: was bisher unter `entity_energy_total` lag,
+            # gehört jetzt unter `entity_energy_discharged_total` und
+            # umgekehrt. Siehe HACS-Release-Notes v3.21.3.
             energy_kwh_total_out = self._read_energy_kwh(
                 entity_energy_discharged_total
             )
@@ -1118,7 +1129,11 @@ class CrowdergyCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
             energy_kwh_delta: float | None = None
             if out_delta is not None:
                 # Two-entity storage device → signed net.
-                energy_kwh_delta = out_delta - (in_delta or 0.0)
+                # Positive = device delivered to home (Bezug/Entladen).
+                # Math-Flip 2026-06-11: vorher `out − in`, jetzt
+                # `in − out` damit entity_energy_total semantisch das
+                # Bezug/Entladen-Counter ist (= Label-Match).
+                energy_kwh_delta = (in_delta or 0.0) - out_delta
             elif in_delta is not None:
                 # Single-entity consumption (or production) device →
                 # positive Δ as before.

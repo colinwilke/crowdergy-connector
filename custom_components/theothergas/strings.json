@@ -107,8 +107,8 @@
               "entity_soc_percent": "State of charge",
               "entity_vehicle_status": "Vehicle status",
               "entity_current_temp_c": "Current temperature",
-              "entity_energy_total": "Energy counter (kWh)",
-              "entity_energy_discharged_total": "Energy counter reverse (kWh)"
+              "entity_energy_total": "Total counter — drawn / discharged (kWh)",
+              "entity_energy_discharged_total": "Total counter — fed-in / charged (kWh)"
             },
             "data_description": {
               "entity_current_power_kw": "Current power in W or kW. Grid/Battery: first direction (import / discharge). Solar/WP/Wallbox: the only direction.",
@@ -117,8 +117,8 @@
               "entity_soc_percent": "Current state of charge in %. Required for Battery and Wallbox.",
               "entity_vehicle_status": "Sensor that signals a car connected to the wallbox.",
               "entity_current_temp_c": "Current temperature in °C — heat-pump flow or boiler interior.",
-              "entity_energy_total": "Lifetime kWh counter (HA state_class: total_increasing). Optional — drives daily/monthly/yearly stats.",
-              "entity_energy_discharged_total": "Grid/Battery only: second kWh counter for the reverse direction."
+              "entity_energy_total": "Grid: kWh drawn from the grid (into the home). Battery: kWh discharged (from the battery into the home). Solar/heating/wallbox/household: lifetime kWh counter. Optional — drives daily/monthly/yearly stats.",
+              "entity_energy_discharged_total": "Grid: kWh fed-in to the grid (from the home). Battery: kWh charged (from the home into the battery). Leave blank for other device types."
             }
           },
           "control_section": {
@@ -369,8 +369,8 @@
               "entity_soc_percent": "State of charge",
               "entity_vehicle_status": "Vehicle status",
               "entity_current_temp_c": "Current temperature",
-              "entity_energy_total": "Energy counter (kWh)",
-              "entity_energy_discharged_total": "Energy counter reverse (kWh)"
+              "entity_energy_total": "Total counter — drawn / discharged (kWh)",
+              "entity_energy_discharged_total": "Total counter — fed-in / charged (kWh)"
             },
             "data_description": {
               "entity_current_power_kw": "Current power in W or kW.",
@@ -379,8 +379,8 @@
               "entity_soc_percent": "Current state of charge in %.",
               "entity_vehicle_status": "Sensor that signals a car connected to the wallbox.",
               "entity_current_temp_c": "Current temperature in °C.",
-              "entity_energy_total": "Lifetime kWh counter. Optional.",
-              "entity_energy_discharged_total": "Grid/Battery only: counter for the reverse direction."
+              "entity_energy_total": "Grid: kWh drawn from the grid. Battery: kWh discharged. Solar/heating/wallbox/household: lifetime kWh counter. Optional.",
+              "entity_energy_discharged_total": "Grid: kWh fed-in to the grid. Battery: kWh charged. Leave blank for other device types."
             }
           },
           "control_section": {
@@ -522,8 +522,8 @@
               "entity_soc_percent": "State of charge",
               "entity_vehicle_status": "Vehicle status",
               "entity_current_temp_c": "Current temperature",
-              "entity_energy_total": "Energy counter (kWh)",
-              "entity_energy_discharged_total": "Energy counter reverse (kWh)"
+              "entity_energy_total": "Total counter — drawn / discharged (kWh)",
+              "entity_energy_discharged_total": "Total counter — fed-in / charged (kWh)"
             },
             "data_description": {
               "entity_current_power_kw": "Current power in W or kW.",
@@ -532,8 +532,8 @@
               "entity_soc_percent": "Current state of charge in %.",
               "entity_vehicle_status": "Sensor that signals a car connected.",
               "entity_current_temp_c": "Current temperature in °C.",
-              "entity_energy_total": "Lifetime kWh counter. Optional.",
-              "entity_energy_discharged_total": "Grid/Battery only."
+              "entity_energy_total": "Grid: kWh drawn from the grid. Battery: kWh discharged. Solar/heating/wallbox/household: lifetime kWh counter. Optional.",
+              "entity_energy_discharged_total": "Grid: kWh fed-in to the grid. Battery: kWh charged. Leave blank for other device types."
             }
           },
           "control_section": {
