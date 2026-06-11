@@ -273,14 +273,10 @@ class CrowdergyCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
         self.state: DeviceStateMirror = DeviceStateMirror()
         # `_last_sse_event_at` ist jetzt auch im DeviceStateMirror —
         # siehe @property-Shim weiter unten.
-        # Wallbox charge_mode snapshot per device — captures whatever
-        # the user had set on entity_charge_mode BEFORE Crowdergize
-        # was switched ON, so we can restore it on OFF. In-memory only;
-        # an HA-restart mid-session loses the snapshot (V1 tradeoff —
-        # rare case, the worst outcome is the entity stays at the
-        # MPC-override value after Crowdergize OFF, easy to fix
-        # manually). Keyed by device_id.
-        self._pre_crowdergize_charge_mode: dict[str, str] = {}
+        # (E-2 / XR-1, 2026-06-11: das frühere
+        # `_pre_crowdergize_charge_mode`-Snapshot-Dict ist entfernt —
+        # toter Restore-Pfad, das Backend sendet
+        # `charge_mode_value_crowdergy` seit 2026-06-03 nicht mehr.)
         # Read once at coordinator init — never changes during a HA
         # session (a manifest bump means HACS reloads the integration).
         # Manifest-Read deferred (siehe Kommentar oben bei _client).
@@ -1391,18 +1387,16 @@ class CrowdergyCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
                 if self.state.active_state.get(device_id) != new_value:
                     self.state.active_state[device_id] = new_value
                     self._sync_field_into_data(device_id, "is_active", new_value)
-                    # Wallbox charge_mode snapshot/restore. Only fires
-                    # for wallbox devices that have BOTH an entity_
-                    # charge_mode configured AND a backend-side
-                    # charge_mode_value_crowdergy set (= user has
-                    # explicitly opted into the override behaviour).
-                    crowdergy_value = payload.get("charge_mode_value_crowdergy")
-                    if new_value and crowdergy_value:
-                        await self._snapshot_and_override_charge_mode(
-                            device_id, str(crowdergy_value)
-                        )
-                    elif not new_value:
-                        await self._restore_charge_mode(device_id)
+                    # E-2 / XR-1 (2026-06-11): der frühere Wallbox-
+                    # Snapshot/Restore-Pfad (`charge_mode_value_crowdergy`)
+                    # ist entfernt. Das Backend hat die Spalte am
+                    # 2026-06-03 gedroppt (Migration 20260603_0005) und
+                    # sendet den Key nie mehr → Snapshot wurde nie
+                    # befüllt, Restore fand nie etwas. BEWUSSTE
+                    # Entscheidung: der Pre-AI-Lademodus wird bei AI-OFF
+                    # NICHT mehr automatisch restauriert. Wallbox-AI-OFF
+                    # räumt nur noch den Charge-Mode-Hold ab (siehe
+                    # unten), danach gehört die Wallbox dem User.
                     if new_value:
                         # Crowdergize on → force an entity_control write
                         # + start the hold loop using the currently
@@ -1440,15 +1434,14 @@ class CrowdergyCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
                                 device_id, "passive", 0.0,
                             )
                         elif dev_type == "wallbox":
-                            # Cluster B Connector (2026-06-09): Finding
-                            # #13 — wenn der User KEIN charge_mode_value_
-                            # crowdergy gesetzt hat, hatte AI-off keinen
-                            # Cleanup-Pfad für die Wallbox. Der Solver-
-                            # Lademodus blieb damit hängen. Charge-Mode-
-                            # Hold-Loop hier zumindest abräumen damit der
+                            # AI-OFF-Cleanup für die Wallbox: nur den
+                            # Charge-Mode-Hold-Loop abräumen, damit der
                             # User die Wallbox manuell übernehmen kann.
-                            # (Wenn crowdergy_value gesetzt war, ist
-                            # snapshot/restore oben schon gelaufen.)
+                            # Der Solver-Lademodus wird NICHT auf einen
+                            # früheren Wert zurückgesetzt (E-2 / XR-1,
+                            # 2026-06-11: der Restore-Pfad ist tot —
+                            # Backend sendet `charge_mode_value_crowdergy`
+                            # seit 2026-06-03 nicht mehr).
                             self._cancel_charge_mode_hold(device_id)
                         elif dev_type in ("heating", "warmwater", "aircon", "generic"):
                             # entity_control auf value_off — sorgt
@@ -1561,59 +1554,6 @@ class CrowdergyCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
                         self._cancel_charge_mode_hold(device_id)
                     else:
                         await self._apply_charge_mode(device_id, str(value))
-
-    async def _snapshot_and_override_charge_mode(
-        self, device_id: str, override_value: str
-    ) -> None:
-        """Crowdergize ON for a wallbox: snapshot the current
-        entity_charge_mode state (so we can restore on OFF) and
-        write the user-configured "MPC controls this" value (e.g.
-        "Power Mode") so the wallbox firmware doesn't self-optimise
-        against the MPC plan.
-
-        Idempotent: if a snapshot for this device already exists
-        (Crowdergize toggled OFF→ON→OFF→ON without going through
-        the restore branch — shouldn't happen, but defensive), we
-        keep the existing snapshot so a future restore still hits
-        the user's original value."""
-        dev = next(
-            (d for d in self.devices if d.get(CONF_DEVICE_ID) == device_id),
-            None,
-        )
-        if dev is None:
-            return
-        entity_id = dev.get(CONF_ENTITY_CHARGE_MODE, "") or ""
-        if not entity_id:
-            # No charge_mode entity configured; nothing to override.
-            return
-        # Snapshot current value if we don't already have one.
-        if device_id not in self._pre_crowdergize_charge_mode:
-            state = self.hass.states.get(entity_id)
-            if state is not None and state.state not in ("unknown", "unavailable"):
-                self._pre_crowdergize_charge_mode[device_id] = state.state
-                _LOGGER.info(
-                    "Snapshotted charge_mode for %s: %r",
-                    device_id, state.state,
-                )
-        # Override.
-        await self._apply_charge_mode(device_id, override_value)
-
-    async def _restore_charge_mode(self, device_id: str) -> None:
-        """Crowdergize OFF for a wallbox: write the snapshotted
-        pre-Crowdergize value back to entity_charge_mode so the
-        user's original Solar-Pure / Eco / whatever logic resumes
-        owning the wallbox."""
-        snapshot = self._pre_crowdergize_charge_mode.pop(device_id, None)
-        if snapshot is None:
-            # No snapshot — either no override was applied (no
-            # entity / no crowdergy_value), or the snapshot was lost
-            # to an HA restart mid-session. Either way nothing to do.
-            return
-        _LOGGER.info(
-            "Restoring charge_mode for %s: %r",
-            device_id, snapshot,
-        )
-        await self._apply_charge_mode(device_id, snapshot)
 
     async def _apply_charge_mode(
         self, device_id: str, mode: str, *, schedule_hold: bool = True
@@ -1749,9 +1689,9 @@ class CrowdergyCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
         """Re-write the last commanded charge_mode every
         CHARGE_MODE_HOLD_INTERVAL seconds. Bails when the held value
         is cleared (cancel via `_cancel_charge_mode_hold` — called on
-        `passive` from the worker, on `_restore_charge_mode` when
-        Crowdergize toggles off, on device removal, and on coordinator
-        shutdown) OR when the SSE channel has been silent past
+        `passive` from the worker, on wallbox AI-off, on device
+        removal, and on coordinator shutdown) OR when the SSE channel
+        has been silent past
         SSE_STALE_THRESHOLD_S (Crowdergy backend / network unreachable
         → the inverter's native logic regains control rather than
         being stuck on the last command forever).
@@ -2370,7 +2310,6 @@ class CrowdergyCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
             self._last_send_at,
             self._last_mirror_at,
             self._last_sent_hash,
-            self._pre_crowdergize_charge_mode,
         ):
             d.pop(device_id, None)
 

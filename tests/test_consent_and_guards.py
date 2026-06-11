@@ -75,7 +75,6 @@ def make_coordinator(
     coord._last_sent_hash = {}
     coord._prev_energy_kwh = {}
     coord._prev_energy_kwh_discharged = {}
-    coord._pre_crowdergize_charge_mode = {}
     return coord
 
 
