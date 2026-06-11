@@ -12,7 +12,7 @@ Tests laufen NUR mit Python ≥3.12 (`requirements-test.txt`-Kopf);
 umgebungsabhängigen Error (aiodns/aiohttp-Drift in frischen venvs) — auf
 sauberem Stand gegenprüfen, bevor man eigene Änderungen verdächtigt.
 
-### Harter Code-Review 2026-06-11 — umgesetzt (v3.22.0 auf diesem Branch)
+### Harter Code-Review 2026-06-11 — umgesetzt (v3.22.0 released, Tag auf main)
 
 CN-1…CN-14 (ohne CN-10) + P3 gefixt; 71 Tests grün (2 deselektiert:
 `test_start_is_idempotent` + `test_stop_cancels_running_task`, beides der
