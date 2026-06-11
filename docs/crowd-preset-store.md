@@ -130,6 +130,16 @@ in `preset_spec.py`, der Rest der Pipeline folgt.
 
 ## Offen / Folgearbeit
 
+- **Rate-Limit auf `/crowd-presets/lookup`** (und moderat auf
+  `/contribute`) + ToS-Klausel „Preset-Daten nicht für Drittprodukte":
+  das public Connector-Repo enthält nur das SCHEMA, die Store-DATEN
+  sind das Asset — ein einzelner (auch zahlender) Account darf den
+  Store nicht komplett abziehen können (User-Frage 2026-06-11).
+- **`updated_at` / Preset-Version im Lookup-Response**: Grundlage für
+  den künftigen Box-Prompt „Verbessertes Profil verfügbar →
+  übernehmen?" — die Box persistiert seit 2026-06-11 pro Gerät die
+  Herkunft (vendor/model/integration_domain/source). Steuer-Slots nie
+  still auto-re-applien.
 - `helper_yaml`-Pfad (Steuer-Entities, die beim Beitragenden
   HA-HELPERS sind, z.B. input_select fürs Modbus-Schreiben): Feld
   existiert im Vertrag, wird aber von der Box noch nicht angewendet —

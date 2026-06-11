@@ -40,7 +40,10 @@ mit Staging (staged→approved, Threshold, anfangs 1):
 `docs/crowd-preset-store.md` — **Backend-Repo war nicht im
 Session-Scope, Umsetzung dort offen**; Connector/Box tolerieren das
 Alt-Backend. 119 Tests grün. Neue Slots: preset_spec + (wenn entity)
-MAPPABLE_ENTITY_DOMAINS + Vertrag nachziehen.
+MAPPABLE_ENTITY_DOMAINS + Vertrag nachziehen. Einschätzungen zu
+Public-Repo-Risiko / Update-Stabilität / OTA / Live-Lookup:
+`crowdergy-box/CLAUDE.md` (Abschnitt „User-Fragen 2026-06-11");
+Entry-Schema-Regel + Store-Schutz-TODOs in CONTEXT.md.
 
 ### User-Entscheidungen 2026-06-11 umgesetzt → v3.23.0
 

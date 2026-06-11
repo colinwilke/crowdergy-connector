@@ -123,6 +123,19 @@ normale HACS-Installationen unverändert.
   (`crowdergy-box/CONNECTOR_VERSION` + `scripts/vendor-connector.sh`).
 
 ### Bekannte Probleme / TODOs
+- **Entry-Schema-Regel (User-Frage 2026-06-11, Box-Update-Stabilität):**
+  Änderungen an Entry-data/-options nur ADDITIV oder mit Load-Time-
+  Migration („Flag fehlt = Altverhalten") — die Box darf bei einem
+  Vendor-Pin-Bump NIE Re-Provisionierung brauchen (Pairing/Geräte/
+  Consents leben im HA-Config-Entry, Code-Tausch berührt sie nicht;
+  `provision_box` bleibt idempotent, unique_id = User-ID).
+- **Store-Schutz (public Repo = nur Schema, Daten hinter Auth):**
+  Rate-Limit auf `/crowd-presets/lookup` + ToS-Klausel gegen
+  Store-Scraping — Backend-TODO, siehe docs/crowd-preset-store.md.
+- **Preset-Provenance/Re-Apply:** Lookup braucht künftig
+  `updated_at`/Version, damit die Box „Verbessertes Profil verfügbar →
+  übernehmen?" anbieten kann (Box persistiert Herkunft pro Gerät seit
+  2026-06-11). Kein stilles Auto-Re-Apply von Steuer-Slots.
 - **Domain noch `theothergas`** (Legacy) — Migration auf `crowdergy` ausstehend (Breaking Change: Manifest,
   `const.py`, Strings, Ordner-Rename)
 - **Default-API-URL hardcoded** `https://api.theothergas.de` in `const.py` (Override nur über Config-Entry)
