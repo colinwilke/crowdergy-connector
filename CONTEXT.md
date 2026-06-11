@@ -1,5 +1,18 @@
 # crowdergy-connector
 
+## Stand: 2026-06-11 abends — Release **v3.24.0** (Branch-Konsolidierung)
+
+> **v3.24.0 (2026-06-11 abends, Multi-Branch-Konsolidierung)**: Die in
+> `claude/trusting-planck-4f9txj` getaggten Releases v3.21.2/v3.21.3/v3.21.4
+> waren via HACS-Tag live, aber nicht auf `main` (parallel zum
+> `cool-hawking-rjc1xg` v3.22.0/v3.23.0-Review-Branch entwickelt).
+> Jetzt cherry-picked: **v3.21.2** Crowd-Contribution sendet
+> `integration_domain` mit; **v3.21.3** E2E-Konsistenz Bezug/Entladen ↔
+> Einspeisung/Laden in Coordinator + Strings; **v3.21.4** explizite
+> `energy_kwh_in_delta` + `energy_kwh_out_delta` an Backend statt
+> signed Wert. Manifest-Konflikt bei jedem Cherry-Pick auf main's
+> 3.23.0 aufgelöst, Schluss-Bump auf 3.24.0.
+
 ## Stand: 2026-06-11 — Release **v3.23.0** (E-2/E-4/E-6 aus dem Review; GitHub-Release via tag-release.yml)
 
 > **Harter Code-Review 2026-06-11: Befunde umgesetzt → v3.22.0 (Branch
