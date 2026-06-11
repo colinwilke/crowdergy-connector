@@ -160,47 +160,12 @@ class TelemetryComposer:
             await asyncio.sleep(sleep_for)
 
     async def device_mirror_loop(self) -> None:
-        """Pro Tick (PER_DEVICE_MIRROR_INTERVAL): für jedes Gerät mit
-        früherem Payload PATCHen wir den letzten Payload erneut wenn
-        ≥ PER_DEVICE_MIRROR_INTERVAL seit dem letzten echten Send
-        vergangen ist. `energy_kwh_delta` wird weggelassen — das hat
-        beim Original-Send seine Δ-kWh ins Backend gebracht, doppelt
-        zu senden würde doppelt zählen.
-        """
+        """Endlos-Loop um `mirror_once()` — Body separat, damit eine
+        einzelne Iteration ohne Task-/Sleep-Maschinerie testbar ist
+        (CN-5-Regression-Tests)."""
         while True:
             try:
-                now_ts = time.time()
-                for device_id, last_payload in list(
-                    self.coord._last_sent_payload.items()
-                ):
-                    age = now_ts - self.coord._last_send_at.get(device_id, 0.0)
-                    if age < PER_DEVICE_MIRROR_INTERVAL:
-                        continue
-                    mirror = {
-                        k: v for k, v in last_payload.items()
-                        if k != "energy_kwh_delta"
-                    }
-                    try:
-                        response = await self.coord._authenticated_request(
-                            "PATCH",
-                            f"/api/v1/devices/{device_id}/telemetry",
-                            json=mirror,
-                        )
-                        if response.status_code < 400:
-                            self.coord._last_send_at[device_id] = now_ts
-                        else:
-                            _LOGGER.debug(
-                                "device-mirror PATCH %s returned %s: %s",
-                                device_id, response.status_code,
-                                response.text,
-                            )
-                    except asyncio.CancelledError:
-                        raise
-                    except Exception as err:  # noqa: BLE001
-                        _LOGGER.debug(
-                            "device-mirror PATCH failed for %s: %s",
-                            device_id, err,
-                        )
+                await self.mirror_once()
             except asyncio.CancelledError:
                 raise
             except Exception as err:  # noqa: BLE001
@@ -209,78 +174,72 @@ class TelemetryComposer:
                 )
             await asyncio.sleep(PER_DEVICE_MIRROR_INTERVAL)
 
-    async def state_resync_loop(self) -> None:
-        """Periodischer Pull von GET /api/v1/devices als SSE-Drop-
-        Backstop. Vergleicht Backend-State (is_active, is_on, cool_on)
-        mit lokalem Cache; bei Drift Cache-Update + Re-Apply via
-        coordinator._apply_device_state / _apply_cool_state.
+    async def mirror_once(self) -> None:
+        """Eine Mirror-Iteration: für jedes Gerät mit früherem Payload
+        PATCHen wir den letzten Payload erneut wenn
+        ≥ PER_DEVICE_MIRROR_INTERVAL seit dem letzten echten Send UND
+        dem letzten Mirror vergangen ist. `energy_kwh_delta` wird
+        weggelassen — das hat beim Original-Send seine Δ-kWh ins
+        Backend gebracht, doppelt zu senden würde doppelt zählen.
 
-        SSE-Limitation: Backend publisht nur bei state-Transitions,
-        nicht idempotent. Connector kann zum Publish-Moment nicht
-        subscribed sein (Netzwerk-Flap, HA-Restart, NAT-Idle). Polling-
-        Backstop fängt das innerhalb STATE_RESYNC_INTERVAL ab.
+        CN-5 (2026-06-11): der Mirror bucht auf den EIGENEN Timestamp
+        `_last_mirror_at`. Vorher hat er `_last_send_at` resettet und
+        damit den 90-s-Soft-Heartbeat + das 600-s-Hard-Ceiling in
+        `_should_send` dauerhaft ausgehebelt (sub-threshold Drift
+        wurde nie gemeldet — toter Code seit v3.4.3).
+
+        Telemetrie-Consent-Gate (2026-06-11): das Privacy-Modell
+        verspricht „telemetry=false stoppt ALLE Telemetrie-Pushes"
+        (services.yaml) — der Mirror re-PATCHt Telemetrie-Payloads
+        und muss deshalb genauso gated sein wie `_async_update_data`.
         """
-        while True:
+        from .const import OPT_CONSENT_TELEMETRY
+
+        if not self.coord._consent(OPT_CONSENT_TELEMETRY):
+            return
+        now_ts = time.time()
+        for device_id, last_payload in list(
+            self.coord._last_sent_payload.items()
+        ):
+            last_activity = max(
+                self.coord._last_send_at.get(device_id, 0.0),
+                self.coord._last_mirror_at.get(device_id, 0.0),
+            )
+            if now_ts - last_activity < PER_DEVICE_MIRROR_INTERVAL:
+                continue
+            mirror = {
+                k: v for k, v in last_payload.items()
+                if k != "energy_kwh_delta"
+            }
             try:
                 response = await self.coord._authenticated_request(
-                    "GET", "/api/v1/devices",
+                    "PATCH",
+                    f"/api/v1/devices/{device_id}/telemetry",
+                    json=mirror,
                 )
-                if response.status_code >= 400:
-                    _LOGGER.debug(
-                        "state-resync GET returned %s: %s",
-                        response.status_code, response.text,
-                    )
+                if response.status_code < 400:
+                    self.coord._last_mirror_at[device_id] = now_ts
                 else:
-                    for d in response.json():
-                        device_id = d["id"]
-                        bk_active = bool(d.get("is_active", False))
-                        bk_on = bool(d.get("is_on", False))
-                        bk_cool = bool(d.get("cool_on", False))
+                    _LOGGER.debug(
+                        "device-mirror PATCH %s returned %s: %s",
+                        device_id, response.status_code,
+                        response.text,
+                    )
+            except asyncio.CancelledError:
+                raise
+            except Exception as err:  # noqa: BLE001
+                _LOGGER.debug(
+                    "device-mirror PATCH failed for %s: %s",
+                    device_id, err,
+                )
 
-                        local_on = self.coord.state.on_state.get(device_id)
-                        local_cool = self.coord.state.cool_state.get(device_id)
-                        local_active = self.coord.state.active_state.get(device_id)
-
-                        # Cache unkonditional aktualisieren — Backend
-                        # ist source of truth.
-                        self.coord.state.active_state[device_id] = bk_active
-                        self.coord.state.on_state[device_id] = bk_on
-                        self.coord.state.cool_state[device_id] = bk_cool
-
-                        if not bk_active:
-                            continue
-                        if local_on is not None and local_on != bk_on:
-                            _LOGGER.warning(
-                                "state-resync: %s is_on drifted "
-                                "(cache=%s, backend=%s) — reapplying",
-                                device_id, local_on, bk_on,
-                            )
-                            await self.coord._apply_device_state(
-                                device_id, bk_on,
-                            )
-                        if local_cool is not None and local_cool != bk_cool:
-                            _LOGGER.warning(
-                                "state-resync: %s cool_on drifted "
-                                "(cache=%s, backend=%s) — reapplying",
-                                device_id, local_cool, bk_cool,
-                            )
-                            try:
-                                await self.coord._apply_cool_state(
-                                    device_id, bk_cool,
-                                )
-                            except Exception:  # noqa: BLE001
-                                _LOGGER.debug(
-                                    "state-resync: cool-reapply failed for %s",
-                                    device_id,
-                                )
-                        if local_active is False and bk_active:
-                            _LOGGER.info(
-                                "state-resync: %s is_active drifted "
-                                "False→True (cache vs backend) — "
-                                "User-Toggle wird empfohlen für "
-                                "Charge-Mode-Snapshot",
-                                device_id,
-                            )
+    async def state_resync_loop(self) -> None:
+        """Endlos-Loop um `resync_once()` — Body separat, damit eine
+        einzelne Iteration ohne Task-/Sleep-Maschinerie testbar ist
+        (CN-1-Regression-Tests)."""
+        while True:
+            try:
+                await self.resync_once()
             except asyncio.CancelledError:
                 raise
             except Exception as err:  # noqa: BLE001
@@ -288,3 +247,83 @@ class TelemetryComposer:
                     "state-resync loop iteration error: %s", err,
                 )
             await asyncio.sleep(STATE_RESYNC_INTERVAL)
+
+    async def resync_once(self) -> None:
+        """Eine Resync-Iteration: Pull von GET /api/v1/devices als
+        SSE-Drop-Backstop. Vergleicht Backend-State (is_active, is_on,
+        cool_on) mit lokalem Cache; bei Drift Cache-Update + Re-Apply
+        via coordinator._apply_device_state / _apply_cool_state.
+
+        SSE-Limitation: Backend publisht nur bei state-Transitions,
+        nicht idempotent. Connector kann zum Publish-Moment nicht
+        subscribed sein (Netzwerk-Flap, HA-Restart, NAT-Idle). Polling-
+        Backstop fängt das innerhalb STATE_RESYNC_INTERVAL ab.
+
+        CN-1 (2026-06-11): früher Skip ohne Remote-Control-Consent —
+        die zentralen Gates in den `_apply_*`-Methoden würden ohnehin
+        greifen, aber der ganze Resync existiert NUR um Cloud-State
+        re-zuapplyen; ohne Consent ist schon der GET + das Diffing
+        sinnlos (und das Cache-Update bliebe inkonsistent zum
+        SSE-Dispatch, der ohne Consent ebenfalls nichts synct).
+        """
+        if not self.coord._remote_control_allowed("state-resync"):
+            return
+        response = await self.coord._authenticated_request(
+            "GET", "/api/v1/devices",
+        )
+        if response.status_code >= 400:
+            _LOGGER.debug(
+                "state-resync GET returned %s: %s",
+                response.status_code, response.text,
+            )
+            return
+        for d in response.json():
+            device_id = d["id"]
+            bk_active = bool(d.get("is_active", False))
+            bk_on = bool(d.get("is_on", False))
+            bk_cool = bool(d.get("cool_on", False))
+
+            local_on = self.coord.state.on_state.get(device_id)
+            local_cool = self.coord.state.cool_state.get(device_id)
+            local_active = self.coord.state.active_state.get(device_id)
+
+            # Cache unkonditional aktualisieren — Backend
+            # ist source of truth.
+            self.coord.state.active_state[device_id] = bk_active
+            self.coord.state.on_state[device_id] = bk_on
+            self.coord.state.cool_state[device_id] = bk_cool
+
+            if not bk_active:
+                continue
+            if local_on is not None and local_on != bk_on:
+                _LOGGER.warning(
+                    "state-resync: %s is_on drifted "
+                    "(cache=%s, backend=%s) — reapplying",
+                    device_id, local_on, bk_on,
+                )
+                await self.coord._apply_device_state(
+                    device_id, bk_on,
+                )
+            if local_cool is not None and local_cool != bk_cool:
+                _LOGGER.warning(
+                    "state-resync: %s cool_on drifted "
+                    "(cache=%s, backend=%s) — reapplying",
+                    device_id, local_cool, bk_cool,
+                )
+                try:
+                    await self.coord._apply_cool_state(
+                        device_id, bk_cool,
+                    )
+                except Exception:  # noqa: BLE001
+                    _LOGGER.debug(
+                        "state-resync: cool-reapply failed for %s",
+                        device_id,
+                    )
+            if local_active is False and bk_active:
+                _LOGGER.info(
+                    "state-resync: %s is_active drifted "
+                    "False→True (cache vs backend) — "
+                    "User-Toggle wird empfohlen für "
+                    "Charge-Mode-Snapshot",
+                    device_id,
+                )

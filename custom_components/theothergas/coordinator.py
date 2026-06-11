@@ -305,6 +305,13 @@ class CrowdergyCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
         # enough to be worth a row.
         self._last_sent_payload: dict[str, dict[str, Any]] = {}
         self._last_send_at: dict[str, float] = {}
+        # CN-5 (2026-06-11): eigener Timestamp für den Device-Mirror.
+        # `_last_send_at` gehört EXKLUSIV den echten `_should_send`-Sends
+        # in `_async_update_data` — vorher hat der Mirror-Loop ihn
+        # mitgeschrieben und damit den 90-s-Soft-Heartbeat und das
+        # 600-s-Hard-Ceiling in `_should_send` dauerhaft ausgehebelt
+        # (sub-threshold Drift wurde nie gemeldet).
+        self._last_mirror_at: dict[str, float] = {}
         # C7 (2026-06-01) payload-hash dedup: stabilen content-hash
         # des letzten gesendeten payloads pro Gerät. Wenn der neue
         # hash identisch ist, hat der 90s-Soft-Heartbeat nichts neues
@@ -313,6 +320,10 @@ class CrowdergyCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
         # Throttle bookkeeping for the event-driven `async_refresh`
         # path. The scheduled 30 s tick is unaffected.
         self._last_event_refresh_at: float = 0.0
+        # CN-1 (2026-06-11): per-context dedup for the consent-gate
+        # DEBUG log so the periodic loops (resync 90 s, self-heal 30 s,
+        # hold loops) don't spam the log while consent is revoked.
+        self._consent_denied_logged: set[str] = set()
         self._build_entity_map()
 
     def _build_entity_map(self) -> None:
@@ -374,6 +385,7 @@ class CrowdergyCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
                 api_url=self.api_url,
                 get_token=lambda: self._access_token,
                 refresh_token=self._refresh_access_token,
+                on_auth_failed=self._start_reauth,
             )
         self._sse_client.start(task_name=f"{DOMAIN}_sse_listener")
         if (
@@ -384,6 +396,16 @@ class CrowdergyCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
                 self._sse_consume_loop(),
                 name=f"{DOMAIN}_sse_consumer",
             )
+
+    def _start_reauth(self) -> None:
+        """CN-11 (2026-06-11): SSE-Auth endgültig tot — der Stream hat
+        SSE_AUTH_FAILURE_LIMIT 401-Zyklen hinter sich, Refresh hilft
+        nicht mehr. Aus einem Hintergrund-Task ist
+        `entry.async_start_reauth(hass)` der dokumentierte Weg, den
+        Reauth-Flow zu starten (`ConfigEntryAuthFailed` wirkt nur im
+        Coordinator-/Setup-Kontext). Idempotent — HA dedupliziert
+        laufende Reauth-Flows pro Entry."""
+        self.entry.async_start_reauth(self.hass)
 
     async def _sse_consume_loop(self) -> None:
         """Consumer-Loop: nimmt Frames aus der SSEClient-Queue und
@@ -563,6 +585,11 @@ class CrowdergyCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
         return False
 
     async def async_shutdown(self) -> None:
+        # P3 (2026-06-11): super().async_shutdown() stoppt den
+        # Scheduled-Refresh + Debouncer der Basisklasse — vorher
+        # konnte ein bereits geplanter Tick nach unserem Cleanup
+        # noch feuern.
+        await super().async_shutdown()
         for unsub in self._unsub_listeners:
             unsub()
         self._unsub_listeners.clear()
@@ -599,7 +626,11 @@ class CrowdergyCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
             task.cancel()
         self.state.charge_mode_hold_tasks.clear()
         self.state.held_charge_mode.clear()
-        await self._client.aclose()
+        # P3 (2026-06-11): `_client` ist bis `async_init()` None —
+        # ein Shutdown vor/abseits des regulären Setups darf nicht
+        # an `None.aclose()` sterben.
+        if self._client is not None:
+            await self._client.aclose()
 
     @property
     def last_sse_event_at(self) -> float:
@@ -935,6 +966,41 @@ class CrowdergyCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
         Box schreibt `box_set_consent` die Flags in die Entry-Options."""
         return bool(self.entry.options.get(option_key, True))
 
+    def _remote_control_allowed(self, context: str) -> bool:
+        """Zentrales Remote-Control-Consent-Gate (CN-1, 2026-06-11).
+
+        ALLE cloud-getriebenen Schreibpfade laufen durch die
+        `_apply_*`-Methoden:
+          * SSE-Dispatch (`_handle_ws_message`)
+          * State-Resync-Loop (`telemetry_composer.state_resync_loop`)
+          * Hold-Self-Heal (`_self_heal_holds` aus `_async_update_data`)
+          * Hold-Loops (`_hold_loop` startet nur über
+            `_apply_device_state`/`_start_hold`; `_charge_mode_hold_loop`
+            schreibt über `_apply_charge_mode`)
+        — deshalb darf das Gate zentral am Anfang jeder `_apply_*`-
+        Methode sitzen und deckt damit jeden Pfad ab. Vorher saß es
+        NUR im SSE-Dispatch; Resync-Loop und Self-Heal haben es
+        umgangen (Backend steuerte mit ≤90 s Latenz trotz
+        `consent_remote_control=False` weiter).
+
+        Loggt pro `context` genau EINMAL auf DEBUG, damit die
+        periodischen Loops das Log nicht fluten, solange Consent
+        entzogen ist.
+        """
+        if self._consent(OPT_CONSENT_REMOTE_CONTROL):
+            # Consent (wieder) da → Log-Dedup zurücksetzen, damit ein
+            # erneuter Entzug wieder sichtbar wird.
+            if self._consent_denied_logged:
+                self._consent_denied_logged.clear()
+            return True
+        if context not in self._consent_denied_logged:
+            self._consent_denied_logged.add(context)
+            _LOGGER.debug(
+                "remote-control consent revoked — skipping %s "
+                "(logged once per context)", context,
+            )
+        return False
+
     async def _async_update_data(self) -> dict[str, dict[str, Any]]:
         if not self._consent(OPT_CONSENT_TELEMETRY):
             # Consent entzogen: KEIN Outdoor-Temp-Push, KEINE Telemetrie-
@@ -1185,17 +1251,45 @@ class CrowdergyCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
                 "is_online": True,
             }
 
-        # Hold-loop self-heal. `_apply_device_state` only fires on
-        # is_on *transitions* coming through the SSE WS — but the MPC
-        # tick re-decides the same state every 5 minutes, and HA
-        # restarts wipe live hold tasks. Without this guard, a device
-        # that should be ON loses its periodic re-write the moment a
-        # transition is missed (warmwasser case 2026-05-22: hysteresis
-        # 53→60, MPC writes "60" once, register reverts, next MPC tick
-        # is also "60" → no transition → no rewrite → device stays
-        # off). Walks each Crowdergize-active device once per tick and
-        # restarts the hold task if it's gone.
-        for device_id in list(result.keys()):
+        await self._self_heal_holds(list(result.keys()))
+
+        return result
+
+    async def _self_heal_holds(self, device_ids: list[str]) -> None:
+        """Hold-loop self-heal. `_apply_device_state` only fires on
+        is_on *transitions* coming through the SSE WS — but the MPC
+        tick re-decides the same state every 5 minutes, and HA
+        restarts wipe live hold tasks. Without this guard, a device
+        that should be ON loses its periodic re-write the moment a
+        transition is missed (warmwasser case 2026-05-22: hysteresis
+        53→60, MPC writes "60" once, register reverts, next MPC tick
+        is also "60" → no transition → no rewrite → device stays
+        off). Walks each Crowdergize-active device once per tick and
+        restarts the hold task if it's gone.
+
+        CN-1 (2026-06-11): früher Skip ohne Remote-Control-Consent —
+        das zentrale Gate in `_apply_device_state` würde ohnehin
+        greifen, aber so läuft kein nutzloses Diffing und das Log
+        bleibt eindeutig.
+
+        CN-3 (2026-06-11): früher Skip bei SSE-Staleness — derselbe
+        Threshold wie der Bail im `_hold_loop`. Vorher restartete der
+        Self-Heal den Hold jeden 30-s-Tick und schrieb den gecachten
+        Zustand zurück, womit ein User-Eingriff während eines Backend-
+        Outages alle ~30 s überschrieben wurde („User regains manual
+        control" galt nur bis zum nächsten Tick).
+        """
+        if not self._remote_control_allowed("hold-self-heal"):
+            return
+        staleness = time.time() - self.state.last_sse_event_at
+        if staleness > SSE_STALE_THRESHOLD_S:
+            _LOGGER.debug(
+                "hold self-heal: skipping — Crowdergy SSE silent for "
+                "%.1fs (> %ds), user keeps manual control",
+                staleness, SSE_STALE_THRESHOLD_S,
+            )
+            return
+        for device_id in device_ids:
             if not self.state.active_state.get(device_id, False):
                 continue
             if device_id not in self.state.on_state:
@@ -1220,8 +1314,6 @@ class CrowdergyCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
                 device_id, self.state.on_state[device_id]
             )
 
-        return result
-
     async def async_post_command(
         self, device_id: str, payload: dict[str, Any]
     ) -> bool:
@@ -1229,8 +1321,10 @@ class CrowdergyCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
 
         Payload must include `action` plus the action-specific fields the
         backend's DeviceCommand schema demands, e.g.:
-          {"action": "toggle_active",  "is_active": True}
-          {"action": "set_soc_min",    "soc_min_percent": 25.0}
+          {"action": "toggle_active", "is_active": True}
+        (P3 2026-06-11: das frühere `set_soc_min`-Beispiel entfernt —
+        die Action existiert backend-seitig nicht mehr; einziger
+        Connector-Caller ist der Crowdergize-Switch mit toggle_active.)
         """
         try:
             response = await self._authenticated_request(
@@ -1429,7 +1523,11 @@ class CrowdergyCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
                 k: v for k, v in data.items()
                 if k not in ("type",)
             }
-            _LOGGER.warning("Crowdergy SSE command frame: %s", payload_keys)
+            # P3 (2026-06-11): WARNING → DEBUG. Command-Frames sind
+            # Normalbetrieb (jeder Solver-Tick); als WARNING wuchs
+            # home-assistant.log unnötig — analog zum Telemetry-Frame-
+            # Log (Cluster D 2026-06-09).
+            _LOGGER.debug("Crowdergy SSE command frame: %s", payload_keys)
             if action == "set_charge_mode" and device_id:
                 # Dispatch nach Device-Typ:
                 #   * battery  → Phase 3 Option D: Lademodus-Select +
@@ -1440,7 +1538,16 @@ class CrowdergyCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
                      if d.get(CONF_DEVICE_ID) == device_id),
                     None,
                 )
-                dev_type = (dev or {}).get(CONF_DEVICE_TYPE, "")
+                # P3 (2026-06-11): unbekannte device_id fiel vorher in
+                # den Wallbox-Else-Zweig (Cancel-Hold / Apply für ein
+                # Gerät das es lokal nicht gibt). Frame ignorieren.
+                if dev is None:
+                    _LOGGER.debug(
+                        "set_charge_mode: unknown device_id %s — "
+                        "ignoring command frame", device_id,
+                    )
+                    return
+                dev_type = dev.get(CONF_DEVICE_TYPE, "")
                 if dev_type == "battery":
                     mode = data.get("mode") or "passive"
                     setpoint_kw = data.get("setpoint_kw")
@@ -1529,7 +1636,15 @@ class CrowdergyCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
         actually obeying Crowdergy's commanded mode. The hold loop
         itself calls this method with `schedule_hold=False` so it
         doesn't keep reseeding its own task.
+
+        CN-1: zentrales Consent-Gate — alle Caller (SSE-Dispatch,
+        Snapshot/Restore, Charge-Mode-Hold-Loop) sind cloud-getrieben,
+        siehe `_remote_control_allowed`. Gate deckt damit auch den
+        Hold-Start (`_start_charge_mode_hold`) ab, der nur von hier
+        aus erreichbar ist.
         """
+        if not self._remote_control_allowed("_apply_charge_mode"):
+            return
         dev = next(
             (d for d in self.devices if d.get(CONF_DEVICE_ID) == device_id),
             None,
@@ -1706,7 +1821,13 @@ class CrowdergyCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
         guards against auto-revert. No-ops cleanly if anything's
         missing so a partial / new-style config can't crash the
         coordinator.
+
+        CN-1 (2026-06-11): zentrales Remote-Control-Consent-Gate.
+        Jeder Caller ist cloud-getrieben (SSE-Dispatch, State-Resync,
+        Hold-Self-Heal) — siehe `_remote_control_allowed`-Docstring.
         """
+        if not self._remote_control_allowed("_apply_device_state"):
+            return
         dev = next(
             (d for d in self.devices if d.get(CONF_DEVICE_ID) == device_id),
             None,
@@ -1749,7 +1870,7 @@ class CrowdergyCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
         # HOLD_INITIAL_DELAY falls actual doch noch != expected ist.
         expected = self._expected_state_value(raw_value, on, domain)
         actual = self._read_current_state(entity_id)
-        if expected is not None and actual == expected:
+        if expected is not None and self._states_match(actual, expected, domain):
             self._start_hold(device_id, entity_id, raw_value, domain, on)
             return
 
@@ -1776,7 +1897,12 @@ class CrowdergyCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
              (single HA entity handles both modes).
           3. Otherwise: skip — the device isn't actually wired for
              cooling at the HA layer, log debug and move on.
+
+        CN-1: zentrales Consent-Gate, alle Caller cloud-getrieben
+        (SSE-Dispatch, State-Resync) — siehe `_remote_control_allowed`.
         """
+        if not self._remote_control_allowed("_apply_cool_state"):
+            return
         dev = next(
             (d for d in self.devices if d.get(CONF_DEVICE_ID) == device_id),
             None,
@@ -1876,7 +2002,13 @@ class CrowdergyCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
 
         Idempotent: skip write wenn HA-State bereits gleich (Mode-
         Select + Setpoint-Toleranz ±10 W).
+
+        CN-1: zentrales Consent-Gate, alle Caller cloud-getrieben
+        (SSE command-Frame, AI-off-Übergabe aus dem SSE-Dispatch) —
+        siehe `_remote_control_allowed`.
         """
+        if not self._remote_control_allowed("_apply_battery_setpoint"):
+            return
         dev = next(
             (d for d in self.devices if d.get(CONF_DEVICE_ID) == device_id),
             None,
@@ -1988,7 +2120,12 @@ class CrowdergyCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
              v3.7.1+) → entity_control hat `set_temperature` eingebaut,
              dispatch direkt dagegen.
           3. Sonst (Manuell-Mode ohne expliziten Setpoint) → skip,
-             Heizung läuft weiter binary on/off."""
+             Heizung läuft weiter binary on/off.
+
+        CN-1: zentrales Consent-Gate, einziger Caller ist der SSE-
+        Dispatch (cloud-getrieben) — siehe `_remote_control_allowed`."""
+        if not self._remote_control_allowed("_apply_vorlauf_setpoint"):
+            return
         dev = next(
             (d for d in self.devices if d.get(CONF_DEVICE_ID) == device_id),
             None,
@@ -2008,7 +2145,20 @@ class CrowdergyCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
         # Idempotenz: wenn HA bereits den exakten Wert reportet (≤ 0.05 °C
         # Toleranz für Float-Rauschen), kein Re-Write — climate.set_
         # temperature ist auf manchen WPs ebenso piepend wie set_hvac_mode.
-        actual_raw = self._read_current_state(entity_id)
+        #
+        # CN-4 (2026-06-11): bei climate.* steht im state der HVAC-Mode
+        # („heat"), der Ziel-Setpoint sitzt im Attribut `temperature`.
+        # Vorher lief `float("heat")` in den except-Pfad → Guard war
+        # wirkungslos und `climate.set_temperature` feuerte bei JEDEM
+        # Solver-Tick (~5 min) auch bei identischem Wert.
+        if domain == "climate":
+            state = self.hass.states.get(entity_id)
+            actual_raw = (
+                None if state is None
+                else state.attributes.get("temperature")
+            )
+        else:
+            actual_raw = self._read_current_state(entity_id)
         if actual_raw is not None:
             try:
                 if abs(float(actual_raw) - temperature_c) <= 0.05:
@@ -2190,17 +2340,35 @@ class CrowdergyCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
         """Prune every per-device bookkeeping dict for a removed
         device. Called from `async_remove_config_entry_device` so
         stale keys don't accumulate across the lifetime of one
-        coordinator instance (HA doesn't force a reload on device
-        removal). Idempotent — missing keys are silently ignored."""
+        coordinator instance (`async_remove_config_entry_device`
+        schedules a reload since CN-8, this keeps the window until
+        the reload lands clean). Idempotent — missing keys are
+        silently ignored."""
         self._cancel_hold(device_id)
         self._cancel_charge_mode_hold(device_id)
+        # CN-8 (2026-06-11): auch die aktive Geräteliste + den
+        # Entity-Index mitpflegen — vorher PATCHte der Coordinator
+        # das gelöschte Device bis zum nächsten Reload weiter
+        # (404-Spam im Telemetry-Loop).
+        self.devices = [
+            d for d in self.devices
+            if d.get(CONF_DEVICE_ID) != device_id
+        ]
+        self._entity_to_devices = {
+            entity_id: remaining
+            for entity_id, ids in self._entity_to_devices.items()
+            if (remaining := [i for i in ids if i != device_id])
+        }
         for d in (
             self.state.active_state,
             self.state.on_state,
+            # P3 (2026-06-11): cool_state fehlte im Pruning.
+            self.state.cool_state,
             self._prev_energy_kwh,
             self._prev_energy_kwh_discharged,
             self._last_sent_payload,
             self._last_send_at,
+            self._last_mirror_at,
             self._last_sent_hash,
             self._pre_crowdergize_charge_mode,
         ):
@@ -2261,13 +2429,17 @@ class CrowdergyCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
                 if (
                     hold_mode == ENTITY_CONTROL_HOLD_AUTO
                     and expected is not None
-                    and actual == expected
+                    and self._states_match(actual, expected, domain)
                 ):
                     # AUTO + state stimmt → skip. Spart Service-Calls
                     # und Piep-Bestätigungen bei AC.
                     await asyncio.sleep(HOLD_POLL_INTERVAL)
                     continue
-                if actual is not None and expected is not None and actual != expected:
+                if (
+                    actual is not None
+                    and expected is not None
+                    and not self._states_match(actual, expected, domain)
+                ):
                     _LOGGER.info(
                         "hold: %s reverted (%r → %r), re-writing",
                         entity_id, expected, actual,
@@ -2280,6 +2452,27 @@ class CrowdergyCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
             raise
         except Exception:  # noqa: BLE001
             _LOGGER.exception("hold loop for %s crashed", device_id)
+
+    @staticmethod
+    def _states_match(
+        actual: Any, expected: Any, domain: str
+    ) -> bool:
+        """Ist-State vs. erwarteter Wert — domain-bewusst (CN-6,
+        2026-06-11). HA normalisiert number-/input_number-States auf
+        Float-Repräsentation ("60.0"), während `value_on`/`value_off`
+        meist als "60" konfiguriert sind. Der frühere String-Vergleich
+        meldete dadurch nicht existenten Drift und der AUTO-Hold
+        schrieb alle 30 s grundlos nach (Muster: `_read_is_on_state`
+        vergleicht number-Domains längst numerisch).
+        """
+        if actual is None or expected is None:
+            return False
+        if domain in ("number", "input_number"):
+            try:
+                return float(actual) == float(expected)
+            except (TypeError, ValueError):
+                pass
+        return str(actual) == str(expected)
 
     def _expected_state_value(
         self, raw_value: Any, on: bool, domain: str
