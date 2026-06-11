@@ -1126,31 +1126,37 @@ class CrowdergyCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
                 if prev_out is not None:
                     raw = energy_kwh_total_out - prev_out
                     out_delta = raw if raw > 0 else 0.0
-            energy_kwh_delta: float | None = None
-            if out_delta is not None:
-                # Two-entity storage device → signed net.
-                # Positive = device delivered to home (Bezug/Entladen).
-                # Math-Flip 2026-06-11: vorher `out − in`, jetzt
-                # `in − out` damit entity_energy_total semantisch das
-                # Bezug/Entladen-Counter ist (= Label-Match).
-                energy_kwh_delta = (in_delta or 0.0) - out_delta
-            elif in_delta is not None:
-                # Single-entity consumption (or production) device →
-                # positive Δ as before.
-                energy_kwh_delta = in_delta
-            # invert_power_sign muss SOWOHL power_kw ALS AUCH
-            # energy_kwh_delta umkehren — sonst entsteht ein
-            # Sign-Mismatch bei Inverter-Setups die beide
-            # Konventionen entgegengesetzt zu Crowdergy haben (z.B.
-            # Wechselrichter die Einspeisung positiv exposen + die
-            # Einspeise-Zähl-Entity als entity_energy_total mapped).
-            # Vor 2026-05-30 wurde nur power_kw invertiert →
+            # E2E-Konvention 2026-06-11 (v3.21.4): zwei UNSIGNED
+            # Felder pro Tick, eines pro Richtung. Backend ≥ heutiger
+            # Deploy weiß was zu tun ist (deriviert signed
+            # energy_kwh_delta = in - out für Backward-Compat).
+            # `energy_kwh_delta` wird in v3.21.4 weiterhin mitgesendet
+            # damit ältere Backend-Versionen die signed Form lesen
+            # können (Übergangs-Schutz; einer der beiden Pfade gewinnt
+            # je nach Backend-Stand).
+            energy_kwh_in_delta_out: float | None = in_delta
+            energy_kwh_out_delta_out: float | None = out_delta
+            if energy_kwh_in_delta_out is None and energy_kwh_out_delta_out is None:
+                # Kein Counter mapped — nichts zu senden.
+                energy_kwh_delta = None
+            else:
+                energy_kwh_delta = (
+                    (energy_kwh_in_delta_out or 0.0)
+                    - (energy_kwh_out_delta_out or 0.0)
+                )
+            # invert_power_sign muss alle Energie-Felder konsistent
+            # spiegeln. Vor 2026-05-30 wurde nur power_kw invertiert →
             # kWh-Bezug/Einspeisung kamen vertauscht beim Backend an.
-            if (
-                energy_kwh_delta is not None
-                and dev.get(CONF_INVERT_POWER_SIGN)
-            ):
-                energy_kwh_delta = -energy_kwh_delta
+            # Inversion = "Counter A ist eigentlich Counter B" → in/out
+            # tauschen, und das daraus deriviert signed delta wird
+            # automatisch negiert.
+            if dev.get(CONF_INVERT_POWER_SIGN):
+                energy_kwh_in_delta_out, energy_kwh_out_delta_out = (
+                    energy_kwh_out_delta_out,
+                    energy_kwh_in_delta_out,
+                )
+                if energy_kwh_delta is not None:
+                    energy_kwh_delta = -energy_kwh_delta
             # Derive is_on from the live HA state of entity_control so a
             # user-driven HA-side toggle propagates up to the backend
             # (and from there to iOS via SSE). Returns None when we
@@ -1184,6 +1190,15 @@ class CrowdergyCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
                 payload["energy_kwh_total"] = energy_kwh_total
             if energy_kwh_delta is not None:
                 payload["energy_kwh_delta"] = energy_kwh_delta
+            # Neue explizite Felder (Backend ≥ heutiger Deploy
+            # liest diese vorrangig; ältere Backends ignorieren sie
+            # weil Pydantic mit `extra="forbid"` nur die deklarierten
+            # Felder annimmt — der signed energy_kwh_delta deckt den
+            # Fall ab).
+            if energy_kwh_in_delta_out is not None:
+                payload["energy_kwh_in_delta"] = energy_kwh_in_delta_out
+            if energy_kwh_out_delta_out is not None:
+                payload["energy_kwh_out_delta"] = energy_kwh_out_delta_out
             if is_on is not None:
                 payload["is_on"] = is_on
             if cool_on is not None:
