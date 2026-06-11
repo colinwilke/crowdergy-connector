@@ -14,6 +14,9 @@ DEVICE_TYPE_MODELS = {
     "grid": "Grid Connection",
     "heating": "Heat Pump (Heating)",
     "warmwater": "Heat Pump (DHW)",
+    # CN-13 (2026-06-11): aircon fehlte — Klimaanlagen erschienen als
+    # "Generic Energy Device" in der HA-Geräteliste.
+    "aircon": "Air Conditioner",
     "generic": "Generic Energy Device",
     "haushalt": "Household Consumption",
 }

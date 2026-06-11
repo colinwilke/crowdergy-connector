@@ -11,17 +11,23 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from homeassistant.util import slugify
 
-from .const import CONF_DEVICE_ID, CONF_DEVICE_NAME, CONF_DEVICE_TYPE, CONF_DEVICES, DOMAIN
+from .const import (
+    CONF_DEVICE_ID,
+    CONF_DEVICE_NAME,
+    CONF_DEVICE_TYPE,
+    CONF_DEVICES,
+    CONTROLLABLE_TYPES,
+    DOMAIN,
+)
 from .coordinator import CrowdergyCoordinator
 from .device_registry import get_device_info
 
 _LOGGER = logging.getLogger(__name__)
 
-# Crowdergize-Switch nur für controllable Typen. Mirrors
-# `_CONTROLLABLE_TYPES` in config_flow.py.
-_CROWDERGIZE_TYPES = {
-    "battery", "wallbox", "heating", "warmwater", "generic"
-}
+# Crowdergize-Switch nur für controllable Typen. CN-13 (2026-06-11):
+# SSOT in const.py — die lokale Kopie hier hatte `aircon` nicht,
+# Klimaanlagen bekamen deshalb nie einen Crowdergy-AI-Switch.
+_CROWDERGIZE_TYPES = CONTROLLABLE_TYPES
 
 
 async def async_setup_entry(

@@ -32,6 +32,17 @@ DEVICE_TYPES = [
     "heating", "warmwater", "aircon",
     "generic", "haushalt",
 ]
+
+# Device types the Crowdergy app can switch on/off through the
+# user-mapped entity_control. Solar / Grid / Haushalt sind read-only.
+# CN-13 (2026-06-11): SSOT hier in const.py — vorher dupliziert in
+# config_flow.py (`_CONTROLLABLE_TYPES`) und switch.py
+# (`_CROWDERGIZE_TYPES`, dort fehlte `aircon` → Klimaanlagen bekamen
+# nie einen Crowdergy-AI-Switch).
+CONTROLLABLE_TYPES = frozenset(
+    {"battery", "wallbox", "heating", "warmwater", "aircon", "generic"}
+)
+
 UPDATE_INTERVAL = 30
 
 CONF_DEVICE_NAME = "device_name"

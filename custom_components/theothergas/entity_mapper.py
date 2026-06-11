@@ -27,7 +27,10 @@ Wichtige Designentscheidungen:
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Literal
+# P3 (2026-06-11): `Any` wurde in Signaturen genutzt, war aber nie
+# importiert — dank `from __future__ import annotations` kein
+# Laufzeitfehler, aber jede Introspektion (get_type_hints) bräche.
+from typing import Any, Literal
 
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import device_registry as dr, entity_registry as er
@@ -51,9 +54,11 @@ from .const import (
 
 # Aliase für besseres Lesen unten — match den Konvention in
 # config_flow.py / coordinator.py.
+# CN-13 (2026-06-11): aircon ergänzt — fehlte hier sowie in
+# NAME_HINTS und der Sortier-Order.
 DeviceType = Literal[
     "solar", "battery", "wallbox", "grid",
-    "heating", "warmwater", "generic", "haushalt",
+    "heating", "warmwater", "aircon", "generic", "haushalt",
 ]
 
 # Welche Crowdergy-Typen eine HA-Integration üblicherweise bedient.
@@ -123,6 +128,7 @@ NAME_HINTS: dict[str, frozenset[str]] = {
     "grid":      frozenset({"grid", "netz", "meter", "zähler", "zaehler", "bezug", "einspeisung"}),
     "heating":   frozenset({"heating", "heat", "heizung", "hp", "wp", "waermepumpe", "warmpump"}),
     "warmwater": frozenset({"warmwater", "ww", "dhw", "warmwasser", "hot_water", "boiler"}),
+    "aircon":    frozenset({"aircon", "ac", "klima", "klimaanlage", "klimaanlagen", "airco", "split"}),
     "haushalt":  frozenset({"haushalt", "household", "load", "hausverbrauch"}),
 }
 
@@ -404,7 +410,7 @@ def _disambiguate_by_name(meta: EntityMeta, types: list[str]) -> list[str]:
     """
     tokens = set(meta.name_tokens)
     # Reihenfolge ist relevant: spezifischere Typen zuerst.
-    priority = ["warmwater", "haushalt", "wallbox", "battery", "solar", "grid", "heating", "generic"]
+    priority = ["warmwater", "haushalt", "wallbox", "battery", "solar", "grid", "aircon", "heating", "generic"]
     for crowdergy_type in priority:
         if crowdergy_type in types and tokens & NAME_HINTS.get(crowdergy_type, frozenset()):
             return [crowdergy_type]
@@ -501,12 +507,12 @@ def group_candidates_by_device(
         )
 
     # Stabile, gut lesbare Reihenfolge: solar zuerst, dann battery,
-    # grid, heatpump-family, wallbox, generic — entspricht der iOS-
-    # Tile-Sortierung.
+    # grid, heatpump-family (inkl. aircon), wallbox, generic —
+    # entspricht der iOS-Tile-Sortierung.
     order = {
         "solar": 0, "battery": 1, "grid": 2,
-        "heating": 3, "warmwater": 4, "wallbox": 5,
-        "generic": 6, "haushalt": 7,
+        "heating": 3, "warmwater": 4, "aircon": 5,
+        "wallbox": 6, "generic": 7, "haushalt": 8,
     }
     groups.sort(key=lambda g: order.get(g.suggested_type, 99))
     return groups
@@ -520,6 +526,7 @@ def _default_name_for_type(dtype: str) -> str:
         "grid": "Netz",
         "heating": "Heizung",
         "warmwater": "Warmwasser",
+        "aircon": "Klimaanlage",
         "generic": "Verbraucher",
         "haushalt": "Hausverbrauch",
     }.get(dtype, "Gerät")
@@ -676,8 +683,8 @@ def merge_llm_suggestions(
     # Stabile Sortier-Order beibehalten (siehe group_candidates_by_device).
     order = {
         "solar": 0, "battery": 1, "grid": 2,
-        "heating": 3, "warmwater": 4, "wallbox": 5,
-        "generic": 6, "haushalt": 7,
+        "heating": 3, "warmwater": 4, "aircon": 5,
+        "wallbox": 6, "generic": 7, "haushalt": 8,
     }
     out = list(by_type.values())
     out.sort(key=lambda g: order.get(g.suggested_type, 99))
