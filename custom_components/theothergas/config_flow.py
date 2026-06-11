@@ -395,6 +395,37 @@ def _vendor_preset_pick_schema(presets: list[dict[str, Any]]) -> vol.Schema:
     )
 
 
+def _resolve_integration_domain(
+    hass: Any, entity_map: dict[str, str]
+) -> str | None:
+    """Aus den gemappten Entities die HA-Integration ableiten.
+
+    Geht über die Entity-Registry → ConfigEntry-Lookup; entity_id-
+    Präfixe sind unzuverlässig (user-renamable). Liefert den
+    ConfigEntry.domain des ersten auflösbaren Eintrags (alle Entities
+    eines Geräte-Setups gehören normalerweise demselben ConfigEntry).
+    Returns None bei Template-Sensoren, nicht-registrierten Entities
+    oder fehlendem ConfigEntry — Backend akzeptiert NULL, der box-
+    manager filtert dann allerdings das Preset raus.
+    """
+    try:
+        from homeassistant.helpers import entity_registry as er
+    except Exception:  # pragma: no cover - HA-only path
+        return None
+    registry = er.async_get(hass)
+    for entity_id in entity_map.values():
+        entry = registry.async_get(entity_id)
+        if entry is None or entry.config_entry_id is None:
+            continue
+        config_entry = hass.config_entries.async_get_entry(
+            entry.config_entry_id
+        )
+        if config_entry is None:
+            continue
+        return config_entry.domain
+    return None
+
+
 def _contribute_form_schema(
     vendor: str | None, model: str | None, notes: str | None,
 ) -> vol.Schema:
@@ -2430,6 +2461,16 @@ class CrowdergyOptionsFlow(OptionsFlow):
                 "model": model,
                 "entity_map": entity_map,
                 "notes": notes,
+                # 2026-06-11: integration_domain mitschicken, sonst
+                # filtert der box-manager das Preset raus (SUPPORTED_
+                # INTEGRATIONS check). Wir leiten es aus der zuerst-
+                # gemappten Entity über die HA-Entity-Registry und das
+                # zugehörige ConfigEntry ab — das ist die einzige
+                # zuverlässige Quelle (Entity-IDs sind frei vom User
+                # umbenennbar, der ConfigEntry.domain ist's nicht).
+                "integration_domain": _resolve_integration_domain(
+                    self.hass, entity_map
+                ),
             }
             # Box-Mapping-Umbau (2026-06-10): Integration der gemappten
             # Entities mitschicken — Pflichtbaustein für Box-taugliche
