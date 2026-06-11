@@ -173,3 +173,80 @@ async def test_import_flow_without_consent_flags_keeps_options_empty(
     )
     assert result["type"] == "create_entry"
     assert result["options"] == {}
+
+
+async def test_import_flow_repairing_merges_consent_options(
+    hass: HomeAssistant,
+):
+    """CN-2 (2026-06-11): Re-Pairing (Entry existiert) muss die frisch
+    erfassten Consent-Flags in die Entry-Options mergen + Reload
+    schedulen — vorher wurden nur die Tokens aktualisiert und die
+    Box-Wizard-Consents verworfen (Invariante 5)."""
+    from unittest.mock import patch
+
+    from custom_components.theothergas.const import (
+        OPT_CONSENT_REMOTE_CONTROL,
+        OPT_CONSENT_TELEMETRY,
+    )
+
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        unique_id=CLAIM[CONF_USER_ID],
+        data=validate_provision_data(dict(CLAIM)),
+        options={
+            OPT_CONSENT_TELEMETRY: True,
+            OPT_CONSENT_REMOTE_CONTROL: True,
+        },
+    )
+    entry.add_to_hass(hass)
+
+    with patch.object(
+        hass.config_entries, "async_schedule_reload"
+    ) as mock_reload:
+        result = await hass.config_entries.flow.async_init(
+            DOMAIN,
+            context={"source": "import"},
+            data={
+                **CLAIM,
+                "consent_telemetry": True,
+                "consent_remote_control": False,
+            },
+        )
+
+    assert result["type"] == "abort"
+    assert result["reason"] == "already_configured"
+    # Konsent-Flags aus dem Re-Pairing greifen sofort …
+    assert entry.options[OPT_CONSENT_REMOTE_CONTROL] is False
+    assert entry.options[OPT_CONSENT_TELEMETRY] is True
+    # … Tokens wie gehabt aktualisiert …
+    assert entry.data[CONF_ACCESS_TOKEN] == "access-jwt"
+    # … und der Entry wird neu geladen, damit das Gate sofort gilt.
+    mock_reload.assert_called_once_with(entry.entry_id)
+
+
+async def test_import_flow_repairing_without_flags_keeps_options(
+    hass: HomeAssistant,
+):
+    """Ältere Box ohne consent_*-Felder im Payload: bestehende Options
+    bleiben unangetastet (kein implizites Default-True-Überschreiben)."""
+    from unittest.mock import patch
+
+    from custom_components.theothergas.const import (
+        OPT_CONSENT_REMOTE_CONTROL,
+    )
+
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        unique_id=CLAIM[CONF_USER_ID],
+        data=validate_provision_data(dict(CLAIM)),
+        options={OPT_CONSENT_REMOTE_CONTROL: False},
+    )
+    entry.add_to_hass(hass)
+
+    with patch.object(hass.config_entries, "async_schedule_reload"):
+        result = await hass.config_entries.flow.async_init(
+            DOMAIN, context={"source": "import"}, data=dict(CLAIM)
+        )
+
+    assert result["reason"] == "already_configured"
+    assert entry.options[OPT_CONSENT_REMOTE_CONTROL] is False

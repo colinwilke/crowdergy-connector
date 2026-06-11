@@ -234,6 +234,18 @@
           "device_type": "Weiteres Gerät hinzufügen",
           "finish": "Fertig — Einrichtung abschließen"
         }
+      },
+      "reauth_confirm": {
+        "title": "Crowdergy neu anmelden",
+        "description": "Die gespeicherten Crowdergy-Zugangstoken sind nicht mehr gültig. Melde dich für {email} neu an, um ein frisches Token-Paar zu erzeugen.",
+        "data": {
+          "email": "E-Mail",
+          "password": "Passwort"
+        },
+        "data_description": {
+          "password": "Passwort deines Crowdergy-Kontos. Wird nur einmal gegen ein Token getauscht — nicht in Home Assistant gespeichert."
+        },
+        "submit": "Anmelden"
       }
     },
     "selector": {
@@ -258,7 +270,9 @@
     },
     "abort": {
       "already_configured": "Dieses Crowdergy-Konto ist auf dieser Home-Assistant-Instanz schon eingerichtet.",
-      "invalid_provision_data": "Box-Provisionierung fehlgeschlagen: Die übergebenen Pairing-Daten sind unvollständig oder fehlerhaft."
+      "invalid_provision_data": "Box-Provisionierung fehlgeschlagen: Die übergebenen Pairing-Daten sind unvollständig oder fehlerhaft.",
+      "reauth_successful": "Neuanmeldung erfolgreich.",
+      "reauth_entry_missing": "Der Eintrag für die Neuanmeldung existiert nicht mehr."
     }
   },
   "options": {

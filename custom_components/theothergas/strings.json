@@ -234,6 +234,18 @@
           "device_type": "Add another device",
           "finish": "Done — finish setup"
         }
+      },
+      "reauth_confirm": {
+        "title": "Re-authenticate Crowdergy",
+        "description": "The stored Crowdergy tokens are no longer valid. Sign in again for {email} to issue a fresh token pair.",
+        "data": {
+          "email": "Email",
+          "password": "Password"
+        },
+        "data_description": {
+          "password": "Password of your Crowdergy account. Exchanged once for a token, not stored in Home Assistant."
+        },
+        "submit": "Sign in"
       }
     },
     "selector": {
@@ -258,7 +270,9 @@
     },
     "abort": {
       "already_configured": "This Crowdergy account is already configured on this Home Assistant instance.",
-      "invalid_provision_data": "Box provisioning failed: the provided pairing data is incomplete or malformed."
+      "invalid_provision_data": "Box provisioning failed: the provided pairing data is incomplete or malformed.",
+      "reauth_successful": "Re-authentication was successful.",
+      "reauth_entry_missing": "The config entry to re-authenticate no longer exists."
     }
   },
   "options": {

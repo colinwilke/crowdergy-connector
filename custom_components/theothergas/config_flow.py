@@ -71,6 +71,7 @@ from .const import (
     ENTITY_CONTROL_HOLD_ALWAYS,
     ENTITY_CONTROL_HOLD_AUTO,
     ENTITY_CONTROL_HOLD_NEVER,
+    CONTROLLABLE_TYPES,
     DEFAULT_API_URL,
     DEVICE_TYPES,
     DOMAIN,
@@ -95,10 +96,9 @@ DEVICE_TYPE_LABELS_DE = {
 }
 
 # Device types that the Crowdergy app can switch on/off through the
-# user-mapped entity_control. Solar / Grid / Haushalt are read-only.
-_CONTROLLABLE_TYPES = {
-    "battery", "wallbox", "heating", "warmwater", "aircon", "generic",
-}
+# user-mapped entity_control. CN-13 (2026-06-11): SSOT liegt jetzt in
+# const.py (CONTROLLABLE_TYPES); Alias bleibt für die ~10 Call-Sites.
+_CONTROLLABLE_TYPES = CONTROLLABLE_TYPES
 
 # v2.4: device types that can carry the "included in haushalt sensor"
 # flag. Classic consumers — their draw is plausibly already counted by
@@ -342,30 +342,53 @@ def _config_mode_schema(
 
 
 async def _fetch_vendor_presets(
-    api_url: str, token: str, device_type: str,
+    hass,
+    device_type: str,
+    *,
+    entry=None,
+    api_url: str = "",
+    token: str = "",
 ) -> list[dict[str, Any]]:
     """GET /api/v1/crowd-presets/lookup für einen Device-Type.
 
     Returns the list of presets (sorted desc by contribution_count
     backend-seitig). Bei Netzwerk-/Backend-Fehler: leere Liste, der
     aufrufende Step skipt den Picker und geht direkt zu device_entities.
+
+    CN-12 (2026-06-11): läuft über `_authenticated_config_request`
+    (401-Refresh + Client-Bau im Executor statt im Event-Loop). Im
+    Options-Flow `entry` übergeben; im Initial-Flow (vor Entry-
+    Existenz) explizite `api_url`/`token`-Credentials.
     """
     try:
-        async with httpx.AsyncClient(timeout=10.0) as client:
-            response = await client.get(
-                f"{api_url}/api/v1/crowd-presets/lookup",
-                params={"device_type": device_type},
-                headers={"Authorization": f"Bearer {token}"},
-            )
-            response.raise_for_status()
-            data = response.json()
+        response = await _authenticated_config_request(
+            hass, entry, "GET", "/api/v1/crowd-presets/lookup",
+            api_url=api_url, access_token=token,
+            params={"device_type": device_type},
+        )
+        response.raise_for_status()
+        data = response.json()
     except (httpx.HTTPStatusError, httpx.RequestError, ValueError) as err:
         _LOGGER.debug("vendor-preset lookup failed: %s", err)
         return []
-    presets = data.get("presets") or []
+    presets = (data.get("presets") or []) if isinstance(data, dict) else []
     if not isinstance(presets, list):
         return []
-    return [p for p in presets if isinstance(p, dict)]
+    # CN-14 (2026-06-11): Pflichtkeys defensiv prüfen — ein Preset
+    # ohne vendor/model crasht sonst den Picker
+    # (`_vendor_preset_pick_schema` indiziert beide hart).
+    out: list[dict[str, Any]] = []
+    for p in presets:
+        if not isinstance(p, dict):
+            continue
+        if not {"vendor", "model"} <= p.keys():
+            _LOGGER.debug(
+                "vendor-preset without vendor/model dropped (keys: %s)",
+                sorted(p.keys()),
+            )
+            continue
+        out.append(p)
+    return out
 
 
 def _vendor_preset_pick_schema(presets: list[dict[str, Any]]) -> vol.Schema:
@@ -1197,12 +1220,15 @@ def _build_device_record(
 
 
 async def _register_device(
-    api_url: str,
-    token: str,
+    hass,
+    entry,
     device_type: str,
     device_name: str,
     entity_input: dict[str, Any],
     location: dict[str, str],
+    *,
+    api_url: str = "",
+    token: str = "",
 ) -> dict[str, Any]:
     """Register a device on the backend and return the full device dict.
 
@@ -1210,6 +1236,10 @@ async def _register_device(
     `device_field_spec.SPEC` — siehe `device_field_spec.py`. Beide
     Pfade (POST hier, PUT in `_update_device_backend`) konsumieren
     dieselbe Spec, damit Field-Drift ausgeschlossen ist.
+
+    CN-12 (2026-06-11): POST läuft über `_authenticated_config_request`
+    (401-Refresh + Client-Bau im Executor). `entry=None` + explizite
+    Credentials nur für den Initial-Flow vor Entry-Existenz.
     """
     device_config = build_payload(
         mode="create",
@@ -1222,21 +1252,20 @@ async def _register_device(
             CONF_REGION: location.get(CONF_REGION, ""),
         },
     )
-    async with httpx.AsyncClient(timeout=15.0) as client:
-        response = await client.post(
-            f"{api_url}/api/v1/devices",
-            headers={"Authorization": f"Bearer {token}"},
-            json=device_config,
-        )
-        response.raise_for_status()
-        result = response.json()
+    response = await _authenticated_config_request(
+        hass, entry, "POST", "/api/v1/devices",
+        api_url=api_url, access_token=token,
+        json=device_config,
+    )
+    response.raise_for_status()
+    result = response.json()
 
     return _build_device_record(result["id"], device_type, device_name, entity_input)
 
 
 async def _update_device_backend(
-    api_url: str,
-    token: str,
+    hass,
+    entry,
     device_id: str,
     device_type: str,
     device_name: str,
@@ -1249,6 +1278,8 @@ async def _update_device_backend(
     2026-06-03: zillmann's shares_hardware ging im Edit-Flow nie
     ans Backend; aircon `included_in_haushalt` fiel beim Edit
     silent auf False).
+
+    CN-12 (2026-06-11): PUT über `_authenticated_config_request`.
     """
     payload = build_payload(
         mode="update",
@@ -1256,13 +1287,11 @@ async def _update_device_backend(
         name=device_name,
         entity_input=entity_input or {},
     )
-    async with httpx.AsyncClient(timeout=15.0) as client:
-        response = await client.put(
-            f"{api_url}/api/v1/devices/{device_id}",
-            headers={"Authorization": f"Bearer {token}"},
-            json=payload,
-        )
-        response.raise_for_status()
+    response = await _authenticated_config_request(
+        hass, entry, "PUT", f"/api/v1/devices/{device_id}",
+        json=payload,
+    )
+    response.raise_for_status()
 
 
 async def _resolve_location_defaults(hass) -> dict[str, str]:
@@ -1355,6 +1384,9 @@ async def _authenticated_config_request(
     entry,
     method: str,
     path: str,
+    *,
+    api_url: str | None = None,
+    access_token: str | None = None,
     **kwargs,
 ) -> httpx.Response:
     """Run an authenticated HTTP call against the backend from the
@@ -1363,10 +1395,26 @@ async def _authenticated_config_request(
     coordinator's `_authenticated_request`, just without the
     persistent `httpx.AsyncClient` (config-flow calls are rare and
     short-lived). Persists rotated tokens back into the config
-    entry so the next call starts from the new pair."""
-    api_url = entry.data[CONF_API_URL]
-    access = entry.data[CONF_ACCESS_TOKEN]
-    refresh = entry.data[CONF_REFRESH_TOKEN]
+    entry so the next call starts from the new pair.
+
+    CN-12 (2026-06-11): `entry=None` + explizite `api_url`/
+    `access_token` für Flows VOR Entry-Existenz (Initial-Flow).
+    Dort kein 401-Retry — der Token ist Sekunden alt und ein
+    Refresh würde das Token-Paar rotieren, ohne dass es irgendwo
+    persistiert werden könnte (Backend invalidiert per Use).
+    """
+    if entry is None:
+        if not api_url or not access_token:
+            raise ValueError(
+                "authenticated config request without entry needs "
+                "explicit api_url + access_token"
+            )
+        access = access_token
+        refresh = None
+    else:
+        api_url = entry.data[CONF_API_URL]
+        access = entry.data[CONF_ACCESS_TOKEN]
+        refresh = entry.data[CONF_REFRESH_TOKEN]
 
     async def _do(token: str) -> httpx.Response:
         # Client-Konstruktion ins Executor: httpx lädt beim Erzeugen
@@ -1388,7 +1436,7 @@ async def _authenticated_config_request(
             await client.aclose()
 
     response = await _do(access)
-    if response.status_code == 401:
+    if response.status_code == 401 and refresh is not None:
         rotated = await _refresh_token(api_url, refresh)
         if rotated is not None:
             new_access, new_refresh = rotated
@@ -1402,20 +1450,9 @@ async def _authenticated_config_request(
     return response
 
 
-async def _delete_device_backend(api_url: str, token: str, device_id: str) -> None:
-    """Delete a device from the backend.
-
-    Legacy single-token signature kept for the (small) number of
-    call sites that haven't been routed through
-    `_authenticated_config_request` yet. New call sites should use
-    the entry-aware variant so 401s auto-refresh.
-    """
-    async with httpx.AsyncClient(timeout=15.0) as client:
-        response = await client.delete(
-            f"{api_url}/api/v1/devices/{device_id}",
-            headers={"Authorization": f"Bearer {token}"},
-        )
-        response.raise_for_status()
+# CN-12 (2026-06-11): das frühere `_delete_device_backend` (Single-
+# Token, ohne 401-Refresh) ist entfernt — der letzte Call-Site
+# (remove_device) läuft längst über `_authenticated_config_request`.
 
 
 def _remove_ha_device(hass, device_id: str) -> None:
@@ -1502,6 +1539,15 @@ class CrowdergyConfigFlow(ConfigFlow, domain=DOMAIN):
                 errors["base"] = "cannot_connect"
 
             if not errors:
+                # P3 (2026-06-11): unique_id auch im UI-Login-Flow
+                # setzen — vorher konnte derselbe Account beliebig
+                # oft als Duplikat-Entry angelegt werden (der Import-
+                # Flow setzte die unique_id längst). Ältere Backends
+                # ohne user_id im Login-Response bleiben ohne
+                # unique_id (Verhalten wie zuvor).
+                if self._data.get(CONF_USER_ID):
+                    await self.async_set_unique_id(self._data[CONF_USER_ID])
+                    self._abort_if_unique_id_configured()
                 # FEAT-1 v0.3 (2026-06-09): Onboarding-Flow gedroppt.
                 # Nach erfolgreichem Login direkt Entry erzeugen mit
                 # leerer Device-Liste. Ort + Außentemp + alle Geräte
@@ -1558,19 +1604,108 @@ class CrowdergyConfigFlow(ConfigFlow, domain=DOMAIN):
             return self.async_abort(reason="invalid_provision_data")
 
         await self.async_set_unique_id(data[CONF_USER_ID])
-        self._abort_if_unique_id_configured(
-            updates={
-                CONF_ACCESS_TOKEN: data[CONF_ACCESS_TOKEN],
-                CONF_REFRESH_TOKEN: data[CONF_REFRESH_TOKEN],
-                CONF_API_URL: data[CONF_API_URL],
-            }
-        )
+        # CN-2 (2026-06-11): Re-Pairing-Pfad (Entry existiert schon).
+        # Vorher liefen nur die Token-/URL-Updates über
+        # `_abort_if_unique_id_configured(updates=...)` — die frisch
+        # erfassten Consent-Flags aus dem Box-Wizard gingen verloren
+        # (Invariante 5: Consent VOR Pairing, atomar). Jetzt werden
+        # data UND options gemeinsam aktualisiert und der Entry neu
+        # geladen, damit das Consent-Gate sofort gilt.
+        for entry in self._async_current_entries(include_ignore=False):
+            if entry.unique_id != self.unique_id:
+                continue
+            self.hass.config_entries.async_update_entry(
+                entry,
+                data={
+                    **entry.data,
+                    CONF_ACCESS_TOKEN: data[CONF_ACCESS_TOKEN],
+                    CONF_REFRESH_TOKEN: data[CONF_REFRESH_TOKEN],
+                    CONF_API_URL: data[CONF_API_URL],
+                },
+                options={
+                    **entry.options,
+                    **extract_consent_options(import_data),
+                },
+            )
+            self.hass.config_entries.async_schedule_reload(entry.entry_id)
+            return self.async_abort(reason="already_configured")
         # Consent-Options atomar mit dem Entry anlegen — kein Fenster,
         # in dem der Coordinator mit Default-True pushen könnte.
         return self.async_create_entry(
             title=entry_title(data),
             data=data,
             options=extract_consent_options(import_data),
+        )
+
+    async def async_step_reauth(
+        self, entry_data: dict[str, Any]
+    ) -> ConfigFlowResult:
+        """CN-11 (2026-06-11): Reauth-Einstieg. Getriggert vom SSE-
+        Client via `entry.async_start_reauth(hass)` wenn das Token-
+        Paar nach SSE_AUTH_FAILURE_LIMIT 401-Zyklen endgültig tot ist."""
+        return await self.async_step_reauth_confirm()
+
+    async def async_step_reauth_confirm(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Minimaler Reauth: Login mit der bestehenden Mail (Feld nur
+        sichtbar, wenn der Entry keine gespeicherte Mail hat — z.B.
+        Box-Provisionierung ohne `email`). Erfolgreicher Login ersetzt
+        das Token-Paar und lädt den Entry neu."""
+        errors: dict[str, str] = {}
+        entry = self.hass.config_entries.async_get_entry(
+            self.context["entry_id"]
+        )
+        if entry is None:
+            return self.async_abort(reason="reauth_entry_missing")
+        stored_email = entry.data.get(CONF_EMAIL, "")
+
+        if user_input is not None:
+            email = (user_input.get(CONF_EMAIL) or stored_email).strip()
+            password = user_input[CONF_PASSWORD]
+            api_url = entry.data.get(CONF_API_URL, DEFAULT_API_URL)
+            try:
+                # Client-Bau im Executor (synchroner CA-Load), analog
+                # `_authenticated_config_request`.
+                client = await self.hass.async_add_executor_job(
+                    lambda: httpx.AsyncClient(timeout=10.0)
+                )
+                try:
+                    response = await client.post(
+                        f"{api_url}/api/v1/auth/login",
+                        json={"email": email, "password": password},
+                    )
+                finally:
+                    await client.aclose()
+                if response.status_code == 401:
+                    errors["base"] = "invalid_auth"
+                elif response.status_code >= 400:
+                    errors["base"] = "cannot_connect"
+                else:
+                    tokens = response.json()
+                    new_data = {
+                        **entry.data,
+                        CONF_EMAIL: email,
+                        CONF_ACCESS_TOKEN: tokens["access_token"],
+                        CONF_REFRESH_TOKEN: tokens["refresh_token"],
+                    }
+                    if tokens.get("user_id"):
+                        new_data[CONF_USER_ID] = tokens["user_id"]
+                    return self.async_update_reload_and_abort(
+                        entry, data=new_data,
+                    )
+            except (httpx.RequestError, ValueError):
+                errors["base"] = "cannot_connect"
+
+        schema_fields: dict[Any, Any] = {}
+        if not stored_email:
+            schema_fields[vol.Required(CONF_EMAIL)] = str
+        schema_fields[vol.Required(CONF_PASSWORD)] = str
+        return self.async_show_form(
+            step_id="reauth_confirm",
+            data_schema=vol.Schema(schema_fields),
+            description_placeholders={"email": stored_email or "—"},
+            errors=errors,
         )
 
     async def async_step_location(
@@ -1887,8 +2022,11 @@ class CrowdergyConfigFlow(ConfigFlow, domain=DOMAIN):
         token = self._data.get(CONF_ACCESS_TOKEN, "")
         presets: list[dict[str, Any]] = []
         if api_url and token and self._pending_type:
+            # Initial-Flow: noch kein Entry → explizite Credentials
+            # (frisch aus dem Login), kein 401-Refresh nötig.
             presets = await _fetch_vendor_presets(
-                api_url, token, self._pending_type,
+                self.hass, self._pending_type,
+                api_url=api_url, token=token,
             )
         # Wenn 0 Presets → skip diesen Step komplett, kein User-Hick-Up
         # mit leerem Picker.
@@ -2244,13 +2382,16 @@ class CrowdergyConfigFlow(ConfigFlow, domain=DOMAIN):
             CONF_DEVICE_CONFIG_MODE, self._pending_config_mode
         )
         try:
+            # Initial-Flow: noch kein Entry → explizite Credentials.
             dev = await _register_device(
-                self._data[CONF_API_URL],
-                self._data[CONF_ACCESS_TOKEN],
+                self.hass,
+                None,
                 device_type,
                 device_name,
                 entity_input,
                 self._data,
+                api_url=self._data[CONF_API_URL],
+                token=self._data[CONF_ACCESS_TOKEN],
             )
             self._devices.append(dev)
             self._pending_type = None
@@ -2441,18 +2582,19 @@ class CrowdergyOptionsFlow(OptionsFlow):
             )
             if domain:
                 payload["integration_domain"] = domain
-            api_url = self._entry.data[CONF_API_URL]
-            token = self._entry.data[CONF_ACCESS_TOKEN]
+            # CN-12 (2026-06-11): über `_authenticated_config_request`
+            # (401-Refresh + Client-Bau im Executor). CN-14: auch das
+            # JSON-Parsing defensiv — ValueError landet im selben
+            # User-Fehlerpfad statt den Flow zu crashen.
             try:
-                async with httpx.AsyncClient(timeout=15.0) as client:
-                    response = await client.post(
-                        f"{api_url}/api/v1/crowd-presets/contribute",
-                        headers={"Authorization": f"Bearer {token}"},
-                        json=payload,
-                    )
-                    response.raise_for_status()
-                    result = response.json()
-            except (httpx.HTTPStatusError, httpx.RequestError) as err:
+                response = await _authenticated_config_request(
+                    self.hass, self._entry,
+                    "POST", "/api/v1/crowd-presets/contribute",
+                    json=payload,
+                )
+                response.raise_for_status()
+                result = response.json()
+            except (httpx.HTTPStatusError, httpx.RequestError, ValueError) as err:
                 _LOGGER.warning("Crowd-Contribution POST failed: %s", err)
                 return self.async_abort(
                     reason="contribute_backend_error",
@@ -2592,12 +2734,10 @@ class CrowdergyOptionsFlow(OptionsFlow):
                         break
             return await self.async_step_add_device_entities()
 
-        api_url = self._entry.data.get(CONF_API_URL, "")
-        token = self._entry.data.get(CONF_ACCESS_TOKEN, "")
         presets: list[dict[str, Any]] = []
-        if api_url and token and self._pending_type:
+        if self._pending_type:
             presets = await _fetch_vendor_presets(
-                api_url, token, self._pending_type,
+                self.hass, self._pending_type, entry=self._entry,
             )
         if not presets:
             return await self.async_step_add_device_entities()
@@ -2892,6 +3032,23 @@ class CrowdergyOptionsFlow(OptionsFlow):
             },
         )
 
+    async def _persist_devices(self, devices: list[dict[str, Any]]) -> None:
+        """CN-7 (2026-06-11): Geräteliste SOFORT nach jeder Add/Edit/
+        Remove-Operation in den Entry schreiben + Reload (Muster:
+        `box_add_device`). Vorher persistierte erst der „Fertig"-Step
+        einen Flow-Start-Snapshot — Dialog-Abbruch nach einer Operation
+        ließ Backend und Entry auseinanderlaufen, und der Snapshot-
+        Writeback überschrieb zwischenzeitliche Änderungen anderer
+        Pfade (box_add_device, Geräteseiten-Löschung) — Lost-Update.
+
+        `devices` ist die NEUE Liste, berechnet gegen den frischen
+        `entry.data`-Stand (nicht gegen den Flow-Start-Snapshot).
+        """
+        self._devices = list(devices)
+        new_data = {**self._entry.data, CONF_DEVICES: list(devices)}
+        self.hass.config_entries.async_update_entry(self._entry, data=new_data)
+        await self.hass.config_entries.async_reload(self._entry.entry_id)
+
     async def _options_register(
         self, entity_input: dict[str, Any]
     ) -> ConfigFlowResult:
@@ -2903,14 +3060,16 @@ class CrowdergyOptionsFlow(OptionsFlow):
         )
         try:
             dev = await _register_device(
-                self._entry.data[CONF_API_URL],
-                self._entry.data[CONF_ACCESS_TOKEN],
+                self.hass,
+                self._entry,
                 device_type,
                 device_name,
                 entity_input,
                 self._entry.data,
             )
-            self._devices.append(dev)
+            await self._persist_devices(
+                [*self._entry.data.get(CONF_DEVICES, []), dev]
+            )
             self._pending_type = None
             self._pending_name = None
             self._pending_config_mode = CONFIG_MODE_MANUAL
@@ -3376,8 +3535,8 @@ class CrowdergyOptionsFlow(OptionsFlow):
         device_name = self._edit_pending_name or target[CONF_DEVICE_NAME]
         try:
             await _update_device_backend(
-                self._entry.data[CONF_API_URL],
-                self._entry.data[CONF_ACCESS_TOKEN],
+                self.hass,
+                self._entry,
                 target[CONF_DEVICE_ID],
                 device_type,
                 device_name,
@@ -3386,10 +3545,10 @@ class CrowdergyOptionsFlow(OptionsFlow):
             updated = _build_device_record(
                 target[CONF_DEVICE_ID], device_type, device_name, entity_input
             )
-            self._devices = [
+            await self._persist_devices([
                 updated if d[CONF_DEVICE_ID] == target[CONF_DEVICE_ID] else d
-                for d in self._devices
-            ]
+                for d in self._entry.data.get(CONF_DEVICES, [])
+            ])
             self._edit_target_id = None
             self._edit_pending_type = None
             self._edit_pending_name = None
@@ -3436,9 +3595,10 @@ class CrowdergyOptionsFlow(OptionsFlow):
 
             if not errors:
                 _remove_ha_device(self.hass, device_id)
-                self._devices = [
-                    d for d in self._devices if d[CONF_DEVICE_ID] != device_id
-                ]
+                await self._persist_devices([
+                    d for d in self._entry.data.get(CONF_DEVICES, [])
+                    if d.get(CONF_DEVICE_ID) != device_id
+                ])
                 return await self.async_step_init()
 
         if not self._devices:
@@ -3470,7 +3630,9 @@ class CrowdergyOptionsFlow(OptionsFlow):
     async def async_step_done(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
-        new_data = {**self._entry.data, CONF_DEVICES: self._devices}
-        self.hass.config_entries.async_update_entry(self._entry, data=new_data)
-        await self.hass.config_entries.async_reload(self._entry.entry_id)
+        # CN-7 (2026-06-11): reiner Menü-Exit. Persistenz + Reload
+        # passieren seit CN-7 unmittelbar nach jeder Add/Edit/Remove-
+        # Operation (`_persist_devices`) — der frühere Snapshot-
+        # Writeback hier hat zwischenzeitliche Änderungen anderer
+        # Pfade überschrieben (Lost-Update).
         return self.async_create_entry(title="", data={})
