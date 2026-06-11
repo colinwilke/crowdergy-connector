@@ -2,6 +2,11 @@
 # Remote-Sessions nur auf ihren Arbeitsbranch pushen dürfen — Tags
 # (z.B. der Vendor-Pin der Crowdergy Box, CONNECTOR_VERSION) brauchen
 # diesen Umweg über die Actions-API.
+#
+# Seit 2026-06-11 wird zusätzlich ein GitHub-Release erzeugt: HACS
+# bedient sich aus Releases (und zeigt den Markdown-Body in-app).
+# Der Body kommt aus docs/releases/<tag>.md am getaggten Stand;
+# fehlt die Datei, gibt es ein Release mit Minimal-Body.
 name: Tag release
 
 on:
@@ -22,9 +27,13 @@ jobs:
   tag:
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.sha || github.sha }}
       - uses: actions/github-script@v7
         with:
           script: |
+            const fs = require("fs");
             const tag = context.payload.inputs.tag;
             const sha = context.payload.inputs.sha || context.sha;
             await github.rest.git.createRef({
@@ -34,3 +43,15 @@ jobs:
               sha,
             });
             core.notice(`Tag ${tag} -> ${sha} angelegt`);
+            const notesPath = `docs/releases/${tag}.md`;
+            const body = fs.existsSync(notesPath)
+              ? fs.readFileSync(notesPath, "utf8")
+              : `Release ${tag}`;
+            const release = await github.rest.repos.createRelease({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              tag_name: tag,
+              name: tag,
+              body,
+            });
+            core.notice(`Release ${tag} angelegt: ${release.data.html_url}`);
