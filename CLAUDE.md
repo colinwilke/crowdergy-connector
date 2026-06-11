@@ -26,6 +26,22 @@ YAML-Key (bewusst Breaking für Self-Hosted ohne Key); SSE-401 mit Backoff
 + Reauth-Flow nach 5 Zyklen; Options-Flow persistiert sofort. Verträge zu
 Backend/Box waren feldgenau OK.
 
+### Mapping-Store 2026-06-11 → v3.24.0 (Branch claude/beautiful-thompson-0a2wvl)
+
+Contribute v0.2 + Mapping-Dictionary: **`preset_spec.py`** = SSOT der
+Preset-Slots pro Typ (solar/grid/battery/wallbox; entity/value/flag +
+required). „Share setup" für alle vier Typen mit Vollständigkeits-Gate;
+Payload jetzt `entity_map` + NEU `value_map` (Select-Optionen/Flags,
+Flags als `"true"`); Preset-Picker überall + Werte-Step-Defaults +
+Staging-Badge. `box_add_device`: Slot-Art-basierte Prüfung
+(`PRESET_VALUE_SLOTS`), Punkt-Werte in Value-Slots ok — **Box braucht
+für Battery-/Wallbox-Presets Vendor-Pin ≥ v3.24.0**. Backend-Vertrag
+mit Staging (staged→approved, Threshold, anfangs 1):
+`docs/crowd-preset-store.md` — **Backend-Repo war nicht im
+Session-Scope, Umsetzung dort offen**; Connector/Box tolerieren das
+Alt-Backend. 119 Tests grün. Neue Slots: preset_spec + (wenn entity)
+MAPPABLE_ENTITY_DOMAINS + Vertrag nachziehen.
+
 ### User-Entscheidungen 2026-06-11 umgesetzt → v3.23.0
 
 E-2: toter Wallbox-Restore-Pfad (`charge_mode_value_crowdergy`,

@@ -309,7 +309,7 @@
       },
       "contribute_preset": {
         "title": "Submit as vendor preset",
-        "description": "Help the Crowdergy community: send your verified setup of this device anonymously as a vendor preset, so that other users with the same hardware can adopt it with one click.",
+        "description": "Help the Crowdergy community: send your verified setup of this device anonymously as a vendor preset, so that other users with the same hardware can adopt it with one click. Only the slot mappings defined per device type (sensors, control entities and their integration-specific values) are transmitted — never names, locations or other data.",
         "data": {
           "device_id": "Device"
         }
@@ -670,7 +670,8 @@
       "vendor_model_required": "Manufacturer and model are required."
     },
     "abort": {
-      "contribute_no_devices": "No solar devices configured yet — add one first.",
+      "contribute_no_devices": "No shareable devices configured yet — solar, battery, grid and wallbox devices can be contributed.",
+      "contribute_incomplete": "'{device_name}' cannot be shared yet — missing required mappings: {missing}. Complete them via 'Edit device' first.",
       "contribute_device_missing": "Selected device disappeared from the configuration.",
       "contribute_no_entities": "Selected device has no entity mappings to submit.",
       "contribute_backend_error": "The contribution could not be submitted. {err}",

@@ -1,6 +1,32 @@
 # crowdergy-connector
 
-## Stand: 2026-06-11 — Release **v3.23.0** (E-2/E-4/E-6 aus dem Review; GitHub-Release via tag-release.yml)
+## Stand: 2026-06-11 — **v3.24.0** (Mapping-Dictionary + Contribute v0.2; Tag/Release ausstehend)
+
+> **Mapping-Store (User-Konzept 2026-06-11, Branch
+> `claude/beautiful-thompson-0a2wvl`):** Neues SSOT-Modul
+> **`preset_spec.py`** (`PRESET_SLOT_SPEC`) definiert pro Gerätetyp
+> (solar/grid/battery/wallbox) die Preset-Slots in drei Arten:
+> entity (→ `entity_map`, Box matcht per Suffix), value (→ `value_map`,
+> integrationsspezifische Strings, Box übernimmt verbatim), flag
+> (serialisiert `"true"`, nur wenn gesetzt). `required` = funktionales
+> Minimum (Solar kW+kWh; Battery kW+SoC+Dispatch-Trio; Wallbox
+> kW+kWh+Lademodus; kWh bei battery/grid bewusst optional — eine Zeile
+> zum Härten). Contribute-Step bietet alle vier Typen an (vorher
+> solar-only), gated auf Vollständigkeit (`contribute_incomplete` mit
+> Fehlliste) und extrahiert NUR Spec-Slots (Allowlist =
+> Anonymisierung). Preset-Picker in beiden Add-Flows für alle Typen;
+> value_map füllt die Werte-Steps vor; Battery-Preset öffnet den
+> Dispatch-Step auch ohne Lademodus-Select; `status≠approved` →
+> Label „Community, noch unbestätigt". `box_add_device` prüft jetzt
+> nach Slot-ART: Entity-Slots Domain-Allowlist, `PRESET_VALUE_SLOTS`
+> frei (auch Punkt im Wert — vorher fälschlich als Entity geprüft),
+> unbekannte Keys Default-DENY. **Backend-Vertrag inkl.
+> Staging-Lifecycle (staged→approved, Promotion-Threshold, anfangs
+> Threshold=1): `docs/crowd-preset-store.md` — Backend-Umsetzung
+> offen, Clients tolerieren Alt-Backend.** Box-Gegenstück
+> (Per-Device-Wizard) im Box-Repo, gleicher Branch. 119 Tests grün
+> (neu: test_preset_spec, test_contribute_flow; 2 bekannte
+> aiodns-Deselects).
 
 > **Harter Code-Review 2026-06-11: Befunde umgesetzt → v3.22.0 (Branch
 > `claude/cool-hawking-rjc1xg`).** Zentrale Fixes: Remote-Control-Consent-Gate
