@@ -182,10 +182,12 @@ async def test_add_device_rejects_unknown_type(hass: HomeAssistant):
         )
 
 
-# ── Phase 4: Consent + Forbidden Domains ─────────────────────────────────────
+# ── Phase 4 / E-6 (CN-10): Slot-Allowlist (Default-DENY) ─────────────────────
 
 
 async def test_add_device_rejects_forbidden_domain(hass: HomeAssistant):
+    """Allowlist (E-6): camera auf einem Control-Slot ist nicht in der
+    erlaubten Domain-Menge → Ablehnung, Entry unverändert."""
     entry = await _setup(hass)
     with pytest.raises(HomeAssistantError) as excinfo:
         await hass.services.async_call(
@@ -199,8 +201,131 @@ async def test_add_device_rejects_forbidden_domain(hass: HomeAssistant):
             blocking=True,
             return_response=True,
         )
-    assert "forbidden" in str(excinfo.value)
+    assert "not allowed" in str(excinfo.value)
     assert entry.data[CONF_DEVICES] == []
+
+
+async def test_add_device_rejects_lock_on_read_slot(hass: HomeAssistant):
+    """Allowlist (E-6): ein lock.* auf einem Read-Slot (entity_current_
+    power_kw, nur `sensor` erlaubt) wird abgewiesen."""
+    entry = await _setup(hass)
+    with pytest.raises(HomeAssistantError) as excinfo:
+        await hass.services.async_call(
+            DOMAIN,
+            SERVICE_BOX_ADD_DEVICE,
+            {
+                CONF_DEVICE_TYPE: "solar",
+                CONF_DEVICE_NAME: "X",
+                "entities": {CONF_ENTITY_POWER: "lock.haustuer"},
+            },
+            blocking=True,
+            return_response=True,
+        )
+    assert "not allowed" in str(excinfo.value)
+    assert entry.data[CONF_DEVICES] == []
+
+
+async def test_add_device_rejects_alarm_panel_on_control_slot(hass: HomeAssistant):
+    """Allowlist (E-6): alarm_control_panel auf entity_control →
+    abgelehnt (nicht in den schaltbaren Domains)."""
+    entry = await _setup(hass)
+    with pytest.raises(HomeAssistantError) as excinfo:
+        await hass.services.async_call(
+            DOMAIN,
+            SERVICE_BOX_ADD_DEVICE,
+            {
+                CONF_DEVICE_TYPE: "generic",
+                CONF_DEVICE_NAME: "X",
+                "entities": {"entity_control": "alarm_control_panel.haus"},
+            },
+            blocking=True,
+            return_response=True,
+        )
+    assert "not allowed" in str(excinfo.value)
+    assert entry.data[CONF_DEVICES] == []
+
+
+async def test_add_device_rejects_unknown_slot(hass: HomeAssistant):
+    """Allowlist (E-6): ein Slot, der gar kein bekannter Mapping-Slot
+    ist, aber wie eine entity_id aussieht, wird Default-DENY abgelehnt."""
+    entry = await _setup(hass)
+    with pytest.raises(HomeAssistantError) as excinfo:
+        await hass.services.async_call(
+            DOMAIN,
+            SERVICE_BOX_ADD_DEVICE,
+            {
+                CONF_DEVICE_TYPE: "generic",
+                CONF_DEVICE_NAME: "X",
+                "entities": {"entity_spy": "sensor.harmlos"},
+            },
+            blocking=True,
+            return_response=True,
+        )
+    assert "not a mappable entity slot" in str(excinfo.value)
+    assert entry.data[CONF_DEVICES] == []
+
+
+async def test_add_device_allows_select_on_charge_mode(hass: HomeAssistant):
+    """Allowlist (E-6): Control-Slot mit erlaubter Domain (select auf
+    entity_charge_mode) geht durch — Gegentest dass die Allowlist die
+    echten Presets nicht aussperrt."""
+    entry = await _setup(hass)
+
+    async def fake_request(hass_, entry_, method, path, **kwargs):
+        return _response(200, {"id": "backend-wb-1"})
+
+    with patch(
+        "custom_components.theothergas.config_flow._authenticated_config_request",
+        new=AsyncMock(side_effect=fake_request),
+    ):
+        await hass.services.async_call(
+            DOMAIN,
+            SERVICE_BOX_ADD_DEVICE,
+            {
+                CONF_DEVICE_TYPE: "wallbox",
+                CONF_DEVICE_NAME: "Wallbox",
+                "entities": {
+                    CONF_ENTITY_POWER: "sensor.wallbox_power",
+                    "entity_charge_mode": "select.lademodus",
+                    "entity_control": "switch.wallbox_enable",
+                },
+            },
+            blocking=True,
+            return_response=True,
+        )
+    assert entry.data[CONF_DEVICES][0][CONF_DEVICE_ID] == "backend-wb-1"
+
+
+async def test_add_device_allows_kostal_solar_preset(hass: HomeAssistant):
+    """Allowlist (E-6) KOSTAL-Regression: das live-verifizierte
+    Plenticore-Solar-Mapping (sensor.* auf Power + Energy) bleibt
+    erlaubt."""
+    entry = await _setup(hass)
+
+    async def fake_request(hass_, entry_, method, path, **kwargs):
+        return _response(200, {"id": "backend-pv-1"})
+
+    from custom_components.theothergas.const import CONF_ENTITY_ENERGY_TOTAL
+
+    with patch(
+        "custom_components.theothergas.config_flow._authenticated_config_request",
+        new=AsyncMock(side_effect=fake_request),
+    ):
+        await hass.services.async_call(
+            DOMAIN,
+            SERVICE_BOX_ADD_DEVICE,
+            {
+                CONF_DEVICE_TYPE: "solar",
+                CONF_DEVICE_NAME: "Plenticore Solar",
+                "entities": {
+                    CONF_ENTITY_POWER: "sensor.sum_power_of_all_pv_dc_inputs",
+                    CONF_ENTITY_ENERGY_TOTAL: "sensor.plenticore_yield_total",
+                },
+            },
+            blocking=True,
+            return_response=True,
+        )
+    assert entry.data[CONF_DEVICES][0][CONF_DEVICE_ID] == "backend-pv-1"
 
 
 # ── CN-9: YAML-Gate + eindeutiger Entry ──────────────────────────────────────

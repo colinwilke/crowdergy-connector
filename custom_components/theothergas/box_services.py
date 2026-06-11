@@ -46,7 +46,7 @@ from .const import (
     CONF_REGION,
     DEVICE_TYPES,
     DOMAIN,
-    FORBIDDEN_ENTITY_DOMAINS,
+    MAPPABLE_ENTITY_DOMAINS,
     OPT_CONSENT_REMOTE_CONTROL,
     OPT_CONSENT_TELEMETRY,
 )
@@ -151,14 +151,33 @@ def async_register_box_services(hass: HomeAssistant) -> None:
         device_name: str = call.data[CONF_DEVICE_NAME]
         entity_input: dict[str, Any] = dict(call.data["entities"])
 
-        # Security-Model #5 (Box): verbotene Domains werden auf Spec-
-        # Ebene geblockt — kein Mapping kann Kamera/Personen/Tracker/
-        # Media-Entities in den Telemetrie-Pfad bringen.
+        # Security-Model #5 (Box), E-6 / CN-10 (2026-06-11): Allowlist
+        # statt Blocklist. Default-DENY — pro Mapping-Slot ist nur eine
+        # explizite Menge HA-Domains zugelassen (`MAPPABLE_ENTITY_
+        # DOMAINS` in const.py). Damit kann keine Kamera-/Personen-/
+        # Tracker-/Media-Entity (oder irgendeine andere unerwartete
+        # Domain) in den Telemetrie- oder Steuer-Pfad gelangen.
+        #
+        # Nur Slots mit einer entity_id (= der Wert enthält einen Punkt,
+        # `domain.object_id`) werden geprüft. Wert-/Flag-Slots der
+        # box_add_device-Payload (value_on, charge_mode_value_*,
+        # *_invert_sign, …) tragen keine Domain und werden übersprungen.
         for slot, entity_id in entity_input.items():
-            domain = entity_id.split(".", 1)[0] if "." in entity_id else ""
-            if domain in FORBIDDEN_ENTITY_DOMAINS:
+            if "." not in str(entity_id):
+                continue
+            domain = entity_id.split(".", 1)[0]
+            allowed = MAPPABLE_ENTITY_DOMAINS.get(slot)
+            if allowed is None:
+                # Unbekannter / nicht-mappbarer Slot — bewusst ablehnen
+                # statt blind durchwinken (Default-DENY).
                 raise HomeAssistantError(
-                    f"forbidden entity domain '{domain}' in slot {slot}"
+                    f"slot '{slot}' is not a mappable entity slot "
+                    f"(entity '{entity_id}' rejected)"
+                )
+            if domain not in allowed:
+                raise HomeAssistantError(
+                    f"entity domain '{domain}' not allowed in slot "
+                    f"'{slot}' (allowed: {', '.join(sorted(allowed))})"
                 )
 
         payload = build_payload(

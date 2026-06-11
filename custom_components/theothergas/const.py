@@ -332,8 +332,77 @@ LLM_MIN_CONFIDENCE = 0.5
 OPT_CONSENT_TELEMETRY = "consent_telemetry"
 OPT_CONSENT_REMOTE_CONTROL = "consent_remote_control"
 
-# Domains, die NIE in ein Box-Geräte-Mapping dürfen (Security-Model #5
-# des Box-Repos: nur whitelisted Energiedaten verlassen die Box).
-FORBIDDEN_ENTITY_DOMAINS = frozenset(
-    {"camera", "person", "device_tracker", "media_player"}
-)
+# ── Box-Mapping-Allowlist (E-6 / CN-10, 2026-06-11) ───────────────────
+# Security-Model #5 der Box: nur whitelisted Energiedaten verlassen die
+# Box. Bis v3.22 schützte hier nur eine 4-Domain-Blocklist (camera /
+# person / device_tracker / media_player) — als Privacy-Appliance ist
+# das zu schwach (jede neue HA-Domain wäre per Default erlaubt). Ab
+# v3.23 gilt Default-DENY: pro Mapping-Slot ist nur eine explizite
+# Allowlist von HA-Domains zugelassen.
+#
+# Die erlaubten Domains pro Slot sind direkt aus den authoritativen
+# Quellen abgeleitet, damit echte Presets (inkl. dem live-verifizierten
+# KOSTAL-Plenticore-Mapping) NICHT brechen:
+#   * Read-Slots  → der EntitySelector im interaktiven Config-Flow
+#     (`config_flow._ENTITY_SELECTORS`) erlaubt durchweg nur
+#     `sensor` (+ `binary_sensor` bei vehicle_status).
+#   * Control-Slots → exakt die Domains, die die Apply-Pfade im
+#     Coordinator tatsächlich schreiben können
+#     (`_write_entity_control`, `_apply_charge_mode`,
+#     `_apply_battery_setpoint`, `_apply_vorlauf_setpoint`).
+#
+# device_class wird BEWUSST nicht zusätzlich geprüft: sie steht beim
+# headless `box_add_device` (nur slot→entity_id) gar nicht zur Verfügung
+# und würde echte Presets aussperren. Domain-Ebene reicht für das
+# Privacy-Ziel (keine Kamera-/Personen-/Tracker-/Media-Entity im
+# Telemetrie- oder Steuer-Pfad).
+
+# Read-only Slots: nur Sensor-Domains.
+_READ_SENSOR = frozenset({"sensor"})
+# vehicle_status darf zusätzlich binary_sensor sein (siehe Selector).
+_READ_SENSOR_OR_BINARY = frozenset({"sensor", "binary_sensor"})
+# entity_control: alle Domains die `_write_entity_control` dispatchen kann.
+_CONTROL_DOMAINS = frozenset({
+    "switch", "input_boolean", "light", "fan",
+    "number", "input_number", "select", "input_select",
+    "climate", "water_heater",
+})
+# Vorlauf-Setpoint: climate.set_temperature ODER number.set_value.
+_SETPOINT_DOMAINS = frozenset({"climate", "number", "input_number"})
+# Battery-Mode / Charge-Mode (Lademodus): Select-artig.
+_SELECT_DOMAINS = frozenset({"select", "input_select"})
+# Battery-Power-Setpoint: Number-artig.
+_NUMBER_DOMAINS = frozenset({"number", "input_number"})
+
+# Slot-Key → erlaubte HA-Domains. Default-DENY: ein Slot, der hier nicht
+# steht, wird im box_add_device abgelehnt (kein stilles Durchwinken
+# unbekannter Mapping-Ziele). Werte-/Flag-Slots (value_*, *_invert_sign,
+# shares_hardware_with, included_in_haushalt) tragen KEINE entity_id und
+# werden im box_services-Check übersprungen (Punkt enthält → Domain-Check).
+MAPPABLE_ENTITY_DOMAINS: dict[str, frozenset[str]] = {
+    # ── Read-Slots ──
+    CONF_ENTITY_POWER: _READ_SENSOR,
+    CONF_ENTITY_POWER_2: _READ_SENSOR,
+    CONF_ENTITY_SOC: _READ_SENSOR,
+    CONF_ENTITY_ENERGY_TOTAL: _READ_SENSOR,
+    CONF_ENTITY_ENERGY_DISCHARGED_TOTAL: _READ_SENSOR,
+    CONF_ENTITY_VORLAUF_TEMP: _READ_SENSOR,
+    CONF_ENTITY_OUTDOOR_TEMP: _READ_SENSOR,
+    CONF_ENTITY_VEHICLE_STATUS: _READ_SENSOR_OR_BINARY,
+    # current_temp: Sensor-Pfad ODER climate/water_heater (climate-first
+    # Onboarding kopiert die climate-/water_heater-Entity hierher).
+    CONF_ENTITY_CURRENT_TEMP: frozenset(
+        {"sensor", "climate", "water_heater"}
+    ),
+    # ── Control-Slots ──
+    CONF_ENTITY_CONTROL: _CONTROL_DOMAINS,
+    CONF_ENTITY_COOL_CONTROL: _CONTROL_DOMAINS,
+    CONF_ENTITY_CHARGE_MODE: _SELECT_DOMAINS,
+    CONF_ENTITY_BATTERY_MODE: _SELECT_DOMAINS,
+    CONF_ENTITY_BATTERY_POWER_SETPOINT: _NUMBER_DOMAINS,
+    CONF_ENTITY_VORLAUF_SETPOINT: _SETPOINT_DOMAINS,
+    # Climate-first Form-Felder: collapsen beim Speichern auf
+    # entity_control, dürfen aber als Roh-Mapping-Ziel rein.
+    CONF_ENTITY_CLIMATE: frozenset({"climate"}),
+    CONF_ENTITY_WATER_HEATER: frozenset({"water_heater"}),
+}
