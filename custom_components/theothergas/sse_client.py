@@ -50,6 +50,13 @@ SSE_READ_TIMEOUT_S = 60
 # echter Consumer-Stall sichtbar wird.
 SSE_QUEUE_MAXSIZE = 512
 
+# CN-11 (2026-06-11): nach so vielen aufeinanderfolgenden 401-Zyklen
+# (Handshake-401 → Refresh-Versuch → erneut 401) gilt die Auth als
+# endgültig tot — der Reader stoppt und meldet via `on_auth_failed`
+# (Coordinator startet dann den Reauth-Flow). Reset des Zählers erst
+# nach erfolgreichem Stream (erstes Body-Byte).
+SSE_AUTH_FAILURE_LIMIT = 5
+
 
 class SSEClient:
     """Reconnecting SSE-Listener mit Auth-Refresh-Callback.
@@ -73,11 +80,16 @@ class SSEClient:
         api_url: str,
         get_token: Callable[[], str],
         refresh_token: Callable[[], Awaitable[bool]],
+        on_auth_failed: Callable[[], None] | None = None,
     ) -> None:
         self._hass = hass
         self._api_url = api_url
         self._get_token = get_token
         self._refresh_token = refresh_token
+        # CN-11: Callback wenn SSE_AUTH_FAILURE_LIMIT 401-Zyklen
+        # erreicht sind — Coordinator hängt hier
+        # `entry.async_start_reauth(hass)` dran.
+        self._on_auth_failed = on_auth_failed
         self._queue: asyncio.Queue[dict[str, Any]] = asyncio.Queue(
             maxsize=SSE_QUEUE_MAXSIZE
         )
@@ -120,6 +132,7 @@ class SSEClient:
         coordinator._run_sse_loop-Implementation; Frames landen jetzt
         in self._queue statt direkt _handle_ws_message zu rufen."""
         delay = SSE_RECONNECT_INITIAL
+        auth_failures = 0
         session = aiohttp_client.async_get_clientsession(self._hass)
         while True:
             try:
@@ -136,9 +149,37 @@ class SSEClient:
                         total=None, sock_read=SSE_READ_TIMEOUT_S,
                     ),
                 ) as resp:
-                    if resp.status == 401 and await self._refresh_token():
-                        # Auth-Refresh ok — sofortiger Reconnect mit dem
-                        # frischen Token, ohne Backoff.
+                    if resp.status == 401:
+                        # CN-11 (2026-06-11): vorher lief bei Refresh-
+                        # Erfolg ein `continue` OHNE Sleep — wenn das
+                        # Backend trotz frischem Token weiter 401t
+                        # (Revocation, Clock-Skew, Backend-Bug), war
+                        # das ein Hot-Loop. Jetzt: Zähler + Backoff
+                        # auch im Erfolgsfall; nach
+                        # SSE_AUTH_FAILURE_LIMIT Zyklen Reauth + Stop.
+                        auth_failures += 1
+                        if auth_failures >= SSE_AUTH_FAILURE_LIMIT:
+                            _LOGGER.error(
+                                "Crowdergy SSE: %d consecutive auth "
+                                "failures — token pair looks dead, "
+                                "stopping stream and starting reauth.",
+                                auth_failures,
+                            )
+                            if self._on_auth_failed is not None:
+                                self._on_auth_failed()
+                            return
+                        refreshed = await self._refresh_token()
+                        backoff = min(
+                            SSE_RECONNECT_INITIAL * (2 ** (auth_failures - 1)),
+                            SSE_RECONNECT_MAX,
+                        )
+                        _LOGGER.warning(
+                            "Crowdergy SSE got 401 (cycle %d/%d, token "
+                            "refresh %s) — retrying in %ss",
+                            auth_failures, SSE_AUTH_FAILURE_LIMIT,
+                            "ok" if refreshed else "failed", backoff,
+                        )
+                        await asyncio.sleep(backoff)
                         continue
                     if resp.status != 200:
                         _LOGGER.warning(
@@ -160,6 +201,9 @@ class SSEClient:
                         if not saw_body:
                             saw_body = True
                             delay = SSE_RECONNECT_INITIAL
+                            # Stream lebt → Auth ist gesund, Zähler
+                            # zurücksetzen (CN-11).
+                            auth_failures = 0
                         line = raw.decode("utf-8", errors="replace").rstrip("\r\n")
                         if not line.startswith("data: "):
                             continue

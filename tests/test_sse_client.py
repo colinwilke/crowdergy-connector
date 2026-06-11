@@ -17,6 +17,7 @@ import json
 import pytest
 
 from custom_components.theothergas.sse_client import (
+    SSE_AUTH_FAILURE_LIMIT,
     SSE_QUEUE_MAXSIZE,
     SSEClient,
 )
@@ -119,3 +120,74 @@ async def test_token_callback_resolves_lazily(hass):
     assert client._get_token() == "v1"
     current_token[0] = "v2"
     assert client._get_token() == "v2"
+
+
+async def test_sse_401_backoff_and_reauth_after_limit(monkeypatch):
+    """CN-11 (2026-06-11): der 401-Pfad darf nicht hot-loopen.
+
+    Vorher lief bei Refresh-Erfolg ein `continue` ohne Sleep — wenn
+    das Backend trotz frischem Token weiter 401t, war das ein Hot-
+    Loop ohne Ende und ohne Reauth. Jetzt: exponentieller Backoff
+    auch im Erfolgsfall, und nach SSE_AUTH_FAILURE_LIMIT Zyklen
+    Stop + `on_auth_failed` (Coordinator → entry.async_start_reauth).
+
+    Kein `hass`-Fixture nötig: Session-Getter ist gepatcht, der Loop
+    läuft als direkt awaited Coroutine.
+    """
+    from unittest.mock import AsyncMock, Mock
+
+    class _FakeResponse:
+        status = 401
+
+    class _FakeCM:
+        async def __aenter__(self):
+            return _FakeResponse()
+
+        async def __aexit__(self, *exc):
+            return False
+
+    class _FakeSession:
+        def __init__(self):
+            self.calls = 0
+
+        def get(self, *args, **kwargs):
+            self.calls += 1
+            return _FakeCM()
+
+    session = _FakeSession()
+    monkeypatch.setattr(
+        "custom_components.theothergas.sse_client."
+        "aiohttp_client.async_get_clientsession",
+        lambda hass: session,
+    )
+    sleeps: list[float] = []
+
+    async def _fake_sleep(seconds):
+        sleeps.append(seconds)
+
+    monkeypatch.setattr(
+        "custom_components.theothergas.sse_client.asyncio.sleep",
+        _fake_sleep,
+    )
+
+    refresh = AsyncMock(return_value=True)
+    on_auth_failed = Mock()
+    client = SSEClient(
+        hass=object(),
+        api_url="http://test",
+        get_token=lambda: "dead-token",
+        refresh_token=refresh,
+        on_auth_failed=on_auth_failed,
+    )
+
+    # Terminiert von selbst: nach SSE_AUTH_FAILURE_LIMIT Zyklen
+    # stoppt der Reader (return) statt weiterzuloopen.
+    await client._run_loop()
+
+    assert session.calls == SSE_AUTH_FAILURE_LIMIT
+    # Refresh wird pro Zyklus VOR dem Limit versucht (Limit-Zyklus
+    # selbst refresht nicht mehr, er eskaliert).
+    assert refresh.await_count == SSE_AUTH_FAILURE_LIMIT - 1
+    # Exponentieller Backoff auch bei Refresh-Erfolg — kein Hot-Loop.
+    assert sleeps == [1, 2, 4, 8]
+    on_auth_failed.assert_called_once()
