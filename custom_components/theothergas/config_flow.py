@@ -1369,13 +1369,23 @@ async def _authenticated_config_request(
     refresh = entry.data[CONF_REFRESH_TOKEN]
 
     async def _do(token: str) -> httpx.Response:
-        async with httpx.AsyncClient(timeout=15.0) as client:
+        # Client-Konstruktion ins Executor: httpx lädt beim Erzeugen
+        # synchron die CA-Zertifikate (load_verify_locations) — im
+        # Event-Loop wirft HA dafür eine Blocking-Call-Warnung (live
+        # gesehen im Box-Smoke-Test 2026-06-10, analog Coordinator-Fix
+        # v3.5.1).
+        client = await hass.async_add_executor_job(
+            lambda: httpx.AsyncClient(timeout=15.0)
+        )
+        try:
             return await client.request(
                 method,
                 f"{api_url}{path}",
                 headers={"Authorization": f"Bearer {token}"},
                 **kwargs,
             )
+        finally:
+            await client.aclose()
 
     response = await _do(access)
     if response.status_code == 401:
@@ -1518,6 +1528,49 @@ class CrowdergyConfigFlow(ConfigFlow, domain=DOMAIN):
                 }
             ),
             errors=errors,
+        )
+
+    async def async_step_import(
+        self, import_data: dict[str, Any]
+    ) -> ConfigFlowResult:
+        """Headless provisioning durch die Crowdergy Box (Phase 2).
+
+        Der box-manager der Box hat per Pairing-Code bereits ein
+        JWT-Paar geclaimt (`POST /api/v1/box/claim`) und ruft den
+        Service `theothergas.provision_box` — der landet hier. Kein
+        Login, keine Forms; Entry-Shape wie nach dem interaktiven
+        Login (leere Geräteliste, Rest kommt aus Options-Flow bzw.
+        box-manager-Provisionierung).
+
+        unique_id = Backend-User-ID: ein Re-Pairing derselben Box/
+        desselben Accounts ersetzt die Tokens im bestehenden Entry
+        statt einen Duplikat-Entry anzulegen.
+        """
+        from .provisioning import (
+            entry_title,
+            extract_consent_options,
+            validate_provision_data,
+        )
+
+        try:
+            data = validate_provision_data(import_data)
+        except ValueError:
+            return self.async_abort(reason="invalid_provision_data")
+
+        await self.async_set_unique_id(data[CONF_USER_ID])
+        self._abort_if_unique_id_configured(
+            updates={
+                CONF_ACCESS_TOKEN: data[CONF_ACCESS_TOKEN],
+                CONF_REFRESH_TOKEN: data[CONF_REFRESH_TOKEN],
+                CONF_API_URL: data[CONF_API_URL],
+            }
+        )
+        # Consent-Options atomar mit dem Entry anlegen — kein Fenster,
+        # in dem der Coordinator mit Default-True pushen könnte.
+        return self.async_create_entry(
+            title=entry_title(data),
+            data=data,
+            options=extract_consent_options(import_data),
         )
 
     async def async_step_location(
@@ -2378,6 +2431,16 @@ class CrowdergyOptionsFlow(OptionsFlow):
                 "entity_map": entity_map,
                 "notes": notes,
             }
+            # Box-Mapping-Umbau (2026-06-10): Integration der gemappten
+            # Entities mitschicken — Pflichtbaustein für Box-taugliche
+            # Presets (siehe entity_mapper.dominant_integration_domain).
+            from .entity_mapper import dominant_integration_domain
+
+            domain = dominant_integration_domain(
+                self.hass, list(entity_map.values())
+            )
+            if domain:
+                payload["integration_domain"] = domain
             api_url = self._entry.data[CONF_API_URL]
             token = self._entry.data[CONF_ACCESS_TOKEN]
             try:

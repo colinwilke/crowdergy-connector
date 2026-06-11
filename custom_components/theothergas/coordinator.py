@@ -19,6 +19,8 @@ from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 from .const import (
     CONF_ACCESS_TOKEN,
     CONF_API_URL,
+    OPT_CONSENT_REMOTE_CONTROL,
+    OPT_CONSENT_TELEMETRY,
     CONF_ENTITY_BATTERY_MODE,
     CONF_VALUE_BATTERY_MODE_ACTIVE,
     CONF_VALUE_BATTERY_MODE_PASSIVE,
@@ -927,7 +929,19 @@ class CrowdergyCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
         """Delegate auf TelemetryComposer (FEAT-5 Phase D, 2026-06-09)."""
         await self._composer.push_outdoor_temp()
 
+    def _consent(self, option_key: str) -> bool:
+        """Box-Consent-Gate (Phase 4). Default True — Self-Hosted-
+        Installationen ohne Box-Manager bleiben unverändert; auf der
+        Box schreibt `box_set_consent` die Flags in die Entry-Options."""
+        return bool(self.entry.options.get(option_key, True))
+
     async def _async_update_data(self) -> dict[str, dict[str, Any]]:
+        if not self._consent(OPT_CONSENT_TELEMETRY):
+            # Consent entzogen: KEIN Outdoor-Temp-Push, KEINE Telemetrie-
+            # PATCHes. Lokale Entity-Werte bleiben auf letztem Stand,
+            # damit HA-seitig nichts kaputt aussieht.
+            return self.data or {}
+
         if not self.state.active_state_bootstrapped:
             await self._bootstrap_active_state()
 
@@ -1244,6 +1258,12 @@ class CrowdergyCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
         # "Crowdergy still talking to us". The 15-s server ping is
         # the most common message type when nothing else is changing.
         self.state.last_sse_event_at = time.time()
+        # Box-Consent-Gate (Phase 4): ohne Remote-Control-Consent werden
+        # eingehende Steuer-Frames komplett ignoriert — keine Entity-
+        # Writes, keine Hold-Loops, kein Cache-Sync. Liveness-Clock oben
+        # bleibt aktuell (der Stream selbst ist kein Steuer-Akt).
+        if not self._consent(OPT_CONSENT_REMOTE_CONTROL):
+            return
         # Telemetry mirror frames carry device-level state changes the user
         # may have driven from the iOS app. We watch two flags:
         #   - is_active (Crowdergize consent) — just update the local cache

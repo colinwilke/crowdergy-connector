@@ -1,6 +1,6 @@
 # crowdergy-connector
 
-## Stand: 2026-06-09 — Release **v3.12.0**
+## Stand: 2026-06-10 — Release **v3.21.1**
 
 HACS Custom-Component (Domain `theothergas`, Legacy-Name) für Home Assistant. Spiegelt Backend-Dispatch
 in HA-Entities und pusht Telemetrie zurück. Zentrale Architektur-Doku: `crowdergy-ios/CLAUDE.md`.
@@ -57,6 +57,32 @@ Coordinator-/Full-Flow-Integration noch offen.
 - **v3.11.0** FEAT-5 Phase B: SSE-Client in eigenes Modul
 - **v3.12.0** FEAT-5 Phase D Step 1: Telemetry-Composer extrahiert
 - Cluster B: Hold-Loops als HA-Background-Tasks (#11), Wallbox-AI-off-Cleanup, DELETE via Coordinator
+
+### Crowdergy Box (v3.17–v3.21.1, 2026-06-10, Branch claude/trusting-planck-4f9txj)
+Die Box (Repo `crowdergy-box`) provisioniert den Connector headless. Alle
+Box-Pfade sind nur aktiv, wenn `theothergas:` per YAML geladen ist —
+normale HACS-Installationen unverändert.
+- **`provision_box`** (`__init__.py` + `provisioning.py` + Import-Flow in
+  `config_flow.py`): Token-Paar aus dem Box-Claim → Entry ohne UI;
+  unique_id = Backend-User-ID, Re-Pairing aktualisiert Tokens statt
+  Duplikat. Optionale `consent_*`-Felder landen **atomar** als
+  Entry-Options (kein Default-True-Fenster).
+- **`box_services.py`**: `box_list_presets` (proxied approved
+  Vendor-Preset-Lookup inkl. `integration_domain`), `box_add_device`
+  (Registrierung über `device_field_spec`, blockt camera/person/
+  device_tracker/media_player), `box_set_consent` (Entry-Options).
+- **Consent-Gates im Coordinator**: ohne `consent_telemetry` kein
+  Telemetrie-/Outdoor-Push (`_async_update_data` Early-Return); ohne
+  `consent_remote_control` werden eingehende Steuer-Frames ignoriert
+  (`_handle_ws_message`). Default True (Flags fehlen) = Alt-Verhalten.
+- **Contribute** schickt `integration_domain` mit
+  (`entity_mapper.dominant_integration_domain`, Registry → Config-Entry).
+- v3.21.1: `_authenticated_config_request` baut den httpx-Client im
+  Executor (Blocking-Call-Warnung in HA 2026.5.4, live gefunden).
+- Tests: `tests/test_provisioning.py`, `test_box_services.py`,
+  `test_integration_domain.py` (HA-Harness; braucht Python 3.12+).
+- **TODO: Tag `v3.21.1` nach Merge anlegen** — die Box pinnt per Git-Tag
+  (`crowdergy-box/CONNECTOR_VERSION` + `scripts/vendor-connector.sh`).
 
 ### Bekannte Probleme / TODOs
 - **Domain noch `theothergas`** (Legacy) — Migration auf `crowdergy` ausstehend (Breaking Change: Manifest,
