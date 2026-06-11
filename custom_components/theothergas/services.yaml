@@ -111,9 +111,16 @@ box_set_consent:
   description: >-
     Write the privacy consent enforcement flags into the config entry
     options (Crowdergy Box, Phase 4). telemetry=false stops all
-    telemetry/outdoor-temp pushes; remote_control=false makes the
-    coordinator ignore incoming control frames. Defaults (flags absent)
-    keep self-hosted installations unchanged.
+    energy telemetry / measurement / outdoor-temp pushes;
+    remote_control=false makes the coordinator ignore incoming control
+    frames. Defaults (flags absent) keep self-hosted installations
+    unchanged.
+
+    Scope note (E-4, 2026-06-11): the telemetry consent covers ENERGY
+    and measurement data only. Operational liveness signals — the
+    heartbeat ping (connector_last_seen / connector_version) and device
+    polling — keep running even with telemetry=false; they carry no
+    energy data and are required for the box to show "connector online".
   fields:
     telemetry:
       name: Telemetry consent

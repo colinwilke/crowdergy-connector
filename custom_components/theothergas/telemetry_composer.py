@@ -129,6 +129,14 @@ class TelemetryComposer:
         aus diesem Call. Exponential-Backoff bei consecutive failures
         25 → 50 → … → cap 120 s. Reset auf base-interval bei nächstem
         Success.
+
+        E-4 (2026-06-11, bewusste Entscheidung): der Heartbeat ist NICHT
+        auf `consent_telemetry` gegated. Telemetrie-Consent deckt Energie-
+        und Messwerte ab (`mirror_once` / `_async_update_data` sind
+        gegated); der Heartbeat trägt nur Betriebsdaten (last_seen +
+        Connector-Version) und muss auch bei telemetry=false laufen,
+        damit die Box „Connector online" anzeigen kann. Dasselbe gilt
+        für das Device-Polling.
         """
         consecutive_failures = 0
         while True:
