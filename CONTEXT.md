@@ -1,6 +1,6 @@
 # crowdergy-connector
 
-## Stand: 2026-06-11 — Release **v3.21.2**
+## Stand: 2026-06-11 — Release **v3.21.3**
 
 HACS Custom-Component (Domain `theothergas`, Legacy-Name) für Home Assistant. Spiegelt Backend-Dispatch
 in HA-Entities und pusht Telemetrie zurück. Zentrale Architektur-Doku: `crowdergy-ios/CLAUDE.md`.
@@ -50,7 +50,16 @@ pytest-Setup (`conftest.py`) mit Pure-Logic-Unit-Tests: `test_device_field_spec`
 `test_sse_client` (Queue/Backpressure/Token-Callback), `test_state_mirror`, `test_seconds_until_next_run`.
 Coordinator-/Full-Flow-Integration noch offen.
 
-### Recent Changes (v3.9.2 → v3.21.2)
+### Recent Changes (v3.9.2 → v3.21.3)
+- **v3.21.3** (2026-06-11, getaggt + GitHub-Release live, BREAKING): E2E-Konsistenz
+  Bezug/Entladen ↔ Einspeisung/Laden. `entity_energy_total` ist jetzt semantisch das
+  Bezug-/Entladen-Counter (= device → home), `entity_energy_discharged_total` das
+  Einspeisung-/Laden-Counter. Math in `coordinator.py` geflippt: `delta = in − out`
+  statt `out − in` damit positive Delta = Energie kam ins Haus (matcht die schon
+  vorher korrekte power_kw-Konvention). Labels (DE/EN) und Beschreibungen pro
+  Device-Type explizit. Backend + iOS-Render unverändert; iOS-Tile-Konvention ist
+  durchgängig device-relativ (↑ Bezug ROT, ↓ Einspeisung GRÜN; Battery analog dunkelgrün).
+  Bestand-User müssen ihre beiden Counter-Mappings einmalig tauschen.
 - **v3.21.2** (2026-06-11, getaggt + GitHub-Release live): Crowd-Contribution sendet
   `integration_domain` mit — leitet Domain aus erstem gemappten Entity via HA-Entity-Registry
   → `ConfigEntry.domain` ab. Vorher landeten alle Submissions mit `NULL` und wurden vom
