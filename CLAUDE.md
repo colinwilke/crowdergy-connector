@@ -12,17 +12,21 @@ Tests laufen NUR mit Python ≥3.12 (`requirements-test.txt`-Kopf);
 umgebungsabhängigen Error (aiodns/aiohttp-Drift in frischen venvs) — auf
 sauberem Stand gegenprüfen, bevor man eigene Änderungen verdächtigt.
 
-### Harter Code-Review 2026-06-11 — Befunde offen
+### Harter Code-Review 2026-06-11 — umgesetzt (v3.22.0 auf diesem Branch)
 
-Multi-Agent-Review über alle 5 Repos; konsolidierte Fix-Prompts beim User.
-Top hier: (1) Remote-Control-Consent-Gate nur in `_handle_ws_message` —
-`state_resync_loop` + Hold-Self-Heal umgehen es (Gate in die `_apply_*`
-ziehen); (2) Re-Pairing via provision_box verwirft Consent-Flags
-(`already_configured` updated nur Tokens, nie Options); (3) Hold-Self-Heal
-ignoriert den SSE-Stale-Bail (überschreibt User-Eingriffe im Outage);
-(4) Climate-Idempotenz-Guard wirkungslos (`float("heat")` wirft);
-(5) `charge_mode_value_crowdergy`-Restore tot. Verträge zu Backend/Box
-feldgenau OK (14 REST-Pfade, SSE-Frames, device_field_spec).
+CN-1…CN-14 (ohne CN-10) + P3 gefixt; 71 Tests grün (2 deselektiert:
+`test_start_is_idempotent` + `test_stop_cancels_running_task`, beides der
+bekannte aiodns/aiohttp-Drift, per Baseline verifiziert). Kern:
+Remote-Control-Consent-Gate jetzt ZENTRAL in allen `_apply_*`
+(Resync/Self-Heal/Hold eingeschlossen); Re-Pairing merged Consent-Options;
+Self-Heal respektiert SSE-Stale; Climate-Guard liest das
+`temperature`-Attribut; Mirror hat eigenen `_last_mirror_at` und ist auf
+Telemetrie-Consent gegated; Box-Services nur noch mit `theothergas:`-
+YAML-Key (bewusst Breaking für Self-Hosted ohne Key); SSE-401 mit Backoff
++ Reauth-Flow nach 5 Zyklen; Options-Flow persistiert sofort. Verträge zu
+Backend/Box waren feldgenau OK. Offen (User-Entscheidung): E-2
+Wallbox-Snapshot/Restore (`charge_mode_value_crowdergy`-Pfad noch drin),
+E-4 Liveness-Traffic bei consent_telemetry=False, E-6 Slot-Allowlist (CN-10).
 
 ### Agent-Ownership (Interferenz-Schutz, User-Vorgabe 2026-06-10)
 

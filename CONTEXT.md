@@ -2,16 +2,17 @@
 
 ## Stand: 2026-06-10 — Release **v3.21.1**
 
-> **Harter Code-Review 2026-06-11 (Multi-Agent, alle 5 Repos): Befunde offen.**
-> Konsolidierte Fix-Prompts liegen beim User. Schwerste Connector-Punkte:
-> (1) Remote-Control-Consent-Gate sitzt nur in `_handle_ws_message` —
-> `state_resync_loop` + Hold-Self-Heal umgehen es (Gate gehört in die
-> `_apply_*`-Methoden); (2) Re-Pairing via `provision_box` verwirft
-> Consent-Flags (`already_configured`-Pfad updated nur Tokens); (3) Hold-
-> Self-Heal ignoriert den SSE-Stale-Bail; (4) Climate-Idempotenz-Guard
-> vergleicht `state.state` („heat") statt `temperature`-Attribut;
-> (5) `charge_mode_value_crowdergy`-Snapshot/Restore ist tot (Backend-Spalte
-> am 2026-06-03 entfernt). Verträge zu Backend/Box sind feldgenau verifiziert OK.
+> **Harter Code-Review 2026-06-11: Befunde umgesetzt → v3.22.0 (Branch
+> `claude/cool-hawking-rjc1xg`).** Zentrale Fixes: Remote-Control-Consent-Gate
+> in allen `_apply_*` (`_remote_control_allowed`, gilt für SSE/Resync/
+> Self-Heal/Hold); Re-Pairing merged Consent-Options im
+> `already_configured`-Pfad; Self-Heal respektiert SSE-Stale; Climate-Guard
+> liest `temperature`-Attribut; Mirror-Loop eigener `_last_mirror_at` +
+> telemetrie-gegated; Box-Services hinter `theothergas:`-YAML-Gate;
+> SSE-401-Backoff + Reauth-Flow; Options-Flow persistiert sofort;
+> `CONTROLLABLE_TYPES` (inkl. aircon) als SSOT in const.py. Offen
+> (User-Entscheidung): toter `charge_mode_value_crowdergy`-Restore (E-2),
+> Liveness-Traffic ohne Telemetrie-Consent (E-4), Slot-Allowlist (E-6/CN-10).
 
 HACS Custom-Component (Domain `theothergas`, Legacy-Name) für Home Assistant. Spiegelt Backend-Dispatch
 in HA-Entities und pusht Telemetrie zurück. Zentrale Architektur-Doku: `crowdergy-ios/CLAUDE.md`.
