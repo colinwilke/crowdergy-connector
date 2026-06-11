@@ -1,6 +1,11 @@
 # crowdergy-connector
 
-## Stand: 2026-06-11 abends — Release **v3.24.0** (Branch-Konsolidierung)
+## Stand: 2026-06-11 abends — Release **v3.25.0** (Branch-Konsolidierung)
+
+> Tag **v3.24.0** war auf origin schon von der parallelen
+> Box-Memory-Docs-Session belegt → Bump auf v3.25.0 statt Konflikt.
+
+
 
 > **v3.24.0 (2026-06-11 abends, Multi-Branch-Konsolidierung)**: Die in
 > `claude/trusting-planck-4f9txj` getaggten Releases v3.21.2/v3.21.3/v3.21.4
