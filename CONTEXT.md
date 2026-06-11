@@ -2,6 +2,17 @@
 
 ## Stand: 2026-06-10 — Release **v3.21.1**
 
+> **Harter Code-Review 2026-06-11 (Multi-Agent, alle 5 Repos): Befunde offen.**
+> Konsolidierte Fix-Prompts liegen beim User. Schwerste Connector-Punkte:
+> (1) Remote-Control-Consent-Gate sitzt nur in `_handle_ws_message` —
+> `state_resync_loop` + Hold-Self-Heal umgehen es (Gate gehört in die
+> `_apply_*`-Methoden); (2) Re-Pairing via `provision_box` verwirft
+> Consent-Flags (`already_configured`-Pfad updated nur Tokens); (3) Hold-
+> Self-Heal ignoriert den SSE-Stale-Bail; (4) Climate-Idempotenz-Guard
+> vergleicht `state.state` („heat") statt `temperature`-Attribut;
+> (5) `charge_mode_value_crowdergy`-Snapshot/Restore ist tot (Backend-Spalte
+> am 2026-06-03 entfernt). Verträge zu Backend/Box sind feldgenau verifiziert OK.
+
 HACS Custom-Component (Domain `theothergas`, Legacy-Name) für Home Assistant. Spiegelt Backend-Dispatch
 in HA-Entities und pusht Telemetrie zurück. Zentrale Architektur-Doku: `crowdergy-ios/CLAUDE.md`.
 
@@ -97,5 +108,5 @@ normale HACS-Installationen unverändert.
 ### Abhängigkeiten / Plattform
 - **Backend (crowdergy-backend)** wird aufgerufen (s.o.); **iOS**: keine Direktverbindung — iOS bekommt
   Connector-Daten via Backend-SSE-Broadcast
-- `manifest.json`: Version `3.12.0`, Domain `theothergas`, `iot_class: cloud_push`, `requirements: ["httpx>=0.24.0"]`
+- `manifest.json`: Version `3.21.1`, Domain `theothergas`, `iot_class: cloud_push`, `requirements: ["httpx>=0.24.0"]`
   (aiohttp seit FEAT-5 Phase B entfallen)
