@@ -1,6 +1,6 @@
 # crowdergy-connector
 
-## Stand: 2026-06-10 — Release **v3.21.1**
+## Stand: 2026-06-11 — Release **v3.21.2**
 
 HACS Custom-Component (Domain `theothergas`, Legacy-Name) für Home Assistant. Spiegelt Backend-Dispatch
 in HA-Entities und pusht Telemetrie zurück. Zentrale Architektur-Doku: `crowdergy-ios/CLAUDE.md`.
@@ -50,7 +50,13 @@ pytest-Setup (`conftest.py`) mit Pure-Logic-Unit-Tests: `test_device_field_spec`
 `test_sse_client` (Queue/Backpressure/Token-Callback), `test_state_mirror`, `test_seconds_until_next_run`.
 Coordinator-/Full-Flow-Integration noch offen.
 
-### Recent Changes (v3.9.2 → v3.12.0)
+### Recent Changes (v3.9.2 → v3.21.2)
+- **v3.21.2** (2026-06-11, getaggt + GitHub-Release live): Crowd-Contribution sendet
+  `integration_domain` mit — leitet Domain aus erstem gemappten Entity via HA-Entity-Registry
+  → `ConfigEntry.domain` ab. Vorher landeten alle Submissions mit `NULL` und wurden vom
+  Box-Manager `SUPPORTED_INTEGRATIONS`-Filter rejected (Colins KOSTAL-Solar-Submission war
+  betroffen — auf prod backfilled).
+- v3.17–v3.21.1 — Box-Phase (provision_box / box_services / consent-Gates) — siehe Box-Sektion unten
 - **v3.9.2** SSE Half-Open-Detection (60-s-Timeout) + Frame-Logging
 - **v3.10.0** FEAT-5 Phase A: `DeviceStateMirror`-Extraktion + Test-Skeleton
 - **v3.10.1** Call-Site-Migration auf State-Mirror
