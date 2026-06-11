@@ -203,6 +203,87 @@ async def test_add_device_rejects_forbidden_domain(hass: HomeAssistant):
     assert entry.data[CONF_DEVICES] == []
 
 
+# ── CN-9: YAML-Gate + eindeutiger Entry ──────────────────────────────────────
+
+
+async def test_services_not_registered_without_yaml_key(hass: HomeAssistant):
+    """CN-9 (2026-06-11): ohne `theothergas:` in configuration.yaml
+    werden provision_box + Box-Services NICHT registriert (wie
+    dokumentiert); async_setup liefert weiterhin True, damit Config-
+    Entries normal laden."""
+    assert await async_setup_component(hass, DOMAIN, {})
+    await hass.async_block_till_done()
+    assert not hass.services.has_service(DOMAIN, "provision_box")
+    assert not hass.services.has_service(DOMAIN, SERVICE_BOX_LIST_PRESETS)
+    assert not hass.services.has_service(DOMAIN, SERVICE_BOX_ADD_DEVICE)
+    assert not hass.services.has_service(DOMAIN, "box_set_consent")
+
+
+async def test_get_entry_rejects_multiple_entries(hass: HomeAssistant):
+    """CN-9 (2026-06-11): `_get_entry` darf bei >1 Entry nicht blind
+    entries[0] raten — Fehler statt falscher Account."""
+    await _setup(hass)
+    second = MockConfigEntry(
+        domain=DOMAIN, unique_id="user-2", data=dict(ENTRY_DATA)
+    )
+    second.add_to_hass(hass)
+    with pytest.raises(HomeAssistantError, match="multiple"):
+        await hass.services.async_call(
+            DOMAIN,
+            SERVICE_BOX_LIST_PRESETS,
+            {CONF_DEVICE_TYPE: "solar"},
+            blocking=True,
+            return_response=True,
+        )
+
+
+# ── CN-14: defensive Server-Antwort-Validierung ──────────────────────────────
+
+
+async def test_list_presets_drops_malformed_presets(hass: HomeAssistant):
+    """CN-14 (2026-06-11): Presets ohne vendor/model (oder Nicht-Dicts)
+    werden gedroppt statt downstream den Picker zu crashen."""
+    await _setup(hass)
+    payload = {
+        "presets": [PRESET, {"vendor": "NurVendor"}, "junk", 42],
+    }
+    with patch(
+        "custom_components.theothergas.config_flow._authenticated_config_request",
+        new=AsyncMock(return_value=_response(200, payload)),
+    ):
+        response = await hass.services.async_call(
+            DOMAIN,
+            SERVICE_BOX_LIST_PRESETS,
+            {CONF_DEVICE_TYPE: "solar"},
+            blocking=True,
+            return_response=True,
+        )
+    assert response["presets"] == [PRESET]
+
+
+async def test_add_device_missing_id_raises_clean_error(hass: HomeAssistant):
+    """CN-14 (2026-06-11): Registrierungs-Antwort ohne `id` →
+    sauberer HomeAssistantError statt KeyError; Entry unverändert."""
+    entry = await _setup(hass)
+    with patch(
+        "custom_components.theothergas.config_flow._authenticated_config_request",
+        new=AsyncMock(return_value=_response(200, {"ok": True})),
+    ):
+        with pytest.raises(HomeAssistantError, match="missing 'id'"):
+            await hass.services.async_call(
+                DOMAIN,
+                SERVICE_BOX_ADD_DEVICE,
+                {
+                    CONF_DEVICE_TYPE: "solar",
+                    CONF_DEVICE_NAME: "X",
+                    "entities": {},
+                },
+                blocking=True,
+                return_response=True,
+            )
+    assert entry.data[CONF_DEVICES] == []
+
+
 async def test_set_consent_writes_entry_options(hass: HomeAssistant):
     from custom_components.theothergas.box_services import SERVICE_BOX_SET_CONSENT
     from custom_components.theothergas.const import (

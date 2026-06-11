@@ -3,7 +3,6 @@ from __future__ import annotations
 
 import logging
 
-import httpx
 import voluptuous as vol
 from homeassistant.config_entries import SOURCE_IMPORT, ConfigEntry
 from homeassistant.core import HomeAssistant, ServiceCall
@@ -57,7 +56,18 @@ CONFIG_SCHEMA = vol.Schema(
 
 
 async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
-    """YAML-loses Setup — registriert nur den Provisioning-Service."""
+    """Komponenten-Setup. Die Box-Services (provision_box,
+    box_list_presets, box_add_device, box_set_consent) werden NUR
+    registriert, wenn `theothergas:` in der configuration.yaml steht
+    (CN-9, 2026-06-11) — exakt wie in services.yaml/box_services.py
+    dokumentiert. Die Crowdergy Box lädt den YAML-Key (verifiziert:
+    crowdergy-box/ha-config/configuration.yaml); normale HACS-
+    Installationen ohne YAML-Key bekommen die Services nicht mehr
+    (gewollt: kein headless Provisioning-Endpoint auf Self-Hosted-
+    Instanzen). Config-Entry-Setup läuft unabhängig davon weiter.
+    """
+    if DOMAIN not in config:
+        return True
 
     async def _handle_provision_box(call: ServiceCall) -> None:
         # Tokens nie loggen — auch nicht im Fehlerfall (das Schema
@@ -172,14 +182,21 @@ async def async_remove_config_entry_device(
     new_data = {**config_entry.data, CONF_DEVICES: devices}
     hass.config_entries.async_update_entry(config_entry, data=new_data)
 
-    # Prune the coordinator's per-device bookkeeping dicts so a
-    # long-lived session doesn't accumulate stale keys after each
-    # device deletion. Coordinator stays running; reload would also
-    # reset them but HA doesn't force one here.
+    # Prune the coordinator's per-device bookkeeping dicts (inkl.
+    # self.devices + Entity-Index seit CN-8) so nothing PATCHes the
+    # deleted device while the scheduled reload below is still
+    # pending.
     coordinator: CrowdergyCoordinator | None = (
         hass.data.get(DOMAIN, {}).get(config_entry.entry_id)
     )
     if coordinator is not None:
         coordinator.forget_device(crowdergy_device_id)
+
+    # CN-8 (2026-06-11): Reload schedulen, damit Coordinator/Entities
+    # sauber auf der neuen Geräteliste neu aufsetzen — HA erzwingt
+    # nach async_remove_config_entry_device keinen Reload, und der
+    # laufende Coordinator hat die Liste sonst nur via forget_device
+    # in-memory gepatcht (Platform-Entities blieben registriert).
+    hass.config_entries.async_schedule_reload(config_entry.entry_id)
 
     return True

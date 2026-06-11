@@ -39,6 +39,24 @@ provision_box:
       required: false
       selector:
         text: {}
+    consent_telemetry:
+      name: Telemetry consent
+      description: >-
+        Consent flag captured by the box wizard BEFORE pairing; stored
+        atomically as a config entry option (see box_set_consent for
+        semantics). Absent flag keeps the existing option / default.
+      required: false
+      selector:
+        boolean: {}
+    consent_remote_control:
+      name: Remote control consent
+      description: >-
+        Consent flag captured by the box wizard BEFORE pairing; stored
+        atomically as a config entry option (see box_set_consent for
+        semantics). Absent flag keeps the existing option / default.
+      required: false
+      selector:
+        boolean: {}
 
 box_list_presets:
   name: Box list vendor presets

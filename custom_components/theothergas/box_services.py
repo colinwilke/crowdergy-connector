@@ -89,6 +89,14 @@ def _get_entry(hass: HomeAssistant) -> ConfigEntry:
         raise HomeAssistantError(
             "no Crowdergy config entry — pair the box first (provision_box)"
         )
+    # CN-9 (2026-06-11): vorher blind entries[0] — bei mehreren
+    # Entries (sollte auf einer Box nie passieren) wäre das ein
+    # stilles Raten auf den falschen Account. Eindeutigkeit erzwingen.
+    if len(entries) > 1:
+        raise HomeAssistantError(
+            "multiple Crowdergy config entries found — box services "
+            "need exactly one (remove the stale entry first)"
+        )
     return entries[0]
 
 
@@ -107,7 +115,30 @@ def async_register_box_services(hass: HomeAssistant) -> None:
             raise HomeAssistantError(
                 f"preset lookup failed: {response.status_code}"
             )
-        return {"presets": response.json().get("presets", [])}
+        # CN-14 (2026-06-11): Server-Antwort defensiv parsen — kaputtes
+        # JSON / unerwartete Shapes dürfen den Service nicht mit einem
+        # rohen Traceback crashen, und Presets ohne vendor/model würden
+        # downstream (GUI-Picker, config_flow-Schema) hart indexiert.
+        try:
+            payload = response.json()
+        except ValueError as err:
+            raise HomeAssistantError(
+                f"preset lookup returned invalid JSON: {err}"
+            ) from err
+        presets = payload.get("presets") if isinstance(payload, dict) else None
+        if not isinstance(presets, list):
+            presets = []
+        valid = []
+        for p in presets:
+            if isinstance(p, dict) and {"vendor", "model"} <= p.keys():
+                valid.append(p)
+            else:
+                _LOGGER.warning(
+                    "box_list_presets: dropping malformed preset "
+                    "(keys: %s)",
+                    sorted(p.keys()) if isinstance(p, dict) else type(p).__name__,
+                )
+        return {"presets": valid}
 
     async def _handle_add_device(call: ServiceCall) -> ServiceResponse:
         # Import hier statt Modulkopf: config_flow ist groß und wird
@@ -149,8 +180,26 @@ def async_register_box_services(hass: HomeAssistant) -> None:
                 f"backend device registration failed: {response.status_code}"
             )
 
+        # CN-14 (2026-06-11): json() + `id` defensiv — Antwort ohne id
+        # hieße ein Device, das backend-seitig existiert, lokal aber
+        # nie ankommt; sauberer Fehler statt KeyError-Traceback.
+        try:
+            body = response.json()
+        except ValueError as err:
+            raise HomeAssistantError(
+                f"backend device registration returned invalid JSON: {err}"
+            ) from err
+        backend_id = body.get("id") if isinstance(body, dict) else None
+        if not backend_id:
+            _LOGGER.warning(
+                "box_add_device: backend response missing 'id' (keys: %s)",
+                sorted(body.keys()) if isinstance(body, dict) else type(body).__name__,
+            )
+            raise HomeAssistantError(
+                "backend device registration response missing 'id'"
+            )
         dev = _build_device_record(
-            response.json()["id"], device_type, device_name, entity_input
+            backend_id, device_type, device_name, entity_input
         )
         devices = [*entry.data.get(CONF_DEVICES, []), dev]
         hass.config_entries.async_update_entry(
