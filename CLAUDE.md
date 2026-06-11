@@ -24,9 +24,20 @@ Self-Heal respektiert SSE-Stale; Climate-Guard liest das
 Telemetrie-Consent gegated; Box-Services nur noch mit `theothergas:`-
 YAML-Key (bewusst Breaking für Self-Hosted ohne Key); SSE-401 mit Backoff
 + Reauth-Flow nach 5 Zyklen; Options-Flow persistiert sofort. Verträge zu
-Backend/Box waren feldgenau OK. Offen (User-Entscheidung): E-2
-Wallbox-Snapshot/Restore (`charge_mode_value_crowdergy`-Pfad noch drin),
-E-4 Liveness-Traffic bei consent_telemetry=False, E-6 Slot-Allowlist (CN-10).
+Backend/Box waren feldgenau OK.
+
+### User-Entscheidungen 2026-06-11 umgesetzt → v3.23.0
+
+E-2: toter Wallbox-Restore-Pfad (`charge_mode_value_crowdergy`,
+`_snapshot_/_restore_charge_mode`) entfernt — Pre-AI-Lademodus wird bei
+AI-OFF NICHT mehr restauriert (Backend-Spalte seit 2026-06-03 weg).
+E-6 (CN-10): Blocklist → **Allowlist** `MAPPABLE_ENTITY_DOMAINS` pro Slot
+(Default-DENY; Read-Slots nur sensor/binary_sensor, Control-Slots nur
+schreibbare Domains; KOSTAL per Regressionstest grün). NEUE Slots künftig
+dort eintragen (analog `device_field_spec.SPEC`). E-4: Liveness
+(Heartbeat/Version/Device-Polling) bewusst NICHT gegated — dokumentiert in
+services.yaml + telemetry_composer (Telemetrie-Consent = nur Energiedaten).
+76 Tests grün (2 deselektiert: bekannter aiodns-Drift).
 
 ### Agent-Ownership (Interferenz-Schutz, User-Vorgabe 2026-06-10)
 

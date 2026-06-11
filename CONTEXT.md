@@ -1,6 +1,6 @@
 # crowdergy-connector
 
-## Stand: 2026-06-11 — Release **v3.22.0** (GitHub-Release mit HACS-Body, Tag via tag-release.yml)
+## Stand: 2026-06-11 — Release **v3.23.0** (E-2/E-4/E-6 aus dem Review; GitHub-Release via tag-release.yml)
 
 > **Harter Code-Review 2026-06-11: Befunde umgesetzt → v3.22.0 (Branch
 > `claude/cool-hawking-rjc1xg`).** Zentrale Fixes: Remote-Control-Consent-Gate
