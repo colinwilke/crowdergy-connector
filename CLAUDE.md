@@ -16,6 +16,20 @@ dort: Cluster C (#16–#22).
     (Default-DENY; Read-Slots nur sensor/binary_sensor, Control-Slots nur
     schreibbare Domains).
   - `CONTROLLABLE_TYPES` in `const.py` ist SSOT für steuerbare Typen.
+  - **`api_client.py` ist DER eine Auth-Pfad** (ab v3.26.0): NIE eine
+    zweite Refresh-Implementierung anlegen — neue Backend-Calls über
+    `CrowdergyAuthSession.async_request` bzw. `authenticated_request`
+    (re-used die Coordinator-Session; Single-Flight-Lock + CAS gegen das
+    Single-Use-Refresh-Token). httpx-Clients IMMER im Executor bauen.
+- **Onboarding = Pairing-Code (User-Entscheidung 2026-06-12):**
+  Email/Passwort ist aus dem Config-Flow KOMPLETT raus (auch Reauth) —
+  HA sieht nie Credentials, funktioniert auch für Apple-only-Accounts,
+  Backend kann die Session revozieren. Claim kanonisch
+  `POST /api/v1/connector/claim` mit `client_id` = HA-Instance-ID;
+  Fallback auf `/api/v1/box/claim`+`box_id` NUR bei 404/405 (altes
+  Backend). Bestands-Entries aus der Login-Ära laufen unverändert
+  weiter (kein Migrationszwang). Reauth lehnt Codes fremder Accounts ab
+  (`reauth_account_mismatch`) — Reauth tauscht Tokens, nie den Account.
 - **Consent-Semantik (entschieden):** Telemetrie-Consent gated NUR
   Energiedaten. Liveness-Traffic (Heartbeat/Version/Device-Polling) ist
   bewusst NICHT gegated — dokumentiert in `services.yaml` +
