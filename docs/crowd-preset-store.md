@@ -128,6 +128,47 @@ in `preset_spec.py`, der Rest der Pipeline folgt.
 - Bestands-Migration: vorhandene Solar-Presets bekommen
   status=`approved` (sie sind live verifiziert).
 
+## Admin / Kuration (Design-Vorschlag 2026-06-12 — mit dem Store umzusetzen)
+
+Admin-Zugang gehört ins **Backend** — einziger Ort, an dem Store-Daten
+und Auth bereits liegen. Box/iOS sind Kundenkanäle, der Connector ist
+public Code; keiner davon taugt als Admin-Oberfläche.
+
+- **AuthZ:** `users.is_admin`-Spalte (oder `ADMIN_USER_IDS`-Env) +
+  `require_admin`-Dependency. Erreichbarkeit Stufe 1: Admin-Router nur
+  auf localhost binden, Zugriff per SSH-Tunnel (bestehendes
+  Staging-Muster) — kein öffentlicher Admin-Endpunkt, solange es genau
+  einen Admin gibt.
+- **Endpoints:**
+  - `GET /admin/crowd-presets?status=staged|approved|rejected` (Queue,
+    sortiert nach distinct_user_count/Alter)
+  - `GET /admin/crowd-presets/{id}` — Aggregat + alle Roh-Contributions
+    (Zeitstempel, User-ID pseudonymisiert) + Auto-Check-Ergebnisse +
+    Konsens-Diff (Fingerprint-Vergleich bei mehreren Contributions,
+    Abweichler markiert)
+  - `POST /admin/crowd-presets/{id}/approve` / `/reject` — body:
+    `reason`, optional korrigierte entity_map/value_map (dann
+    `source=admin_edited`, Original bleibt in den Contributions)
+  - `approved → rejected` ist erlaubt (Notbremse: falsche Steuer-Slots
+    schalten reale Hardware). Verschwindet sofort aus dem Lookup;
+    bereits angewendete Geräte behalten ihr Mapping (→ Re-Apply-Prompt,
+    siehe Folgearbeit).
+- **Auto-Checks** (Ampel pro Preset, vor dem Augen-Review): Pflicht-
+  Slots vollständig (Spec-Mirror), Entity-Domain plausibel pro Slot
+  (sensor auf Read-, select/number auf Steuer-Slots), **Suffix-
+  Matchbarkeit** (object_id braucht einen `_`-Suffix ≥ 6 Zeichen —
+  sonst kann keine Box die ID je auflösen), value_map-Werte nicht
+  leer, notes-Länge/PII-Heuristik.
+- **Audit:** jede Statusänderung append-only (wer/wann/was/Grund).
+- **UI Stufe 1:** server-rendered Mini-Seite unter `/admin` (Jinja,
+  kein Build-Step) — Tabellen + Diff sind visuell; CLI-Script als
+  Alternative. **Stufe 2:** Benachrichtigung „N neue staged Presets",
+  Telemetrie-Plausibilitäts-Loop nach Approve (liefern Boxen mit
+  diesem Preset realistische kW/SoC-Werte?).
+- **Empirische Validierung:** der Self-Hosted-Preset-Picker ist das
+  Test-Vehikel — ein staged Preset gegen die eigene Hardware (KOSTAL)
+  anwenden, bevor es approved wird.
+
 ## Offen / Folgearbeit
 
 - **Rate-Limit auf `/crowd-presets/lookup`** (und moderat auf
