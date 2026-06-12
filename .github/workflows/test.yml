@@ -1,0 +1,43 @@
+name: Connector tests
+
+# Trigger pausiert wie backend.yml im Backend-Repo (GitHub-Actions-
+# Billing/Spending-Limit, seit 2026-05-25). `workflow_dispatch` hält den
+# Workflow manuell ausführbar; nach dem Billing-Fix die push/
+# pull_request-Trigger unten wieder einkommentieren (Backlog #15).
+on:
+  workflow_dispatch:
+  # push:
+  #   branches: [main]
+  #   paths-ignore:
+  #     - "**/*.md"
+  #     - "docs/**"
+  #     - "images/**"
+  # pull_request:
+
+concurrency:
+  group: connector-test-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install deps
+        run: pip install -r requirements-test.txt
+
+      - name: Run pytest
+        # Die beiden deselektierten sse_client-Tests sind der bekannte
+        # umgebungsabhängige aiodns/aiohttp-Drift in frischen venvs
+        # (siehe CLAUDE.md) — in CI deterministisch raus.
+        run: >
+          pytest -v
+          --deselect tests/test_sse_client.py::test_start_is_idempotent
+          --deselect tests/test_sse_client.py::test_stop_cancels_running_task

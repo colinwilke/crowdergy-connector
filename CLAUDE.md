@@ -57,5 +57,7 @@ sauberem Stand gegenprüfen, bevor man eigene Änderungen verdächtigt.
   backend + box). Der lokale Mac-/Xcode-Agent besitzt `crowdergy-ios`.
 - Fremde Agents: dieses Repo LESEN ja (API-Verträge), schreiben nein —
   Ausnahme: CLAUDE.md/CONTEXT.md-Memory-Updates.
-- Nie auf fremden `claude/...`-Arbeitsbranches committen; eigene Branches,
-  Sync-Punkt ist main (Merges macht der User bzw. der lokale Agent).
+- **Trunk-based (User-Entscheidung 2026-06-11):** Owner-Agent pusht direkt
+  auf `main`; Bedingung: Tests vorher grün. `claude/...`-Branches nur für
+  Riskantes/Experimentelles; nie auf fremden Arbeitsbranches committen.
+  Releases bleiben davon getrennt (nur via Tag).
