@@ -261,8 +261,98 @@ async def test_add_device_rejects_unknown_slot(hass: HomeAssistant):
             blocking=True,
             return_response=True,
         )
-    assert "not a mappable entity slot" in str(excinfo.value)
+    assert "not a mappable entity or preset value slot" in str(excinfo.value)
     assert entry.data[CONF_DEVICES] == []
+
+
+async def test_add_device_rejects_unknown_slot_without_dot(hass: HomeAssistant):
+    """v3.24 (Mapping-Dictionary): unbekannte Slot-Keys werden jetzt
+    auch dann abgelehnt, wenn ihr Wert KEIN Punkt-Format hat — vorher
+    rutschten sie still durch und wurden erst später gedroppt."""
+    entry = await _setup(hass)
+    with pytest.raises(HomeAssistantError) as excinfo:
+        await hass.services.async_call(
+            DOMAIN,
+            SERVICE_BOX_ADD_DEVICE,
+            {
+                CONF_DEVICE_TYPE: "battery",
+                CONF_DEVICE_NAME: "X",
+                "entities": {"mystery_value": "whatever"},
+            },
+            blocking=True,
+            return_response=True,
+        )
+    assert "not a mappable entity or preset value slot" in str(excinfo.value)
+    assert entry.data[CONF_DEVICES] == []
+
+
+async def test_add_device_rejects_non_entity_value_on_entity_slot(
+    hass: HomeAssistant,
+):
+    """v3.24: ein Entity-Slot mit einem Wert ohne `<domain>.<object_id>`-
+    Form ist ein kaputtes Preset — Ablehnung statt stiller Übernahme
+    (vorher übersprang der Punkt-Check solche Werte komplett)."""
+    entry = await _setup(hass)
+    with pytest.raises(HomeAssistantError) as excinfo:
+        await hass.services.async_call(
+            DOMAIN,
+            SERVICE_BOX_ADD_DEVICE,
+            {
+                CONF_DEVICE_TYPE: "solar",
+                CONF_DEVICE_NAME: "X",
+                "entities": {CONF_ENTITY_POWER: "kaputt_ohne_domain"},
+            },
+            blocking=True,
+            return_response=True,
+        )
+    assert "not allowed" in str(excinfo.value)
+    assert entry.data[CONF_DEVICES] == []
+
+
+async def test_add_device_allows_battery_preset_with_value_map(
+    hass: HomeAssistant,
+):
+    """v3.24 (Mapping-Dictionary): volles Batterie-Preset — Entity-Slots
+    mit Domain-Check, Wert-/Flag-Slots verbatim, auch mit Punkt im Wert
+    (Select-Optionen wie '7.4 kW Mode' liefen vorher fälschlich in den
+    Entity-Check)."""
+    entry = await _setup(hass)
+
+    async def fake_request(hass_, entry_, method, path, **kwargs):
+        return _response(200, {"id": "backend-bat-1"})
+
+    with patch(
+        "custom_components.theothergas.config_flow._authenticated_config_request",
+        new=AsyncMock(side_effect=fake_request),
+    ):
+        await hass.services.async_call(
+            DOMAIN,
+            SERVICE_BOX_ADD_DEVICE,
+            {
+                CONF_DEVICE_TYPE: "battery",
+                CONF_DEVICE_NAME: "Speicher",
+                "entities": {
+                    CONF_ENTITY_POWER: "sensor.batterie_power",
+                    "entity_soc_percent": "sensor.batterie_soc",
+                    "entity_battery_mode": "select.batterie_modus",
+                    "entity_battery_power_setpoint_w": "number.batterie_setpoint",
+                    "value_battery_mode_active": "Mode 1.0 (extern)",
+                    "value_battery_mode_passive": "Internal",
+                    "battery_setpoint_invert_sign": "true",
+                    "entity_control_hold": "always",
+                },
+            },
+            blocking=True,
+            return_response=True,
+        )
+
+    dev = entry.data[CONF_DEVICES][0]
+    assert dev[CONF_DEVICE_ID] == "backend-bat-1"
+    assert dev["entity_battery_mode"] == "select.batterie_modus"
+    assert dev["value_battery_mode_active"] == "Mode 1.0 (extern)"
+    # Flag kam als String "true" an und ist im Record truthy gespeichert
+    assert dev["battery_setpoint_invert_sign"]
+    assert dev["entity_control_hold"] == "always"
 
 
 async def test_add_device_allows_select_on_charge_mode(hass: HomeAssistant):

@@ -33,6 +33,10 @@ dort: Cluster C (#16–#22).
 - **Config-Flow Edit-Felder:** `vol.Optional(..., description=
   {"suggested_value": ...})`, NIE `default=` (HA re-injected, Felder
   werden unlöschbar).
+- **Entry-Schema-Regel (Box-Update-Stabilität, 2026-06-11):**
+  Änderungen an Entry-data/-options nur ADDITIV oder mit
+  Load-Time-Migration („Feld fehlt = Altverhalten") — ein
+  Vendor-Pin-Bump auf der Box darf NIE Re-Provisionierung brauchen.
 - **Release-Prozess:** Manifest-Bump + Tag; GitHub-Release via
   `tag-release.yml` bzw. User. Die Remote-Session pusht nur auf den
   Arbeitsbranch. Vor dem Taggen prüfen, ob der Tag auf origin schon

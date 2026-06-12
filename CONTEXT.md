@@ -1,12 +1,17 @@
 # crowdergy-connector — aktueller Stand
 
-Release-Stand: **v3.25.0 auf main** (Box pinnt diesen Tag); v3.26.0
-(Crowd-Preset-Store-Vertrag, Manifest bereits gebumpt) wartet auf Tag
-durch den User — Deploy-Reihenfolge: Backend-Migration `20260612_0001`
-zuerst (sonst 422 bei Beiträgen mit `value_map`). HACS Custom-Component (Domain
-`theothergas`, Legacy-Name) für Home Assistant: spiegelt Backend-Dispatch
-in HA-Entities und pusht Telemetrie zurück. Regeln + Backlog:
-`CLAUDE.md` hier bzw. `crowdergy-ios/CLAUDE.md` (Index).
+Release-Stand: **v3.25.0 auf main** (Box pinnt diesen Tag); **v3.26.0**
+(Manifest bereits gebumpt) wartet auf Tag durch den User und
+konsolidiert ZWEI Stränge: das getaggte v3.24.0
+(Mapping-Dictionary + Contribute v0.2 von
+`claude/beautiful-thompson-0a2wvl` — war NICHT in der
+v3.25.0-Konsolidierung!) und den Crowd-Preset-Store-Vertrag mit
+Backend-Umsetzung. Deploy-Reihenfolge: Backend-Migration
+`20260612_0001` zuerst (sonst 422 bei Beiträgen mit `value_map`).
+HACS Custom-Component (Domain `theothergas`, Legacy-Name) für Home
+Assistant: spiegelt Backend-Dispatch in HA-Entities und pusht
+Telemetrie zurück. Regeln + Backlog: `CLAUDE.md` hier bzw.
+`crowdergy-ios/CLAUDE.md` (Index).
 
 ## Modul-Struktur (`custom_components/theothergas/`)
 
@@ -17,7 +22,7 @@ in HA-Entities und pusht Telemetrie zurück. Regeln + Backlog:
 | `state_mirror.py` | `DeviceStateMirror`: active/on/cool-State + Hold-Tasks + `last_sse_event_at` |
 | `telemetry_composer.py` | Background-Loops (Heartbeat, Device-Mirror mit eigenem `_last_mirror_at`, State-Resync), `bootstrap_active_state()`, `push_outdoor_temp()`; Mirror ist auf Telemetrie-Consent gegated |
 | `device_field_spec.py` | SSOT für Device-Felder im create/update-Roundtrip (`build_payload(mode, …)`) |
-| `preset_spec.py` | Slot-Schema für Crowd-Presets (public Teil des Store-Vertrags, SSOT): `PRESET_SLOT_SPEC` je Typ (Pflicht-/Optional-Entity-Slots + Value-Slots) + `split_device_record()` für den Contribute-Pfad |
+| `preset_spec.py` | Slot-Schema für Crowd-Presets (public Teil des Store-Vertrags, SSOT): `PRESET_SLOT_SPEC` je Typ (solar/grid/battery/wallbox; Slot-Arten entity/value/flag + `required`), `PRESET_VALUE_SLOTS` (box_add_device-Allowlist), `extract_preset_maps()` + `missing_required_labels()` für den Contribute-Pfad |
 | `config_flow.py` | 3-Step-Onboarding pro Gerät + Nominatim-Reverse-Geocoding + Import-Flow für Box-Provisioning; Options-Flow persistiert sofort |
 | `provisioning.py` / `box_services.py` | Box-Pfade (nur mit `theothergas:`-YAML-Key) |
 | `const.py` | Domain, `DEVICE_TYPES`, `CONTROLLABLE_TYPES` (SSOT), `CONF_ENTITY_*`, `MAPPABLE_ENTITY_DOMAINS` (Allowlist), Intervalle |
@@ -90,14 +95,16 @@ einmal.
 - **Consent-Gates:** ohne `consent_telemetry` kein Telemetrie-/
   Outdoor-Push; ohne `consent_remote_control` keine Steuer-Frames.
   Fehlende Flags = Alt-Verhalten (True).
-- **Contribute** schickt `integration_domain` mit
-  (`entity_mapper.dominant_integration_domain`) und seit v3.26.0
-  `entity_map`/`value_map` per `preset_spec.split_device_record`
-  (portable Slots only; `value_map` nur wenn belegt — Alt-Backend-
-  kompatibel). Store-Vertrag: `docs/crowd-preset-store.md` —
-  Backend-Staging/Kuration ist seit 2026-06-12 umgesetzt (Backlog #9
+- **Contribute** (alle vier preset-fähigen Typen, Vollständigkeits-
+  Gate `contribute_incomplete`) schickt `integration_domain` mit
+  (`entity_mapper.dominant_integration_domain`) und
+  `entity_map`/`value_map` per `preset_spec.extract_preset_maps`
+  (Allowlist = Anonymisierung; `value_map` nur wenn belegt —
+  Alt-Backend-kompatibel). Store-Vertrag: `docs/crowd-preset-store.md`
+  — Backend-Staging/Kuration ist seit 2026-06-12 umgesetzt (Backlog #9
   erledigt): Lookup liefert `status` (staged/approved), `value_map`,
-  `updated_at`; staged = „Community"-Badge.
+  `updated_at`; staged = Badge „Community, noch unbestätigt" in
+  Picker + Box-GUI.
 - `_authenticated_config_request` baut den httpx-Client im Executor
   (HA-Blocking-Call-Warnung, live gefunden).
 
@@ -105,8 +112,8 @@ einmal.
 
 pytest, Python ≥ 3.12. Pure-Logic-Unit-Tests: `test_device_field_spec`
 (SSOT-Regression-Guard), `test_preset_spec` (Vertrags-Invarianten,
-u.a. Entity-Slots ⊆ `MAPPABLE_ENTITY_DOMAINS`), `test_sse_client`,
-`test_state_mirror`, `test_seconds_until_next_run`,
+u.a. Entity-Slots ⊆ `MAPPABLE_ENTITY_DOMAINS`), `test_contribute_flow`,
+`test_sse_client`, `test_state_mirror`, `test_seconds_until_next_run`,
 `test_provisioning`, `test_box_services`, `test_integration_domain`.
 2 bekannte aiodns-Drift-Errors (siehe `CLAUDE.md`).
 Coordinator-/Full-Flow-Integration offen (Backlog #21).

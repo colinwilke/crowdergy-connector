@@ -19,3 +19,7 @@ __pycache__/
 .idea/
 .vscode/
 *.swp
+
+# virtualenvs
+.venv/
+venv/

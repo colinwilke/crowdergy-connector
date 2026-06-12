@@ -1,41 +1,45 @@
-"""Slot-Schema für Crowd-Presets — der PUBLIC Teil des Store-Vertrags.
+"""Crowd-Preset-Slot-Spec — das Mapping-Dictionary für Vendor-Presets.
 
-Vertrag: docs/crowd-preset-store.md. Dieses Modul ist die SSOT dafür,
-WELCHE Slots eines Device-Records portabel sind und in einen
-Crowd-Preset-Beitrag gehören:
+Single Source of Truth dafür, WAS ein „share setup"-Beitrag pro
+Device-Type transportiert (User-Vorgabe 2026-06-11: Contribute über
+Solar hinaus, Box-Wizard je Device, „alle benötigten Entities").
 
-* **Entity-Slots** (`entity_map`, slot → entity_id): werden beim
-  Anwenden auf einer fremden Installation per Suffix-Match neu
-  aufgelöst (Entity-ID-Präfixe tragen den kundenseitigen Gerätenamen,
-  nur der Integrations-Messname ist portabel).
-* **Value-Slots** (`value_map`, slot → string): Select-Optionen und
-  Flags der Integration (z.B. "External"/"Internal" beim Plenticore-
-  Battery-Mode) — installationsUNabhängig, werden verbatim übernommen.
-  Boolean-Flags laut Vertrag als String `"true"` (nicht gesetzt =
-  Slot weglassen).
+Drei Slot-Arten:
 
-BEWUSST NICHT im Preset (nicht portabel bzw. installationsspezifisch):
-* `entity_climate` / `entity_water_heater` — Form-only Felder des
-  Climate-first-Onboardings; kollabieren beim Speichern auf
-  `entity_control`, das im Preset landet.
-* `entity_outdoor_temp_c` — integration-wide, kein Device-Slot.
-* `shares_hardware_with_device_id` — Backend-Device-ID der jeweiligen
-  Installation.
-* `included_in_haushalt` — hängt an der Zähler-Topologie des Haushalts.
-* `district` / `city` / `region` — Standort.
+* ``entity`` — HA-Entity-IDs. Wandern als ``entity_map`` zum Backend;
+  die Box löst sie beim Nachbauen per Suffix-Match gegen die EIGENEN
+  Entity-IDs auf (Präfix = kundenseitiger Gerätename, nicht portabel).
+* ``value``  — integrationsspezifische Strings (Select-Optionen wie
+  „Lock Mode", Hold-Modus). Identisch auf jeder Installation derselben
+  Integration → wandern als ``value_map`` mit und werden auf der Box
+  VERBATIM übernommen (kein Matching nötig).
+* ``flag``   — booleans (Vorzeichen-Konventionen). Serialisiert als
+  String ``"true"`` und nur wenn gesetzt — ``box_add_device`` validiert
+  seine Payload als str→str, und ein fehlendes Flag ist der Default.
 
-Konsistenz-Invariante (Test-gesichert): jeder Entity-Slot hier muss in
-`MAPPABLE_ENTITY_DOMAINS` (const.py, Default-DENY) stehen — sonst würde
-`box_add_device` ein Store-Preset beim Anwenden ablehnen.
+``required`` markiert das funktionale Minimum, mit dem ein Gerät dieses
+Typs auf der Box sinnvoll läuft (Messung + bei steuerbaren Typen die
+Steuerung). Der Contribute-Flow lehnt unvollständige Beiträge mit einer
+verständlichen Fehlliste ab; alles Optionale wird mitgeschickt, wenn
+der Beitragende es gemappt hat, und auf der Box als Capability gezeigt.
 
-Das Backend prüft nur die Shape (string→string, Key-Bounds); die
-Slot-Semantik erzwingen Connector/Box beim Anwenden. Store-DATEN und
-Kuration bleiben im Backend hinter Auth — hier liegt nur das Schema.
+Bewusste Abweichung von „Batterie kw+kwh+steuerung": die kWh-Zähler
+sind bei battery/grid OPTIONAL (nicht jede Integration exposed
+getrennte Lade-/Entlade-Zähler); wer das härter will, setzt hier
+``required=True`` — eine Zeile, der Rest der Pipeline folgt der Spec.
+
+Konsumenten:
+* config_flow Contribute-Steps (Picker-Kandidaten, Vollständigkeits-
+  Gate, Payload-Konstruktion),
+* box_services.box_add_device (Default-DENY-Allowlist der Value-Slots,
+  analog MAPPABLE_ENTITY_DOMAINS für Entity-Slots),
+* Backend + box-manager spiegeln die Required-Sets (Vertrag:
+  docs/crowd-preset-store.md). NEUE Slots: hier eintragen + in
+  MAPPABLE_ENTITY_DOMAINS (wenn entity) + Vertrag nachziehen.
 """
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Mapping
 
 from .const import (
     CONF_BATTERY_SETPOINT_INVERT_SIGN,
@@ -45,26 +49,16 @@ from .const import (
     CONF_ENTITY_BATTERY_MODE,
     CONF_ENTITY_BATTERY_POWER_SETPOINT,
     CONF_ENTITY_CHARGE_MODE,
-    CONF_ENTITY_CONTROL,
     CONF_ENTITY_CONTROL_HOLD,
-    CONF_ENTITY_COOL_CONTROL,
-    CONF_ENTITY_CURRENT_TEMP,
     CONF_ENTITY_ENERGY_DISCHARGED_TOTAL,
     CONF_ENTITY_ENERGY_TOTAL,
     CONF_ENTITY_POWER,
     CONF_ENTITY_POWER_2,
     CONF_ENTITY_SOC,
     CONF_ENTITY_VEHICLE_STATUS,
-    CONF_ENTITY_VORLAUF_SETPOINT,
-    CONF_ENTITY_VORLAUF_TEMP,
     CONF_INVERT_POWER_SIGN,
-    CONF_SUPPORTS_COOLING,
     CONF_VALUE_BATTERY_MODE_ACTIVE,
     CONF_VALUE_BATTERY_MODE_PASSIVE,
-    CONF_VALUE_COOL_OFF,
-    CONF_VALUE_COOL_ON,
-    CONF_VALUE_OFF,
-    CONF_VALUE_ON,
     CONF_VEHICLE_STATUS_VALUE_ERROR,
     CONF_VEHICLE_STATUS_VALUE_PLUGGED,
     CONF_VEHICLE_STATUS_VALUE_UNPLUGGED,
@@ -72,150 +66,150 @@ from .const import (
 
 
 @dataclass(frozen=True)
-class PresetSlots:
-    """Portable Slots eines Device-Types.
-
-    `required_entities` müssen auf der Ziel-Installation auflösbar
-    sein, damit das Preset anwendbar ist (die Box registriert kein
-    Gerät ohne Power-Slot); `optional_entities` werden bei
-    Nicht-Auflösung als `missing_slots` gemeldet statt zu blocken.
-    """
-
-    required_entities: frozenset[str]
-    optional_entities: frozenset[str]
-    value_slots: frozenset[str]
-
-    @property
-    def entity_slots(self) -> frozenset[str]:
-        return self.required_entities | self.optional_entities
+class PresetSlot:
+    key: str
+    kind: str  # "entity" | "value" | "flag"
+    required: bool
+    label_de: str
+    """Menschlich lesbar — für die Fehlliste im Contribute-Flow und
+    die Capability-Anzeige (Box-GUI spiegelt Gruppen-Labels)."""
 
 
-_POWER_ONLY = frozenset({CONF_ENTITY_POWER})
-_SIGN_FLAG = frozenset({CONF_INVERT_POWER_SIGN})
-_ON_OFF = frozenset({CONF_VALUE_ON, CONF_VALUE_OFF, CONF_ENTITY_CONTROL_HOLD})
-_COOLING_VALUES = frozenset(
-    {CONF_SUPPORTS_COOLING, CONF_VALUE_COOL_ON, CONF_VALUE_COOL_OFF}
-)
-
-PRESET_SLOT_SPEC: dict[str, PresetSlots] = {
-    "solar": PresetSlots(
-        required_entities=_POWER_ONLY,
-        optional_entities=frozenset({CONF_ENTITY_ENERGY_TOTAL}),
-        value_slots=_SIGN_FLAG,
+# Energie-Zähler-Semantik = E2E-Konvention #17 (final 2026-06-11):
+# entity_energy_total = Bezug/Entladen (device → home),
+# entity_energy_discharged_total = Einspeisung/Laden.
+PRESET_SLOT_SPEC: dict[str, tuple[PresetSlot, ...]] = {
+    "solar": (
+        PresetSlot(CONF_ENTITY_POWER, "entity", True, "Aktuelle Leistung (kW)"),
+        PresetSlot(CONF_ENTITY_ENERGY_TOTAL, "entity", True, "Ertragszähler (kWh)"),
+        PresetSlot(CONF_INVERT_POWER_SIGN, "flag", False, "Leistungs-Vorzeichen umkehren"),
     ),
-    "grid": PresetSlots(
-        required_entities=_POWER_ONLY,
-        optional_entities=frozenset({
-            CONF_ENTITY_POWER_2,
-            CONF_ENTITY_ENERGY_TOTAL,
+    "grid": (
+        PresetSlot(CONF_ENTITY_POWER, "entity", True, "Netzleistung (kW)"),
+        PresetSlot(CONF_ENTITY_ENERGY_TOTAL, "entity", True, "Bezugszähler (kWh)"),
+        PresetSlot(
             CONF_ENTITY_ENERGY_DISCHARGED_TOTAL,
-        }),
-        value_slots=_SIGN_FLAG,
-    ),
-    "haushalt": PresetSlots(
-        required_entities=_POWER_ONLY,
-        optional_entities=frozenset({CONF_ENTITY_ENERGY_TOTAL}),
-        value_slots=_SIGN_FLAG,
-    ),
-    "battery": PresetSlots(
-        required_entities=_POWER_ONLY,
-        optional_entities=frozenset({
+            "entity", False, "Einspeisezähler (kWh)",
+        ),
+        PresetSlot(
             CONF_ENTITY_POWER_2,
-            CONF_ENTITY_ENERGY_TOTAL,
-            CONF_ENTITY_ENERGY_DISCHARGED_TOTAL,
-            CONF_ENTITY_SOC,
-            CONF_ENTITY_BATTERY_MODE,
+            "entity", False, "Einspeise-Leistung (kW, zweiter Sensor)",
+        ),
+        PresetSlot(CONF_INVERT_POWER_SIGN, "flag", False, "Leistungs-Vorzeichen umkehren"),
+    ),
+    "battery": (
+        PresetSlot(CONF_ENTITY_POWER, "entity", True, "Batterieleistung (kW)"),
+        PresetSlot(CONF_ENTITY_SOC, "entity", True, "Ladestand (SoC %)"),
+        # Steuerung = Battery-Dispatch v3.8 (Mode-Select + Setpoint).
+        PresetSlot(CONF_ENTITY_BATTERY_MODE, "entity", True, "Betriebsmodus (Select)"),
+        PresetSlot(
+            CONF_VALUE_BATTERY_MODE_ACTIVE, "value", True, "Modus-Wert „aktiv“",
+        ),
+        PresetSlot(
+            CONF_VALUE_BATTERY_MODE_PASSIVE, "value", True, "Modus-Wert „passiv“",
+        ),
+        PresetSlot(
             CONF_ENTITY_BATTERY_POWER_SETPOINT,
-        }),
-        value_slots=_SIGN_FLAG | frozenset({
-            CONF_VALUE_BATTERY_MODE_ACTIVE,
-            CONF_VALUE_BATTERY_MODE_PASSIVE,
-            CONF_BATTERY_SETPOINT_INVERT_SIGN,
-        }),
-    ),
-    "wallbox": PresetSlots(
-        required_entities=_POWER_ONLY,
-        optional_entities=frozenset({
-            CONF_ENTITY_ENERGY_TOTAL,
-            CONF_ENTITY_SOC,
-            CONF_ENTITY_VEHICLE_STATUS,
-            CONF_ENTITY_CONTROL,
+            "entity", True, "Leistungs-Sollwert (W, Number)",
+        ),
+        PresetSlot(CONF_ENTITY_ENERGY_TOTAL, "entity", False, "Entlade-Zähler (kWh)"),
+        PresetSlot(
+            CONF_ENTITY_ENERGY_DISCHARGED_TOTAL,
+            "entity", False, "Lade-Zähler (kWh)",
+        ),
+        PresetSlot(
+            CONF_ENTITY_POWER_2, "entity", False, "Ladeleistung (kW, zweiter Sensor)",
+        ),
+        PresetSlot(
             CONF_ENTITY_CHARGE_MODE,
-        }),
-        value_slots=_SIGN_FLAG | _ON_OFF | frozenset({
-            CONF_CHARGE_MODE_VALUE_LOCK,
-            CONF_CHARGE_MODE_VALUE_POWER,
+            "entity", False, "Lademodus-Select (manuelle App-Steuerung)",
+        ),
+        PresetSlot(
+            CONF_BATTERY_SETPOINT_INVERT_SIGN,
+            "flag", False, "Setpoint-Vorzeichen umkehren",
+        ),
+        PresetSlot(CONF_INVERT_POWER_SIGN, "flag", False, "Leistungs-Vorzeichen umkehren"),
+        PresetSlot(CONF_ENTITY_CONTROL_HOLD, "value", False, "Hold-Modus"),
+    ),
+    "wallbox": (
+        PresetSlot(CONF_ENTITY_POWER, "entity", True, "Ladeleistung (kW)"),
+        PresetSlot(CONF_ENTITY_ENERGY_TOTAL, "entity", True, "Energiezähler (kWh)"),
+        PresetSlot(CONF_ENTITY_CHARGE_MODE, "entity", True, "Lademodus-Select"),
+        # Die drei Mode-Strings sind optional — Modi ohne Wert bekommen
+        # (wie im interaktiven Flow) schlicht keinen Button in iOS.
+        PresetSlot(CONF_CHARGE_MODE_VALUE_LOCK, "value", False, "Lademodus-Wert „Aus“"),
+        PresetSlot(CONF_CHARGE_MODE_VALUE_POWER, "value", False, "Lademodus-Wert „An“"),
+        PresetSlot(
             CONF_CHARGE_MODE_VALUE_SOLAR,
+            "value", False, "Lademodus-Wert „Solaroptimiert“",
+        ),
+        PresetSlot(CONF_ENTITY_SOC, "entity", False, "Ladestand Fahrzeug (SoC %)"),
+        PresetSlot(CONF_ENTITY_VEHICLE_STATUS, "entity", False, "Fahrzeugstatus"),
+        PresetSlot(
             CONF_VEHICLE_STATUS_VALUE_PLUGGED,
+            "value", False, "Fahrzeugstatus-Wert „eingesteckt“",
+        ),
+        PresetSlot(
             CONF_VEHICLE_STATUS_VALUE_UNPLUGGED,
+            "value", False, "Fahrzeugstatus-Wert „ausgesteckt“",
+        ),
+        PresetSlot(
             CONF_VEHICLE_STATUS_VALUE_ERROR,
-        }),
-    ),
-    "heating": PresetSlots(
-        required_entities=_POWER_ONLY,
-        optional_entities=frozenset({
-            CONF_ENTITY_ENERGY_TOTAL,
-            CONF_ENTITY_CURRENT_TEMP,
-            CONF_ENTITY_VORLAUF_TEMP,
-            CONF_ENTITY_VORLAUF_SETPOINT,
-            CONF_ENTITY_CONTROL,
-            CONF_ENTITY_COOL_CONTROL,
-        }),
-        value_slots=_SIGN_FLAG | _ON_OFF | _COOLING_VALUES,
-    ),
-    "warmwater": PresetSlots(
-        required_entities=_POWER_ONLY,
-        optional_entities=frozenset({
-            CONF_ENTITY_ENERGY_TOTAL,
-            CONF_ENTITY_CURRENT_TEMP,
-            CONF_ENTITY_CONTROL,
-        }),
-        value_slots=_SIGN_FLAG | _ON_OFF,
-    ),
-    "aircon": PresetSlots(
-        required_entities=_POWER_ONLY,
-        optional_entities=frozenset({
-            CONF_ENTITY_ENERGY_TOTAL,
-            CONF_ENTITY_CURRENT_TEMP,
-            CONF_ENTITY_CONTROL,
-            CONF_ENTITY_COOL_CONTROL,
-        }),
-        value_slots=_SIGN_FLAG | _ON_OFF | _COOLING_VALUES,
-    ),
-    "generic": PresetSlots(
-        required_entities=_POWER_ONLY,
-        optional_entities=frozenset({
-            CONF_ENTITY_ENERGY_TOTAL,
-            CONF_ENTITY_CONTROL,
-        }),
-        value_slots=_SIGN_FLAG | _ON_OFF,
+            "value", False, "Fahrzeugstatus-Wert „Fehler“",
+        ),
+        PresetSlot(CONF_INVERT_POWER_SIGN, "flag", False, "Leistungs-Vorzeichen umkehren"),
+        PresetSlot(CONF_ENTITY_CONTROL_HOLD, "value", False, "Hold-Modus"),
     ),
 }
 
+PRESET_CAPABLE_TYPES = frozenset(PRESET_SLOT_SPEC)
 
-def split_device_record(
-    device_type: str, record: Mapping[str, Any]
-) -> tuple[dict[str, str], dict[str, str]]:
-    """Zerlegt einen Device-Record (Config-Entry-Dict) in die portablen
-    `(entity_map, value_map)` für einen Contribute-Beitrag.
+# Allowlist der Nicht-Entity-Slots, die `box_add_device` akzeptiert —
+# Gegenstück zu MAPPABLE_ENTITY_DOMAINS (Default-DENY auch für Werte).
+# value_on/off (+cool) gehören heutigen Box-Typen nicht, bleiben aber
+# erlaubt, damit ein künftiger heating-/generic-Preset-Pfad nicht an
+# dieser Liste scheitert.
+PRESET_VALUE_SLOTS: frozenset[str] = frozenset(
+    slot.key
+    for slots in PRESET_SLOT_SPEC.values()
+    for slot in slots
+    if slot.kind in ("value", "flag")
+) | frozenset({"value_on", "value_off", "value_cool_on", "value_cool_off"})
 
-    Nicht-portable Keys werden verworfen; Boolean-Flags True → "true",
-    False/leer → weggelassen (laut Vertrag trägt ein fehlender Slot
-    keine Information — die Box übernimmt nur gesetzte Werte).
+
+def _is_set(value: object) -> bool:
+    return value not in ("", None, False)
+
+
+def extract_preset_maps(device: dict) -> tuple[dict[str, str], dict[str, str]]:
+    """Device-Record (Config-Entry) → (entity_map, value_map) gemäß Spec.
+
+    Bewusst Allowlist-getrieben statt „alle entity_*-Keys" (Pre-v3.24-
+    Verhalten): nur spezifizierte Slots verlassen die Installation —
+    das IST die Anonymisierungs-Schicht, die Contribute bisher auf
+    Solar beschränkt hat. Flags werden als "true" serialisiert (siehe
+    Modul-Doku), unbekannte Typen liefern leere Maps.
     """
-    spec = PRESET_SLOT_SPEC.get(device_type)
-    if spec is None:
-        return {}, {}
     entity_map: dict[str, str] = {}
-    for slot in sorted(spec.entity_slots):
-        value = record.get(slot)
-        if isinstance(value, str) and value:
-            entity_map[slot] = value
     value_map: dict[str, str] = {}
-    for slot in sorted(spec.value_slots):
-        value = record.get(slot)
-        if value is True:
-            value_map[slot] = "true"
-        elif isinstance(value, str) and value:
-            value_map[slot] = value
+    for slot in PRESET_SLOT_SPEC.get(device.get("device_type", ""), ()):
+        value = device.get(slot.key)
+        if not _is_set(value):
+            continue
+        if slot.kind == "entity":
+            entity_map[slot.key] = str(value)
+        elif slot.kind == "flag":
+            value_map[slot.key] = "true"
+        else:
+            value_map[slot.key] = str(value)
     return entity_map, value_map
+
+
+def missing_required_labels(device: dict) -> list[str]:
+    """Fehlende Pflicht-Slots eines Device-Records, als deutsche Labels
+    für die Contribute-Fehlermeldung. Leer = Beitrag ist vollständig."""
+    return [
+        slot.label_de
+        for slot in PRESET_SLOT_SPEC.get(device.get("device_type", ""), ())
+        if slot.required and not _is_set(device.get(slot.key))
+    ]

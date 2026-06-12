@@ -1,139 +1,133 @@
-"""Tests für `preset_spec` (Crowd-Preset-Store-Vertrag, 2026-06-12).
+"""Mapping-Dictionary (preset_spec): Slot-Schema, Extraktion, Gates.
 
-Sichert die Vertrags-Invarianten aus docs/crowd-preset-store.md:
-
-* Jeder Entity-Slot im Schema steht in `MAPPABLE_ENTITY_DOMAINS`
-  (Default-DENY) — sonst würde `box_add_device` ein Store-Preset beim
-  Anwenden ablehnen.
-* `split_device_record` trennt portable Entity-/Value-Slots und
-  verwirft installationsspezifische Keys (shares_hardware_with,
-  Standort, included_in_haushalt, Form-only-Felder).
-* Boolean-Flags reisen als String "true"; False/leer = Slot fehlt.
+Die Spec ist der Vertrag zwischen Contribute-Flow, box_add_device und
+dem Backend-Store (docs/crowd-preset-store.md) — diese Tests pinnen
+die User-Entscheidungen vom 2026-06-11 fest.
 """
 from __future__ import annotations
 
-from custom_components.theothergas.const import (
-    CONF_ENTITY_CLIMATE,
-    CONF_ENTITY_CONTROL_HOLD,
-    CONF_ENTITY_POWER,
-    CONF_ENTITY_WATER_HEATER,
-    CONF_INVERT_POWER_SIGN,
-    CONF_SUPPORTS_COOLING,
-    DEVICE_TYPES,
-    MAPPABLE_ENTITY_DOMAINS,
-)
+from custom_components.theothergas.const import MAPPABLE_ENTITY_DOMAINS
 from custom_components.theothergas.preset_spec import (
+    PRESET_CAPABLE_TYPES,
     PRESET_SLOT_SPEC,
-    split_device_record,
+    PRESET_VALUE_SLOTS,
+    extract_preset_maps,
+    missing_required_labels,
 )
 
-
-def test_spec_covers_every_device_type():
-    assert set(PRESET_SLOT_SPEC) == set(DEVICE_TYPES)
-
-
-def test_power_slot_is_required_everywhere():
-    """Box registriert kein Gerät ohne auflösbaren Power-Slot —
-    der Pflicht-Slot muss in jedem Typ Pflicht sein."""
-    for dtype, spec in PRESET_SLOT_SPEC.items():
-        assert CONF_ENTITY_POWER in spec.required_entities, dtype
-
-
-def test_entity_slots_subset_of_mappable_allowlist():
-    """Default-DENY-Invariante: ein Entity-Slot außerhalb von
-    MAPPABLE_ENTITY_DOMAINS würde von box_add_device abgelehnt —
-    so ein Preset wäre auf der Box unbrauchbar."""
-    for dtype, spec in PRESET_SLOT_SPEC.items():
-        unknown = spec.entity_slots - set(MAPPABLE_ENTITY_DOMAINS)
-        assert not unknown, f"{dtype}: {sorted(unknown)}"
-
-
-def test_form_only_slots_are_not_in_spec():
-    """entity_climate / entity_water_heater kollabieren beim Speichern
-    auf entity_control — sie gehören nicht in Presets."""
-    for spec in PRESET_SLOT_SPEC.values():
-        assert CONF_ENTITY_CLIMATE not in spec.entity_slots
-        assert CONF_ENTITY_WATER_HEATER not in spec.entity_slots
+COMPLETE_BATTERY = {
+    "device_type": "battery",
+    "device_name": "Speicher Keller",
+    "entity_current_power_kw": "sensor.anlage_battery_power",
+    "entity_soc_percent": "sensor.anlage_battery_soc",
+    "entity_battery_mode": "select.anlage_battery_mode",
+    "value_battery_mode_active": "External",
+    "value_battery_mode_passive": "Internal",
+    "entity_battery_power_setpoint_w": "number.anlage_battery_setpoint",
+    "entity_energy_total": "sensor.anlage_battery_discharge_total",
+    "battery_setpoint_invert_sign": True,
+    "invert_power_sign": False,
+    "entity_control_hold": "always",
+    # Install-spezifisches darf NIE in die Maps (Allowlist-Prinzip):
+    "district": "Altona",
+    "city": "Hamburg",
+    "shares_hardware_with_device_id": "dev-77",
+}
 
 
-def test_entity_and_value_slots_are_disjoint():
-    for dtype, spec in PRESET_SLOT_SPEC.items():
-        assert not spec.entity_slots & spec.value_slots, dtype
+def test_capable_types_match_user_concept():
+    assert PRESET_CAPABLE_TYPES == {"solar", "grid", "battery", "wallbox"}
 
 
-def test_split_battery_record():
-    record = {
-        "device_type": "battery",
-        "device_name": "Keller-Speicher",
-        "entity_current_power_kw": "sensor.plenticore_battery_power",
-        "entity_soc_percent": "sensor.plenticore_battery_soc",
-        "entity_battery_mode": "select.plenticore_battery_charge_usage_mode",
-        "value_battery_mode_active": "External",
-        "value_battery_mode_passive": "Internal",
-        # installationsspezifisch — darf NICHT in den Beitrag:
-        "district": "Altstadt",
-        "city": "Heidelberg",
-        "included_in_haushalt": True,
-        "shares_hardware_with_device_id": "abc-123",
+def test_every_entity_slot_is_domain_allowlisted():
+    """Trap: ein Entity-Slot in der Spec ohne Eintrag in
+    MAPPABLE_ENTITY_DOMAINS würde beim box_add_device IMMER abgelehnt
+    — Spec und Allowlist müssen synchron bleiben."""
+    for dtype, slots in PRESET_SLOT_SPEC.items():
+        for slot in slots:
+            if slot.kind == "entity":
+                assert slot.key in MAPPABLE_ENTITY_DOMAINS, (dtype, slot.key)
+
+
+def test_value_slots_never_overlap_entity_allowlist():
+    """Ein Key darf nicht gleichzeitig Entity- und Wert-Slot sein —
+    box_add_device entscheidet die Prüfart über genau diese Mengen."""
+    assert not (PRESET_VALUE_SLOTS & set(MAPPABLE_ENTITY_DOMAINS))
+
+
+def test_required_sets_per_device_type():
+    """User-Vorgabe 2026-06-11: Solar kW+kWh; Batterie kW+SoC+komplette
+    Dispatch-Steuerung; Wallbox kW+kWh+Lademodus-Select. (kWh bei
+    battery/grid bewusst optional — siehe Modul-Doku.)"""
+    required = {
+        dtype: {s.key for s in slots if s.required}
+        for dtype, slots in PRESET_SLOT_SPEC.items()
     }
-    entity_map, value_map = split_device_record("battery", record)
+    assert required["solar"] == {"entity_current_power_kw", "entity_energy_total"}
+    assert required["grid"] == {"entity_current_power_kw", "entity_energy_total"}
+    assert required["battery"] == {
+        "entity_current_power_kw",
+        "entity_soc_percent",
+        "entity_battery_mode",
+        "value_battery_mode_active",
+        "value_battery_mode_passive",
+        "entity_battery_power_setpoint_w",
+    }
+    assert required["wallbox"] == {
+        "entity_current_power_kw",
+        "entity_energy_total",
+        "entity_charge_mode",
+    }
+
+
+def test_extract_battery_maps_splits_entity_and_value():
+    entity_map, value_map = extract_preset_maps(COMPLETE_BATTERY)
     assert entity_map == {
-        "entity_current_power_kw": "sensor.plenticore_battery_power",
-        "entity_soc_percent": "sensor.plenticore_battery_soc",
-        "entity_battery_mode": "select.plenticore_battery_charge_usage_mode",
+        "entity_current_power_kw": "sensor.anlage_battery_power",
+        "entity_soc_percent": "sensor.anlage_battery_soc",
+        "entity_battery_mode": "select.anlage_battery_mode",
+        "entity_battery_power_setpoint_w": "number.anlage_battery_setpoint",
+        "entity_energy_total": "sensor.anlage_battery_discharge_total",
     }
     assert value_map == {
         "value_battery_mode_active": "External",
         "value_battery_mode_passive": "Internal",
+        # Flag gesetzt → String "true"; ungesetztes Flag fehlt komplett
+        "battery_setpoint_invert_sign": "true",
+        "entity_control_hold": "always",
     }
+    # Install-Spezifisches (Ort, Kopplung, Name) bleibt draußen
+    flat = {**entity_map, **value_map}
+    assert "district" not in flat
+    assert "shares_hardware_with_device_id" not in flat
+    assert "invert_power_sign" not in flat  # False → nicht serialisiert
 
 
-def test_split_serialises_true_flags_and_drops_false():
-    record = {
-        "entity_current_power_kw": "sensor.grid_power",
-        "invert_power_sign": True,
-    }
-    entity_map, value_map = split_device_record("grid", record)
-    assert value_map == {CONF_INVERT_POWER_SIGN: "true"}
-
-    record["invert_power_sign"] = False
-    _, value_map = split_device_record("grid", record)
-    assert value_map == {}
+def test_extract_unknown_type_yields_empty_maps():
+    entity_map, value_map = extract_preset_maps(
+        {"device_type": "heating", "entity_current_power_kw": "sensor.x"}
+    )
+    assert entity_map == {} and value_map == {}
 
 
-def test_split_keeps_control_hold_and_cooling_values():
-    record = {
-        "entity_current_power_kw": "sensor.wp_power",
-        "entity_control": "climate.wp",
-        "value_on": "heat",
-        "value_off": "off",
-        "supports_cooling": True,
-        "value_cool_on": "cool",
-        "entity_control_hold": "never",
-    }
-    _, value_map = split_device_record("heating", record)
-    assert value_map == {
-        "value_on": "heat",
-        "value_off": "off",
-        CONF_SUPPORTS_COOLING: "true",
-        "value_cool_on": "cool",
-        CONF_ENTITY_CONTROL_HOLD: "never",
-    }
+def test_missing_required_complete_battery_is_empty():
+    assert missing_required_labels(COMPLETE_BATTERY) == []
 
 
-def test_split_drops_empty_and_non_string_values():
-    record = {
-        "entity_current_power_kw": "sensor.pv",
-        "entity_energy_total": "",
-        "invert_power_sign": 1,  # kein bool True, kein string
-    }
-    entity_map, value_map = split_device_record("solar", record)
-    assert entity_map == {"entity_current_power_kw": "sensor.pv"}
-    assert value_map == {}
+def test_missing_required_lists_labels_for_incomplete_battery():
+    incomplete = dict(COMPLETE_BATTERY)
+    incomplete.pop("entity_battery_mode")
+    incomplete["value_battery_mode_active"] = ""
+    missing = missing_required_labels(incomplete)
+    assert "Betriebsmodus (Select)" in missing
+    assert "Modus-Wert „aktiv“" in missing
+    assert len(missing) == 2
 
 
-def test_unknown_device_type_yields_empty_maps():
-    assert split_device_record("toaster", {"entity_current_power_kw": "sensor.x"}) == (
-        {},
-        {},
+def test_value_slots_cover_future_control_values():
+    """value_on/off (+cool) sind heute keinem preset-fähigen Typ
+    zugeordnet, bleiben aber in der box_add_device-Allowlist, damit
+    ein künftiger heating-/generic-Pfad nicht hier scheitert."""
+    assert {"value_on", "value_off", "value_cool_on", "value_cool_off"} <= (
+        PRESET_VALUE_SLOTS
     )

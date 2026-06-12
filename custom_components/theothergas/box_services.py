@@ -51,6 +51,7 @@ from .const import (
     OPT_CONSENT_TELEMETRY,
 )
 from .device_field_spec import build_payload
+from .preset_spec import PRESET_VALUE_SLOTS
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -158,26 +159,31 @@ def async_register_box_services(hass: HomeAssistant) -> None:
         # Tracker-/Media-Entity (oder irgendeine andere unerwartete
         # Domain) in den Telemetrie- oder Steuer-Pfad gelangen.
         #
-        # Nur Slots mit einer entity_id (= der Wert enthält einen Punkt,
-        # `domain.object_id`) werden geprüft. Wert-/Flag-Slots der
-        # box_add_device-Payload (value_on, charge_mode_value_*,
-        # *_invert_sign, …) tragen keine Domain und werden übersprungen.
-        for slot, entity_id in entity_input.items():
-            if "." not in str(entity_id):
+        # v3.24 (Mapping-Dictionary): die Slot-ART entscheidet die
+        # Prüfung, nicht mehr „enthält der Wert einen Punkt". Value-/
+        # Flag-Slots aus dem Preset (`PRESET_VALUE_SLOTS`) dürfen
+        # beliebige Strings tragen — auch mit Punkt (Select-Optionen
+        # wie "7.4 kW Mode" liefen vorher in den Entity-Check und
+        # wurden fälschlich abgelehnt). Unbekannte Slot-Keys bleiben
+        # Default-DENY, jetzt auch ohne Punkt im Wert.
+        for slot, value in entity_input.items():
+            if value in ("", None):
                 continue
-            domain = entity_id.split(".", 1)[0]
             allowed = MAPPABLE_ENTITY_DOMAINS.get(slot)
-            if allowed is None:
-                # Unbekannter / nicht-mappbarer Slot — bewusst ablehnen
-                # statt blind durchwinken (Default-DENY).
+            if allowed is not None:
+                entity_id = str(value)
+                domain = entity_id.split(".", 1)[0] if "." in entity_id else ""
+                if domain not in allowed:
+                    raise HomeAssistantError(
+                        f"entity domain '{domain or entity_id}' not allowed "
+                        f"in slot '{slot}' "
+                        f"(allowed: {', '.join(sorted(allowed))})"
+                    )
+                continue
+            if slot not in PRESET_VALUE_SLOTS:
                 raise HomeAssistantError(
-                    f"slot '{slot}' is not a mappable entity slot "
-                    f"(entity '{entity_id}' rejected)"
-                )
-            if domain not in allowed:
-                raise HomeAssistantError(
-                    f"entity domain '{domain}' not allowed in slot "
-                    f"'{slot}' (allowed: {', '.join(sorted(allowed))})"
+                    f"slot '{slot}' is not a mappable entity or preset "
+                    f"value slot (value '{value}' rejected)"
                 )
 
         payload = build_payload(

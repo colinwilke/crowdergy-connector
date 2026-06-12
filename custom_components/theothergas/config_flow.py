@@ -79,6 +79,11 @@ from .const import (
 )
 from .device_field_spec import build_payload
 from .entity_mapper import DeviceGroup, discover_devices, discover_devices_with_llm
+from .preset_spec import (
+    PRESET_CAPABLE_TYPES,
+    extract_preset_maps,
+    missing_required_labels,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -394,25 +399,20 @@ async def _fetch_vendor_presets(
 def _vendor_preset_pick_schema(presets: list[dict[str, Any]]) -> vol.Schema:
     """Picker für Vendor-Presets. Option `__manual__` skipt das Preset
     und führt zum klassischen manuellen Entity-Mapping. Pro Preset
-    eine Option im Format `<vendor>::<model>` als Key."""
-    options = [
-        {
-            "value": f"{p['vendor']}::{p['model']}",
-            # staged = noch unter dem Kurations-/Promotion-Threshold
-            # (Store-Vertrag) — kennzeichnen wie die Box-GUI; fehlt
-            # das Feld (Alt-Backend) gilt approved.
-            "label": (
-                f"{p['vendor']} {p['model']} "
-                f"(Anzahl Beiträge: {p.get('contribution_count', 1)})"
-                + (
-                    " – Community-Vorschlag"
-                    if p.get("status") == "staged"
-                    else ""
-                )
-            ),
-        }
-        for p in presets
-    ]
+    eine Option im Format `<vendor>::<model>` als Key. Presets im
+    Staging (Backend-`status` ≠ approved, Store-Vertrag) werden
+    gekennzeichnet — sie werden bewusst mit angeboten, der
+    Promotion-/Kurations-Threshold kuratiert nur das Label; fehlt
+    das Feld (Alt-Backend) gilt approved."""
+    options = []
+    for p in presets:
+        label = (
+            f"{p['vendor']} {p['model']} "
+            f"(Anzahl Beiträge: {p.get('contribution_count', 1)})"
+        )
+        if p.get("status") not in (None, "approved"):
+            label += " — Community, noch unbestätigt"
+        options.append({"value": f"{p['vendor']}::{p['model']}", "label": label})
     options.append({"value": "__manual__", "label": "Manuell konfigurieren"})
     return vol.Schema(
         {
@@ -455,6 +455,51 @@ def _resolve_integration_domain(
             continue
         return config_entry.domain
     return None
+
+
+def _picked_preset_maps(
+    presets: list[dict[str, Any]], choice: str
+) -> tuple[dict[str, str], dict[str, str]] | None:
+    """Auflösung der Picker-Wahl `<vendor>::<model>` → (entity_map,
+    value_map) des Presets, beide str→str-gefiltert. None wenn die
+    Wahl nicht (mehr) im Lookup-Cache liegt. value_map ist neu im
+    Mapping-Store-Vertrag — ältere Backends liefern das Feld nicht,
+    dann bleibt die Map leer (Werte-Steps zeigen keine Vorschläge)."""
+    for p in presets:
+        if f"{p['vendor']}::{p['model']}" != choice:
+            continue
+
+        def _str_map(raw: Any) -> dict[str, str]:
+            if not isinstance(raw, dict):
+                return {}
+            return {
+                k: v for k, v in raw.items()
+                if isinstance(k, str) and isinstance(v, str)
+            }
+
+        return _str_map(p.get("entity_map")), _str_map(p.get("value_map"))
+    return None
+
+
+def _preset_step_defaults(flow: Any) -> dict[str, Any]:
+    """Gemergte Preset-Defaults (entity_map + value_map) für die
+    Werte-Steps nach dem Entity-Step. Beide Flow-Klassen (Initial +
+    Options-Add) tragen die gleichen `_pending_preset_*`-Attribute.
+    Leeres Dict = kein Preset gewählt → Steps rendern wie bisher."""
+    return {
+        **(getattr(flow, "_pending_preset_entity_map", None) or {}),
+        **(getattr(flow, "_pending_preset_value_map", None) or {}),
+    }
+
+
+def _preset_suggests_battery_control(flow: Any) -> bool:
+    """True wenn das gewählte Preset die Battery-Dispatch-Slots trägt.
+    Der Battery-Werte-Step wurde bisher nur über ein gesetztes
+    `entity_charge_mode` erreicht — ein Preset mit Mode-Select +
+    Setpoint (Pflicht-Slots im Mapping-Dictionary) soll den Step auch
+    ohne Lademodus-Select öffnen, damit die Steuerung nicht stumm
+    unkonfiguriert bleibt."""
+    return bool(_preset_step_defaults(flow).get(CONF_ENTITY_BATTERY_MODE))
 
 
 def _contribute_form_schema(
@@ -1533,6 +1578,10 @@ class CrowdergyConfigFlow(ConfigFlow, domain=DOMAIN):
         # `device_entities`-Step als Suggested-Defaults vor. None =
         # User skipped Preset oder es gab keine.
         self._pending_preset_entity_map: dict[str, str] | None = None
+        # Mapping-Store (2026-06-11): value_map des gewählten Presets —
+        # integrationsspezifische Werte (Select-Optionen, Flags) als
+        # Defaults für die nachgelagerten Werte-Steps.
+        self._pending_preset_value_map: dict[str, str] | None = None
         # Backend-Response-Cache zwischen Picker-Render und Submit,
         # damit der Submit nicht erneut zum Backend gehen muss.
         self._pending_lookup_cache: list[dict[str, Any]] = []
@@ -2015,16 +2064,18 @@ class CrowdergyConfigFlow(ConfigFlow, domain=DOMAIN):
             # Reset Preset-State zwischen Devices (z.B. wenn der User
             # mehrere Geräte hintereinander anlegt).
             self._pending_preset_entity_map = None
+            self._pending_preset_value_map = None
             # v3.0: WP-Typen (heating, warmwater) bekommen einen
             # KonfigMode-Step danach. Andere Typen skippen direkt zu
             # device_entities mit implizitem config_mode = manual.
             if self._pending_type in {"heating", "warmwater", "aircon"}:
                 return await self.async_step_device_config_mode()
             self._pending_config_mode = CONFIG_MODE_MANUAL
-            # FEAT-1 v0.1 (2026-06-09): vor dem manuellen Entity-Step
-            # prüfen ob Hersteller-Presets verfügbar sind. v0.1 nur
-            # für Solar — andere Types folgen.
-            if self._pending_type == "solar":
+            # FEAT-1 (2026-06-09, erweitert 2026-06-11): vor dem
+            # manuellen Entity-Step prüfen ob Hersteller-Presets
+            # verfügbar sind — für alle preset-fähigen Typen aus dem
+            # Mapping-Dictionary (vorher solar-only).
+            if self._pending_type in PRESET_CAPABLE_TYPES:
                 return await self.async_step_vendor_preset_pick()
             return await self.async_step_device_entities()
 
@@ -2044,17 +2095,10 @@ class CrowdergyConfigFlow(ConfigFlow, domain=DOMAIN):
         if user_input is not None:
             choice = user_input.get("preset_choice", "__manual__")
             if choice != "__manual__" and self._pending_lookup_cache:
-                # vendor::model — finde den vollen Preset-Eintrag
-                for p in self._pending_lookup_cache:
-                    key = f"{p['vendor']}::{p['model']}"
-                    if key == choice:
-                        em = p.get("entity_map") or {}
-                        if isinstance(em, dict):
-                            self._pending_preset_entity_map = {
-                                k: v for k, v in em.items()
-                                if isinstance(k, str) and isinstance(v, str)
-                            }
-                        break
+                maps = _picked_preset_maps(self._pending_lookup_cache, choice)
+                if maps is not None:
+                    self._pending_preset_entity_map = maps[0]
+                    self._pending_preset_value_map = maps[1]
             return await self.async_step_device_entities()
 
         api_url = self._data.get(CONF_API_URL, "")
@@ -2182,7 +2226,10 @@ class CrowdergyConfigFlow(ConfigFlow, domain=DOMAIN):
 
         if (
             device_type == "battery"
-            and entity_input.get(CONF_ENTITY_CHARGE_MODE)
+            and (
+                entity_input.get(CONF_ENTITY_CHARGE_MODE)
+                or _preset_suggests_battery_control(self)
+            )
             and CONF_ENTITY_BATTERY_MODE not in entity_input
         ):
             self._pending_entity_input = entity_input
@@ -2255,7 +2302,7 @@ class CrowdergyConfigFlow(ConfigFlow, domain=DOMAIN):
         return self.async_show_form(
             step_id="device_charge_mode_values",
             data_schema=_charge_mode_values_schema(
-                self.hass, entity_charge_mode, {}
+                self.hass, entity_charge_mode, _preset_step_defaults(self)
             ),
             description_placeholders={
                 "device_type": DEVICE_TYPE_LABELS_DE.get(device_type, device_type),
@@ -2295,7 +2342,9 @@ class CrowdergyConfigFlow(ConfigFlow, domain=DOMAIN):
 
         return self.async_show_form(
             step_id="device_battery_values",
-            data_schema=_battery_values_schema(self.hass, {}),
+            data_schema=_battery_values_schema(
+                self.hass, _preset_step_defaults(self)
+            ),
             description_placeholders={
                 "device_type": DEVICE_TYPE_LABELS_DE.get(device_type, device_type),
                 "device_name": device_name,
@@ -2327,7 +2376,7 @@ class CrowdergyConfigFlow(ConfigFlow, domain=DOMAIN):
         return self.async_show_form(
             step_id="device_vehicle_status",
             data_schema=_vehicle_status_schema(
-                self.hass, entity_vehicle_status, {}
+                self.hass, entity_vehicle_status, _preset_step_defaults(self)
             ),
             description_placeholders={
                 "device_type": DEVICE_TYPE_LABELS_DE.get(device_type, device_type),
@@ -2505,6 +2554,9 @@ class CrowdergyOptionsFlow(OptionsFlow):
         # gewählte Entity-IDs landen als suggested_values im
         # add_device_entities-Step.
         self._pending_preset_entity_map: dict[str, str] | None = None
+        # value_map des Presets als Defaults der Werte-Steps (Mapping-
+        # Store 2026-06-11) — Spiegel des Initial-Flow-Attributs.
+        self._pending_preset_value_map: dict[str, str] | None = None
         self._pending_lookup_cache: list[dict[str, Any]] = []
 
     async def async_step_init(
@@ -2526,32 +2578,55 @@ class CrowdergyOptionsFlow(OptionsFlow):
             ],
         )
 
-    # ── Crowd-Contribution (FEAT-1 Sprint C v0.1, 2026-06-09) ──────────────
+    # ── Crowd-Contribution (FEAT-1 Sprint C, 2026-06-09) ───────────────────
     #
     # User submittet ein bereits konfiguriertes Device als Vendor-Preset.
-    # v0.1: nur Solar-Devices (read-only, kein control_status zu prüfen,
-    # Entity-IDs typischerweise nicht-PII → keine Anonymisierung nötig).
-    # Andere Device-Types folgen in späteren Iterationen.
+    # v0.2 (Mapping-Store 2026-06-11): alle preset-fähigen Typen aus dem
+    # Mapping-Dictionary (preset_spec.PRESET_SLOT_SPEC) statt solar-only.
+    # Die Anonymisierung liegt jetzt in der Spec selbst: NUR die dort
+    # spezifizierten Slots verlassen die Installation (Allowlist statt
+    # „alle entity_*-Keys"), plus Vollständigkeits-Gate auf die
+    # Pflicht-Slots, damit nur box-taugliche Beiträge im Store landen.
 
     async def async_step_contribute_preset(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
         """Pick which configured device to contribute as a vendor preset."""
-        # Nur Solar in v0.1 — andere Types brauchen Anonymisierungs-Layer
-        # bevor sie als Crowd-Beitrag taugen.
         candidates = [
-            d for d in self._devices if d.get(CONF_DEVICE_TYPE) == "solar"
+            d for d in self._devices
+            if d.get(CONF_DEVICE_TYPE) in PRESET_CAPABLE_TYPES
         ]
         if not candidates:
             return self.async_abort(reason="contribute_no_devices")
 
         if user_input is not None:
             device_id = user_input[CONF_DEVICE_ID]
+            dev = next(
+                (d for d in candidates if d.get(CONF_DEVICE_ID) == device_id),
+                None,
+            )
+            if dev is None:
+                return self.async_abort(reason="contribute_device_missing")
+            # Vollständigkeits-Gate VOR dem Vendor/Model-Formular: ein
+            # unvollständiges Gerät erst gar nicht beschreiben lassen,
+            # sondern die fehlenden Pflicht-Slots benennen.
+            missing = missing_required_labels(dev)
+            if missing:
+                return self.async_abort(
+                    reason="contribute_incomplete",
+                    description_placeholders={
+                        "device_name": dev.get(CONF_DEVICE_NAME, device_id),
+                        "missing": ", ".join(missing),
+                    },
+                )
             self._contribute_target_id = device_id
             return await self.async_step_contribute_preset_form()
 
         options = {
-            d[CONF_DEVICE_ID]: f"{d.get(CONF_DEVICE_NAME, d[CONF_DEVICE_ID])} (solar)"
+            d[CONF_DEVICE_ID]: (
+                f"{d.get(CONF_DEVICE_NAME, d[CONF_DEVICE_ID])} "
+                f"({DEVICE_TYPE_LABELS_DE.get(d.get(CONF_DEVICE_TYPE, ''), d.get(CONF_DEVICE_TYPE, ''))})"
+            )
             for d in candidates
         }
         return self.async_show_form(
@@ -2595,17 +2670,12 @@ class CrowdergyOptionsFlow(OptionsFlow):
             if dev is None:
                 return self.async_abort(reason="contribute_device_missing")
 
-            # Portable Slots aus dem Device-Record — SSOT dafür ist
-            # preset_spec.PRESET_SLOT_SPEC (Vertrag:
-            # docs/crowd-preset-store.md). Filtert installations-
-            # spezifische Keys raus (shares_hardware_with, Standort, …)
-            # und trennt Entity-Slots (Suffix-Match auf der Zielbox)
-            # von Value-Slots (verbatim, z.B. Battery-Mode-Optionen).
-            from .preset_spec import split_device_record
-
-            entity_map, value_map = split_device_record(
-                dev[CONF_DEVICE_TYPE], dev
-            )
+            # Mapping-Store (2026-06-11): Slot-Extraktion strikt über
+            # die Spec (preset_spec.PRESET_SLOT_SPEC, Vertrag:
+            # docs/crowd-preset-store.md) — entity_map (Entity-Slots) +
+            # value_map (integrationsspezifische Werte/Flags). Nichts
+            # außerhalb der Allowlist verlässt die Installation.
+            entity_map, value_map = extract_preset_maps(dev)
             if not entity_map:
                 return self.async_abort(reason="contribute_no_entities")
 
@@ -2614,11 +2684,6 @@ class CrowdergyOptionsFlow(OptionsFlow):
                 "vendor": vendor,
                 "model": model,
                 "entity_map": entity_map,
-                # nur mitschicken wenn belegt — Backends vor dem
-                # Store-Vertrag (extra="forbid") lehnen unbekannte
-                # Felder ab; ohne value_map bleibt der Beitrag auch
-                # gegen Alt-Backends gültig.
-                **({"value_map": value_map} if value_map else {}),
                 "notes": notes,
                 # 2026-06-11: integration_domain mitschicken, sonst
                 # filtert der box-manager das Preset raus (SUPPORTED_
@@ -2631,6 +2696,8 @@ class CrowdergyOptionsFlow(OptionsFlow):
                     self.hass, entity_map
                 ),
             }
+            if value_map:
+                payload["value_map"] = value_map
             # Box-Mapping-Umbau (2026-06-10): Integration der gemappten
             # Entities mitschicken — Pflichtbaustein für Box-taugliche
             # Presets (siehe entity_mapper.dominant_integration_domain).
@@ -2758,12 +2825,13 @@ class CrowdergyOptionsFlow(OptionsFlow):
             # Reset Preset-State zwischen Devices (User legt mehrere
             # nacheinander an).
             self._pending_preset_entity_map = None
+            self._pending_preset_value_map = None
             if self._pending_type in {"heating", "warmwater", "aircon"}:
                 return await self.async_step_add_device_config_mode()
             self._pending_config_mode = CONFIG_MODE_MANUAL
-            # FEAT-1 v0.2 (2026-06-09): Vendor-Preset-Picker auch im
-            # Options-Flow-Add für Solar.
-            if self._pending_type == "solar":
+            # FEAT-1 v0.2 (2026-06-09, erweitert 2026-06-11): Vendor-
+            # Preset-Picker für alle preset-fähigen Typen.
+            if self._pending_type in PRESET_CAPABLE_TYPES:
                 return await self.async_step_add_vendor_preset_pick()
             return await self.async_step_add_device_entities()
 
@@ -2781,16 +2849,10 @@ class CrowdergyOptionsFlow(OptionsFlow):
         if user_input is not None:
             choice = user_input.get("preset_choice", "__manual__")
             if choice != "__manual__" and self._pending_lookup_cache:
-                for p in self._pending_lookup_cache:
-                    key = f"{p['vendor']}::{p['model']}"
-                    if key == choice:
-                        em = p.get("entity_map") or {}
-                        if isinstance(em, dict):
-                            self._pending_preset_entity_map = {
-                                k: v for k, v in em.items()
-                                if isinstance(k, str) and isinstance(v, str)
-                            }
-                        break
+                maps = _picked_preset_maps(self._pending_lookup_cache, choice)
+                if maps is not None:
+                    self._pending_preset_entity_map = maps[0]
+                    self._pending_preset_value_map = maps[1]
             return await self.async_step_add_device_entities()
 
         presets: list[dict[str, Any]] = []
@@ -2881,7 +2943,10 @@ class CrowdergyOptionsFlow(OptionsFlow):
 
         if (
             device_type == "battery"
-            and entity_input.get(CONF_ENTITY_CHARGE_MODE)
+            and (
+                entity_input.get(CONF_ENTITY_CHARGE_MODE)
+                or _preset_suggests_battery_control(self)
+            )
             and CONF_ENTITY_BATTERY_MODE not in entity_input
         ):
             self._pending_entity_input = entity_input
@@ -2946,7 +3011,7 @@ class CrowdergyOptionsFlow(OptionsFlow):
         return self.async_show_form(
             step_id="add_device_charge_mode_values",
             data_schema=_charge_mode_values_schema(
-                self.hass, entity_charge_mode, {}
+                self.hass, entity_charge_mode, _preset_step_defaults(self)
             ),
             description_placeholders={
                 "device_type": DEVICE_TYPE_LABELS_DE.get(device_type, device_type),
@@ -2981,7 +3046,9 @@ class CrowdergyOptionsFlow(OptionsFlow):
 
         return self.async_show_form(
             step_id="add_device_battery_values",
-            data_schema=_battery_values_schema(self.hass, {}),
+            data_schema=_battery_values_schema(
+                self.hass, _preset_step_defaults(self)
+            ),
             description_placeholders={
                 "device_type": DEVICE_TYPE_LABELS_DE.get(device_type, device_type),
                 "device_name": device_name,
@@ -3012,7 +3079,7 @@ class CrowdergyOptionsFlow(OptionsFlow):
         return self.async_show_form(
             step_id="add_device_vehicle_status",
             data_schema=_vehicle_status_schema(
-                self.hass, entity_vehicle_status, {}
+                self.hass, entity_vehicle_status, _preset_step_defaults(self)
             ),
             description_placeholders={
                 "device_type": DEVICE_TYPE_LABELS_DE.get(device_type, device_type),
