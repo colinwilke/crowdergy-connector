@@ -1,7 +1,9 @@
 # crowdergy-connector — aktueller Stand
 
-Release-Stand: **v3.25.0 auf main** (alle Parallel-Branch-Releases
-konsolidiert; Box pinnt diesen Tag). HACS Custom-Component (Domain
+Release-Stand: **v3.25.0 auf main** (Box pinnt diesen Tag); v3.26.0
+(Crowd-Preset-Store-Vertrag, Manifest bereits gebumpt) wartet auf Tag
+durch den User — Deploy-Reihenfolge: Backend-Migration `20260612_0001`
+zuerst (sonst 422 bei Beiträgen mit `value_map`). HACS Custom-Component (Domain
 `theothergas`, Legacy-Name) für Home Assistant: spiegelt Backend-Dispatch
 in HA-Entities und pusht Telemetrie zurück. Regeln + Backlog:
 `CLAUDE.md` hier bzw. `crowdergy-ios/CLAUDE.md` (Index).
@@ -15,7 +17,7 @@ in HA-Entities und pusht Telemetrie zurück. Regeln + Backlog:
 | `state_mirror.py` | `DeviceStateMirror`: active/on/cool-State + Hold-Tasks + `last_sse_event_at` |
 | `telemetry_composer.py` | Background-Loops (Heartbeat, Device-Mirror mit eigenem `_last_mirror_at`, State-Resync), `bootstrap_active_state()`, `push_outdoor_temp()`; Mirror ist auf Telemetrie-Consent gegated |
 | `device_field_spec.py` | SSOT für Device-Felder im create/update-Roundtrip (`build_payload(mode, …)`) |
-| `preset_spec.py` | Slot-Schema für Crowd-Presets (public Teil des Store-Vertrags) |
+| `preset_spec.py` | Slot-Schema für Crowd-Presets (public Teil des Store-Vertrags, SSOT): `PRESET_SLOT_SPEC` je Typ (Pflicht-/Optional-Entity-Slots + Value-Slots) + `split_device_record()` für den Contribute-Pfad |
 | `config_flow.py` | 3-Step-Onboarding pro Gerät + Nominatim-Reverse-Geocoding + Import-Flow für Box-Provisioning; Options-Flow persistiert sofort |
 | `provisioning.py` / `box_services.py` | Box-Pfade (nur mit `theothergas:`-YAML-Key) |
 | `const.py` | Domain, `DEVICE_TYPES`, `CONTROLLABLE_TYPES` (SSOT), `CONF_ENTITY_*`, `MAPPABLE_ENTITY_DOMAINS` (Allowlist), Intervalle |
@@ -89,18 +91,25 @@ einmal.
   Outdoor-Push; ohne `consent_remote_control` keine Steuer-Frames.
   Fehlende Flags = Alt-Verhalten (True).
 - **Contribute** schickt `integration_domain` mit
-  (`entity_mapper.dominant_integration_domain`); Store-Vertrag:
-  `docs/crowd-preset-store.md` (Backend-Umsetzung offen, Backlog #9).
+  (`entity_mapper.dominant_integration_domain`) und seit v3.26.0
+  `entity_map`/`value_map` per `preset_spec.split_device_record`
+  (portable Slots only; `value_map` nur wenn belegt — Alt-Backend-
+  kompatibel). Store-Vertrag: `docs/crowd-preset-store.md` —
+  Backend-Staging/Kuration ist seit 2026-06-12 umgesetzt (Backlog #9
+  erledigt): Lookup liefert `status` (staged/approved), `value_map`,
+  `updated_at`; staged = „Community"-Badge.
 - `_authenticated_config_request` baut den httpx-Client im Executor
   (HA-Blocking-Call-Warnung, live gefunden).
 
 ## Tests (`tests/`)
 
 pytest, Python ≥ 3.12. Pure-Logic-Unit-Tests: `test_device_field_spec`
-(SSOT-Regression-Guard), `test_sse_client`, `test_state_mirror`,
-`test_seconds_until_next_run`, `test_provisioning`, `test_box_services`,
-`test_integration_domain`. 2 bekannte aiodns-Drift-Errors (siehe
-`CLAUDE.md`). Coordinator-/Full-Flow-Integration offen (Backlog #21).
+(SSOT-Regression-Guard), `test_preset_spec` (Vertrags-Invarianten,
+u.a. Entity-Slots ⊆ `MAPPABLE_ENTITY_DOMAINS`), `test_sse_client`,
+`test_state_mirror`, `test_seconds_until_next_run`,
+`test_provisioning`, `test_box_services`, `test_integration_domain`.
+2 bekannte aiodns-Drift-Errors (siehe `CLAUDE.md`).
+Coordinator-/Full-Flow-Integration offen (Backlog #21).
 
 ## Offene Punkte
 
@@ -114,5 +123,5 @@ Refresh-Tokens liegen im Klartext in `config_entries` (HA-Standard).
 - **Backend** wird aufgerufen (s.o.); **iOS**: keine Direktverbindung
   (Daten via Backend-SSE-Broadcast); **Box** vendored dieses Repo per
   Git-Tag (`crowdergy-box/CONNECTOR_VERSION`, aktuell v3.25.0).
-- `manifest.json`: Version `3.25.0`, Domain `theothergas`,
+- `manifest.json`: Version `3.26.0`, Domain `theothergas`,
   `iot_class: cloud_push`, `requirements: ["httpx>=0.24.0"]`.

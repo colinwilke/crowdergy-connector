@@ -16,6 +16,10 @@ dort: Cluster C (#16–#22).
     (Default-DENY; Read-Slots nur sensor/binary_sensor, Control-Slots nur
     schreibbare Domains).
   - `CONTROLLABLE_TYPES` in `const.py` ist SSOT für steuerbare Typen.
+  - Preset-Slots (was in einen Crowd-Preset-Beitrag gehört) NUR in
+    `preset_spec.PRESET_SLOT_SPEC`; Entity-Slots dort müssen in
+    `MAPPABLE_ENTITY_DOMAINS` stehen (Test-gesichert). Vertrag:
+    `docs/crowd-preset-store.md`.
 - **Consent-Semantik (entschieden):** Telemetrie-Consent gated NUR
   Energiedaten. Liveness-Traffic (Heartbeat/Version/Device-Polling) ist
   bewusst NICHT gegated — dokumentiert in `services.yaml` +

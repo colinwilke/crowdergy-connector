@@ -398,9 +398,17 @@ def _vendor_preset_pick_schema(presets: list[dict[str, Any]]) -> vol.Schema:
     options = [
         {
             "value": f"{p['vendor']}::{p['model']}",
+            # staged = noch unter dem Kurations-/Promotion-Threshold
+            # (Store-Vertrag) — kennzeichnen wie die Box-GUI; fehlt
+            # das Feld (Alt-Backend) gilt approved.
             "label": (
                 f"{p['vendor']} {p['model']} "
                 f"(Anzahl Beiträge: {p.get('contribution_count', 1)})"
+                + (
+                    " – Community-Vorschlag"
+                    if p.get("status") == "staged"
+                    else ""
+                )
             ),
         }
         for p in presets
@@ -2587,12 +2595,17 @@ class CrowdergyOptionsFlow(OptionsFlow):
             if dev is None:
                 return self.async_abort(reason="contribute_device_missing")
 
-            # entity_map aus dem Device-Record (v0.1: nur entity_* keys
-            # die NICHT-leer sind).
-            entity_map = {
-                k: v for k, v in dev.items()
-                if k.startswith("entity_") and isinstance(v, str) and v
-            }
+            # Portable Slots aus dem Device-Record — SSOT dafür ist
+            # preset_spec.PRESET_SLOT_SPEC (Vertrag:
+            # docs/crowd-preset-store.md). Filtert installations-
+            # spezifische Keys raus (shares_hardware_with, Standort, …)
+            # und trennt Entity-Slots (Suffix-Match auf der Zielbox)
+            # von Value-Slots (verbatim, z.B. Battery-Mode-Optionen).
+            from .preset_spec import split_device_record
+
+            entity_map, value_map = split_device_record(
+                dev[CONF_DEVICE_TYPE], dev
+            )
             if not entity_map:
                 return self.async_abort(reason="contribute_no_entities")
 
@@ -2601,6 +2614,11 @@ class CrowdergyOptionsFlow(OptionsFlow):
                 "vendor": vendor,
                 "model": model,
                 "entity_map": entity_map,
+                # nur mitschicken wenn belegt — Backends vor dem
+                # Store-Vertrag (extra="forbid") lehnen unbekannte
+                # Felder ab; ohne value_map bleibt der Beitrag auch
+                # gegen Alt-Backends gültig.
+                **({"value_map": value_map} if value_map else {}),
                 "notes": notes,
                 # 2026-06-11: integration_domain mitschicken, sonst
                 # filtert der box-manager das Preset raus (SUPPORTED_
