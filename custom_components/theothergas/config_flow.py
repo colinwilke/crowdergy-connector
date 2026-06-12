@@ -77,6 +77,7 @@ from .const import (
     DOMAIN,
     USER_AGENT,
 )
+from .api_client import authenticated_request
 from .device_field_spec import build_payload
 from .entity_mapper import DeviceGroup, discover_devices, discover_devices_with_llm
 
@@ -1388,28 +1389,6 @@ async def _resolve_location_defaults(hass) -> dict[str, str]:
     }
 
 
-async def _refresh_token(
-    api_url: str, refresh_token: str
-) -> tuple[str, str] | None:
-    """One-shot token refresh for config-flow HTTP calls. The
-    coordinator has its own refresh path on `_authenticated_request`;
-    config-flow paths (register / update / delete) are too rare to
-    justify the same machinery, so this small helper covers them.
-    Returns (access_token, refresh_token) on success, None otherwise."""
-    try:
-        async with httpx.AsyncClient(timeout=10.0) as client:
-            response = await client.post(
-                f"{api_url}/api/v1/auth/refresh",
-                json={"refresh_token": refresh_token},
-            )
-        if response.status_code == 200:
-            tokens = response.json()
-            return tokens["access_token"], tokens["refresh_token"]
-    except (httpx.HTTPStatusError, httpx.RequestError) as err:
-        _LOGGER.error("Token refresh failed in config flow: %s", err)
-    return None
-
-
 async def _authenticated_config_request(
     hass,
     entry,
@@ -1420,65 +1399,23 @@ async def _authenticated_config_request(
     access_token: str | None = None,
     **kwargs,
 ) -> httpx.Response:
-    """Run an authenticated HTTP call against the backend from the
-    config / options flow. Retries once with a fresh access token
-    when the first attempt comes back 401 — same behaviour as the
-    coordinator's `_authenticated_request`, just without the
-    persistent `httpx.AsyncClient` (config-flow calls are rare and
-    short-lived). Persists rotated tokens back into the config
-    entry so the next call starts from the new pair.
-
-    CN-12 (2026-06-11): `entry=None` + explizite `api_url`/
-    `access_token` für Flows VOR Entry-Existenz (Initial-Flow).
-    Dort kein 401-Retry — der Token ist Sekunden alt und ein
-    Refresh würde das Token-Paar rotieren, ohne dass es irgendwo
-    persistiert werden könnte (Backend invalidiert per Use).
-    """
-    if entry is None:
-        if not api_url or not access_token:
-            raise ValueError(
-                "authenticated config request without entry needs "
-                "explicit api_url + access_token"
-            )
-        access = access_token
-        refresh = None
-    else:
-        api_url = entry.data[CONF_API_URL]
-        access = entry.data[CONF_ACCESS_TOKEN]
-        refresh = entry.data[CONF_REFRESH_TOKEN]
-
-    async def _do(token: str) -> httpx.Response:
-        # Client-Konstruktion ins Executor: httpx lädt beim Erzeugen
-        # synchron die CA-Zertifikate (load_verify_locations) — im
-        # Event-Loop wirft HA dafür eine Blocking-Call-Warnung (live
-        # gesehen im Box-Smoke-Test 2026-06-10, analog Coordinator-Fix
-        # v3.5.1).
-        client = await hass.async_add_executor_job(
-            lambda: httpx.AsyncClient(timeout=15.0)
-        )
-        try:
-            return await client.request(
-                method,
-                f"{api_url}{path}",
-                headers={"Authorization": f"Bearer {token}"},
-                **kwargs,
-            )
-        finally:
-            await client.aclose()
-
-    response = await _do(access)
-    if response.status_code == 401 and refresh is not None:
-        rotated = await _refresh_token(api_url, refresh)
-        if rotated is not None:
-            new_access, new_refresh = rotated
-            new_data = {
-                **entry.data,
-                CONF_ACCESS_TOKEN: new_access,
-                CONF_REFRESH_TOKEN: new_refresh,
-            }
-            hass.config_entries.async_update_entry(entry, data=new_data)
-            response = await _do(new_access)
-    return response
+    """Connector-Arch (2026-06-12): dünner Alias auf
+    `api_client.authenticated_request` — DER eine Auth-Pfad (Token-
+    Paar, Single-Flight-Refresh, 401-retry-once) lebt jetzt dort und
+    wird mit dem Coordinator geteilt (läuft dessen Session, wird sie
+    wiederverwendet — kein Refresh-Race zweier Token-Kopien mehr).
+    Name + Signatur bleiben für die ~dozen Options-Flow-Call-Sites
+    erhalten, inkl. CN-12-Modus `entry=None` + explizite `api_url`/
+    `access_token` für Flows VOR Entry-Existenz (kein 401-Retry)."""
+    return await authenticated_request(
+        hass,
+        entry,
+        method,
+        path,
+        api_url=api_url,
+        access_token=access_token,
+        **kwargs,
+    )
 
 
 # CN-12 (2026-06-11): das frühere `_delete_device_backend` (Single-

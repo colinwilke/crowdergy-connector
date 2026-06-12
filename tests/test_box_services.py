@@ -74,7 +74,7 @@ async def test_list_presets_proxies_lookup(hass: HomeAssistant):
         return _response(200, {"presets": [PRESET]})
 
     with patch(
-        "custom_components.theothergas.config_flow._authenticated_config_request",
+        "custom_components.theothergas.api_client.authenticated_request",
         new=AsyncMock(side_effect=fake_request),
     ):
         response = await hass.services.async_call(
@@ -92,7 +92,7 @@ async def test_list_presets_proxies_lookup(hass: HomeAssistant):
 async def test_list_presets_backend_error(hass: HomeAssistant):
     await _setup(hass)
     with patch(
-        "custom_components.theothergas.config_flow._authenticated_config_request",
+        "custom_components.theothergas.api_client.authenticated_request",
         new=AsyncMock(return_value=_response(500, {})),
     ):
         with pytest.raises(HomeAssistantError):
@@ -128,7 +128,7 @@ async def test_add_device_registers_and_persists(hass: HomeAssistant):
         return _response(200, {"id": "backend-dev-1"})
 
     with patch(
-        "custom_components.theothergas.config_flow._authenticated_config_request",
+        "custom_components.theothergas.api_client.authenticated_request",
         new=AsyncMock(side_effect=fake_request),
     ):
         response = await hass.services.async_call(
@@ -153,7 +153,7 @@ async def test_add_device_registers_and_persists(hass: HomeAssistant):
 async def test_add_device_backend_error_keeps_entry_unchanged(hass: HomeAssistant):
     entry = await _setup(hass)
     with patch(
-        "custom_components.theothergas.config_flow._authenticated_config_request",
+        "custom_components.theothergas.api_client.authenticated_request",
         new=AsyncMock(return_value=_response(500, {})),
     ):
         with pytest.raises(HomeAssistantError):
@@ -275,7 +275,7 @@ async def test_add_device_allows_select_on_charge_mode(hass: HomeAssistant):
         return _response(200, {"id": "backend-wb-1"})
 
     with patch(
-        "custom_components.theothergas.config_flow._authenticated_config_request",
+        "custom_components.theothergas.api_client.authenticated_request",
         new=AsyncMock(side_effect=fake_request),
     ):
         await hass.services.async_call(
@@ -308,7 +308,7 @@ async def test_add_device_allows_kostal_solar_preset(hass: HomeAssistant):
     from custom_components.theothergas.const import CONF_ENTITY_ENERGY_TOTAL
 
     with patch(
-        "custom_components.theothergas.config_flow._authenticated_config_request",
+        "custom_components.theothergas.api_client.authenticated_request",
         new=AsyncMock(side_effect=fake_request),
     ):
         await hass.services.async_call(
@@ -373,7 +373,7 @@ async def test_list_presets_drops_malformed_presets(hass: HomeAssistant):
         "presets": [PRESET, {"vendor": "NurVendor"}, "junk", 42],
     }
     with patch(
-        "custom_components.theothergas.config_flow._authenticated_config_request",
+        "custom_components.theothergas.api_client.authenticated_request",
         new=AsyncMock(return_value=_response(200, payload)),
     ):
         response = await hass.services.async_call(
@@ -391,7 +391,7 @@ async def test_add_device_missing_id_raises_clean_error(hass: HomeAssistant):
     sauberer HomeAssistantError statt KeyError; Entry unverändert."""
     entry = await _setup(hass)
     with patch(
-        "custom_components.theothergas.config_flow._authenticated_config_request",
+        "custom_components.theothergas.api_client.authenticated_request",
         new=AsyncMock(return_value=_response(200, {"ok": True})),
     ):
         with pytest.raises(HomeAssistantError, match="missing 'id'"):
