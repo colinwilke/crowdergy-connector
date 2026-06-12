@@ -169,6 +169,33 @@ public Code; keiner davon taugt als Admin-Oberfläche.
   Test-Vehikel — ein staged Preset gegen die eigene Hardware (KOSTAL)
   anwenden, bevor es approved wird.
 
+### User-Übersicht (Ergänzung 2026-06-12)
+
+Gleicher Admin-Bereich, gleiche AuthZ-/Tunnel-Regel. Bewusst
+datenminimal — Betriebs-Metadaten ja, Inhalts-/Energiedaten nein
+(DSGVO-Datenminimierung UND das Privacy-Versprechen der Box gelten
+auch intern):
+
+- `GET /admin/users` — Liste: user_id, E-Mail, created_at, „zuletzt
+  aktiv" (ableitbar aus vorhandenen Heartbeat-/Telemetrie-Timestamps;
+  zusätzlich `last_login_at`-Spalte, gesetzt bei Login/Refresh),
+  Anzahl + Typen der Devices, Box gepaart (ja/nein, seit), Consents
+  (telemetry/remote_control), Connector-Version (aus Heartbeat),
+  Anzahl Crowd-Contributions (Brücke zur Preset-Kuration).
+- `GET /admin/users/{id}` — Detail: Geräteliste (Typ, Name,
+  Vendor/Modell, created_at, letzter Telemetrie-Zeitstempel — KEINE
+  Messwerte), Box-/Connector-Status, beigetragene Presets.
+- **Nicht im Admin:** Telemetrie-/Energiedaten (Verhaltensprofile),
+  Standort feiner als Region, Passwort-Hashes/Tokens, APNS-Tokens.
+  Für echte Debug-Fälle bleibt psql — bewusste Hürde statt Klick-UI.
+- Admin-Abrufe auditieren (wer hat wann welchen User angesehen);
+  Ops-Zugriff in der Datenschutzerklärung erwähnen.
+- Stufe 2 (Support-Aktionen, jeweils auditiert): Force-Logout
+  (Refresh-JTI-Blacklist existiert), Box-Verbindung trennen
+  (admin-seitige Variante des `DELETE /users/me/connector`-Pfads),
+  Account-Löschung auf Anfrage (Art. 17; Reset-Endpoints existieren
+  als Self-Service bereits).
+
 ## Offen / Folgearbeit
 
 - **Rate-Limit auf `/crowd-presets/lookup`** (und moderat auf
