@@ -26,6 +26,15 @@ YAML-Key (bewusst Breaking für Self-Hosted ohne Key); SSE-401 mit Backoff
 + Reauth-Flow nach 5 Zyklen; Options-Flow persistiert sofort. Verträge zu
 Backend/Box waren feldgenau OK.
 
+### v3.26.0 vorbereitet 2026-06-12 (Branch `claude/device-hierarchy-power-snys2h`)
+
+`included_in_haushalt` end-to-end entfernt — ersetzt durch den
+Backend-Topologie-Baum `parent_device_id` (App-konfiguriert,
+„Übergeordnetes Gerät"). Bestands-Entries behalten schlafende Werte;
+Backend toleriert den Key von ≤3.25 als No-Op. Release-Notes in
+`docs/releases/v3.26.0.md`; **Tag erst nach Backend-Deploy von Mig
+`20260612_0001`**. 100 Tests grün (2 bekannte aiodns-Deselects).
+
 ### User-Entscheidungen 2026-06-11 umgesetzt → v3.23.0
 
 E-2: toter Wallbox-Restore-Pfad (`charge_mode_value_crowdergy`,

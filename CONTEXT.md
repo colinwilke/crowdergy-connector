@@ -1,5 +1,25 @@
 # crowdergy-connector
 
+## Stand: 2026-06-12 — **v3.26.0** vorbereitet (Branch `claude/device-hierarchy-power-snys2h`, Tag steht aus)
+
+> **`included_in_haushalt` komplett entfernt** — ersetzt durch den
+> generischen Geräte-Topologie-Baum im Backend
+> (`devices.parent_device_id`, Backend-Mig `20260612_0001`),
+> konfiguriert in der Crowdergy-App („Übergeordnetes Gerät"; auf der
+> Box ist der HA-Config-Flow für Kunden unerreichbar). Raus:
+> `CONF_INCLUDED_IN_HAUSHALT` (const), DeviceField +
+> `_CONSUMER_HAUSHALT_TYPES` (device_field_spec), Schema-Injection +
+> `_HAUSHALT_FLAG_TYPES` + Device-Record-Mapping (config_flow),
+> strings/de-Übersetzungen (je 3 Step-Vorkommen). Bestands-Entries
+> behalten schlafende Werte (keine Entry-Migration);
+> Regression-Test: stale Werte landen in keinem Payload.
+> Kompat beidseitig (altes Backend defaultet false, neues toleriert
+> den Key von ≤3.25 als No-Op). Release-Notes:
+> `docs/releases/v3.26.0.md` — enthält den User-Hinweis, dass
+> Ex-Flag-Geräte einmalig in der App zugeordnet werden müssen.
+> 100 Tests grün (2 deselektiert: bekannter aiodns-Drift).
+> **Erst releasen/taggen, nachdem das Backend deployed ist.**
+
 ## Stand: 2026-06-11 abends — Release **v3.25.0** (Branch-Konsolidierung)
 
 > Tag **v3.24.0** war auf origin schon von der parallelen
