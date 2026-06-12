@@ -9,8 +9,8 @@ gleichzeitig gestartet trotz korrekt gesetztem
 `shares_hardware_with_device_id`). Root cause war ein Drift-Bug —
 das Feld wurde im Create-Flow gesetzt aber im Edit-Flow nicht
 re-übermittelt. Audit förderte zusätzliche Drift-Stellen zutage
-(aircon `included_in_haushalt` fehlte im Edit, …). Statt jede
-Stelle einzeln zu fixen, vereinheitlichen wir die Payload-Konstruktion.
+(aircon-Flag fehlte im Edit, …). Statt jede Stelle einzeln zu
+fixen, vereinheitlichen wir die Payload-Konstruktion.
 
 ## Adding a new backend-mapped field
 
@@ -45,7 +45,6 @@ from .const import (
     CONF_CITY,
     CONF_DISTRICT,
     CONF_ENTITY_COOL_CONTROL,
-    CONF_INCLUDED_IN_HAUSHALT,
     CONF_REGION,
     CONF_SHARES_HARDWARE_WITH,
     CONF_SUPPORTS_COOLING,
@@ -108,9 +107,6 @@ def _compute_value_cool_off(entity_input: dict[str, Any], dtype: str) -> str:
 # ── Type-Mengen ──────────────────────────────────────────────────────────────
 
 
-_CONSUMER_HAUSHALT_TYPES = frozenset({
-    "heating", "warmwater", "aircon", "wallbox", "generic",
-})
 _HEATING_FAMILY_COOLING = frozenset({"heating", "aircon"})
 _WARMWATER_ONLY = frozenset({"warmwater"})
 _WALLBOX_ONLY = frozenset({"wallbox"})
@@ -136,17 +132,10 @@ SPEC: tuple[DeviceField, ...] = (
         on_create="always", on_update="skip",
     ),
 
-    # Haushalt-Flag — alle Verbraucher-Typen, beide Richtungen.
-    # **Bugfix 2026-06-03**: aircon war im alten Update-Code-Set
-    # nicht enthalten; ein Aircon-Edit ließ das Flag silent auf False
-    # fallen. Mit Spec-driven Payload geht das nicht mehr.
-    DeviceField(
-        api_name="included_in_haushalt",
-        conf_key=CONF_INCLUDED_IN_HAUSHALT,
-        types=_CONSUMER_HAUSHALT_TYPES,
-        on_create="always", on_update="always",
-        transform=bool,
-    ),
+    # v3.26: `included_in_haushalt` entfernt — ersetzt durch den
+    # generischen parent_device_id-Baum im Backend, konfiguriert in
+    # der Crowdergy-App („Übergeordnetes Gerät"). Das Backend
+    # toleriert den Key von älteren Connectors als No-Op.
 
     # Warmwater shares-hardware — Pointer aufs Heizungs-Device das
     # denselben Kompressor teilt (Solver-Mutex: nie gleichzeitig).

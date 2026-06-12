@@ -10,7 +10,6 @@ sollte.
 from __future__ import annotations
 
 from custom_components.theothergas.const import (
-    CONF_INCLUDED_IN_HAUSHALT,
     CONF_SHARES_HARDWARE_WITH,
 )
 from custom_components.theothergas.device_field_spec import build_payload
@@ -69,23 +68,23 @@ def test_shares_hardware_clearable_on_update():
         )
 
 
-def test_included_in_haushalt_present_in_create_for_aircon():
-    """Cluster E (2026-06-09): aircon `included_in_haushalt` war
-    eines der ursprünglich gedrifteten Felder (Memo
-    `project_connector_v3_9_field_spec`). Stelle sicher dass es bei
-    Create UND Update geschrieben wird wenn vorhanden."""
+def test_included_in_haushalt_removed_from_payloads():
+    """v3.26: das Haushalt-Flag ist komplett raus — ersetzt durch den
+    parent_device_id-Baum im Backend (App-konfiguriert). Der Connector
+    darf den Key in KEINEM Payload mehr senden, auch nicht wenn ein
+    Bestands-Config-Entry den schlafenden Wert noch trägt."""
+    stale_entry_input = {"included_in_haushalt": True}
     create_out = build_payload(
         mode="create",
         dtype="aircon",
         name="Klima Wohnzimmer",
-        entity_input={CONF_INCLUDED_IN_HAUSHALT: True},
+        entity_input=stale_entry_input,
     )
     update_out = build_payload(
         mode="update",
         dtype="aircon",
         name="Klima Wohnzimmer",
-        entity_input={CONF_INCLUDED_IN_HAUSHALT: True},
+        entity_input=stale_entry_input,
     )
-    # Beide Pfade müssen das Feld setzen.
-    assert "included_in_haushalt" in create_out or CONF_INCLUDED_IN_HAUSHALT in create_out
-    assert "included_in_haushalt" in update_out or CONF_INCLUDED_IN_HAUSHALT in update_out
+    assert "included_in_haushalt" not in create_out
+    assert "included_in_haushalt" not in update_out

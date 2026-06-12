@@ -58,7 +58,6 @@ from .const import (
     CONF_ENTITY_BATTERY_POWER_SETPOINT,
     CONF_BATTERY_SETPOINT_INVERT_SIGN,
     CONF_SHARES_HARDWARE_WITH,
-    CONF_INCLUDED_IN_HAUSHALT,
     CONF_SUPPORTS_COOLING,
     CONF_ENTITY_COOL_CONTROL,
     CONF_VALUE_COOL_ON,
@@ -99,16 +98,6 @@ DEVICE_TYPE_LABELS_DE = {
 # user-mapped entity_control. CN-13 (2026-06-11): SSOT liegt jetzt in
 # const.py (CONTROLLABLE_TYPES); Alias bleibt für die ~10 Call-Sites.
 _CONTROLLABLE_TYPES = CONTROLLABLE_TYPES
-
-# v2.4: device types that can carry the "included in haushalt sensor"
-# flag. Classic consumers — their draw is plausibly already counted by
-# the user's haushalt-sensor (single home-meter). Solar / Grid /
-# Battery / Haushalt itself are excluded: solar generates, grid is the
-# meter itself, battery is bidirectional storage, haushalt is the
-# residual we're computing.
-_HAUSHALT_FLAG_TYPES = {
-    "heating", "warmwater", "aircon", "wallbox", "generic",
-}
 
 # Device-Typen die einen Kühl-Modus konfigurieren können — heating-
 # family only. Warmwater nie (DHW-Tank ist monotonic-heat), wallbox /
@@ -539,16 +528,11 @@ def _entities_schema(
             read_schema, {"collapsed": False}
         )
 
-    # v3.0: Haushalt-Toggle für Verbraucher direkt hier statt eigener
-    # Step am Ende. Default True für neue Geräte (häufigster Fall:
-    # Hauszähler sieht alles), Edit-Flow zieht stored value.
-    if device_type in _HAUSHALT_FLAG_TYPES:
-        haushalt_default = d.get(CONF_INCLUDED_IN_HAUSHALT, True)
-        schema_dict[
-            vol.Optional(
-                CONF_INCLUDED_IN_HAUSHALT, default=haushalt_default
-            )
-        ] = selector.BooleanSelector()
+    # v3.26: Haushalt-Toggle entfernt — die Zuordnung „Messung im
+    # übergeordneten Zähler enthalten" ist jetzt der generische
+    # parent_device_id-Baum und wird in der Crowdergy-App pro Gerät
+    # konfiguriert („Übergeordnetes Gerät"); auf der Box ist der
+    # HA-Config-Flow für Kunden ohnehin unerreichbar.
 
     if device_type == "wallbox":
         # Wallbox's full control surface lives behind ONE entity: a
@@ -1226,13 +1210,6 @@ def _build_device_record(
         # backend can wire up the joint-power constraint.
         CONF_SHARES_HARDWARE_WITH: entity_input.get(
             CONF_SHARES_HARDWARE_WITH, ""
-        ),
-        # v2.4: classic-consumer flag for the haushalt double-counting
-        # fix. Defaults to False on types that don't carry it (solar /
-        # grid / battery / haushalt) — the backend ignores it anyway
-        # for those types.
-        CONF_INCLUDED_IN_HAUSHALT: bool(
-            entity_input.get(CONF_INCLUDED_IN_HAUSHALT, False)
         ),
         # v3.0: supports_cooling abgeleitet aus bool(value_cool_on).
         # User-spec "leer = kein cooling" — kein separater Toggle mehr.
@@ -2209,11 +2186,11 @@ class CrowdergyConfigFlow(ConfigFlow, domain=DOMAIN):
             self._pending_entity_input = entity_input
             return await self.async_step_device_shares_hardware()
 
-        # v3.0: legacy included_in_haushalt + cooling steps werden nicht
-        # mehr dispatched — beide Felder werden inline im device_entities
-        # bzw. device_values Step erfasst. Wenn die Schlüssel nicht in
-        # entity_input liegen, ist das v3.0-konformes "kein cooling" /
-        # "default-haushalt-flag" — nicht Anlass für einen extra Step.
+        # v3.0: legacy cooling step wird nicht mehr dispatched — das
+        # Feld wird inline im device_values Step erfasst; fehlt der
+        # Schlüssel, heißt das "kein cooling". (Das Haushalt-Flag ist
+        # seit v3.26 komplett raus — ersetzt durch den parent_device_id-
+        # Baum, konfiguriert in der Crowdergy-App.)
         return await self._register_with_entities(entity_input)
 
     async def async_step_device_charge_mode_values(
@@ -2896,8 +2873,9 @@ class CrowdergyOptionsFlow(OptionsFlow):
             self._pending_entity_input = entity_input
             return await self.async_step_add_device_shares_hardware()
 
-        # v3.0: legacy included_in_haushalt + cooling steps entfernt —
-        # beide Felder werden inline erfasst (siehe initial-Setup-Flow).
+        # v3.0: legacy cooling step entfernt — inline erfasst (siehe
+        # initial-Setup-Flow); Haushalt-Flag seit v3.26 komplett raus
+        # (parent_device_id-Baum, App-konfiguriert).
         return await self._options_register(entity_input)
 
     async def async_step_add_device_charge_mode_values(
@@ -3308,8 +3286,9 @@ class CrowdergyOptionsFlow(OptionsFlow):
             self._edit_pending_entity_input = entity_input
             return await self.async_step_edit_device_shares_hardware()
 
-        # v3.0: legacy included_in_haushalt + cooling steps entfernt —
-        # beide Felder werden inline erfasst.
+        # v3.0: legacy cooling step entfernt — inline erfasst;
+        # Haushalt-Flag seit v3.26 komplett raus (parent_device_id-
+        # Baum, App-konfiguriert).
         return await self._edit_save(target, entity_input)
 
     async def async_step_edit_device_charge_mode_values(

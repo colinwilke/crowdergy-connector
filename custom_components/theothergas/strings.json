@@ -88,13 +88,11 @@
           "entity_current_power_kw": "Power",
           "invert_power_sign": "Invert sign",
           "read_section": "Sensors",
-          "control_section": "Control",
-          "included_in_haushalt": "Counted in haushalt sensor?"
+          "control_section": "Control"
         },
         "data_description": {
           "entity_current_power_kw": "Current power in W or kW.",
-          "invert_power_sign": "On when sensor uses the opposite sign convention.",
-          "included_in_haushalt": "On when your haushalt sensor already includes this consumer (common case: shared main meter). Crowdergy subtracts it so nothing is double-counted."
+          "invert_power_sign": "On when sensor uses the opposite sign convention."
         },
         "sections": {
           "read_section": {
@@ -350,13 +348,11 @@
           "entity_current_power_kw": "Power",
           "invert_power_sign": "Invert sign",
           "read_section": "Sensors",
-          "control_section": "Control",
-          "included_in_haushalt": "Counted in haushalt sensor?"
+          "control_section": "Control"
         },
         "data_description": {
           "entity_current_power_kw": "Current power in W or kW.",
-          "invert_power_sign": "On when sensor uses the opposite sign convention.",
-          "included_in_haushalt": "On when your haushalt sensor already includes this consumer (common case: shared main meter)."
+          "invert_power_sign": "On when sensor uses the opposite sign convention."
         },
         "sections": {
           "read_section": {
@@ -502,14 +498,12 @@
           "entity_current_power_kw": "Power",
           "invert_power_sign": "Invert sign",
           "read_section": "Sensors",
-          "control_section": "Control",
-          "included_in_haushalt": "Counted in haushalt sensor?"
+          "control_section": "Control"
         },
         "data_description": {
           "device_name": "Display name in the Crowdergy app and in Home Assistant.",
           "entity_current_power_kw": "Current power in W or kW.",
-          "invert_power_sign": "On when sensor uses the opposite sign convention.",
-          "included_in_haushalt": "On when your haushalt sensor already includes this consumer."
+          "invert_power_sign": "On when sensor uses the opposite sign convention."
         },
         "sections": {
           "read_section": {
