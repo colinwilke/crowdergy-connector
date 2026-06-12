@@ -107,7 +107,11 @@ in `preset_spec.py`, der Rest der Pipeline folgt.
   (id, user_id, device_type, vendor_norm, model_norm,
   integration_domain, entity_map JSONB, value_map JSONB, notes,
   created_at). Eine Zeile pro Submission, nie überschreiben
-  (Audit/Abuse-Nachvollziehbarkeit).
+  (Audit/Abuse-Nachvollziehbarkeit). **Account-Löschung (Art. 17)
+  anonymisiert `user_id`** (Mapping-Daten sind technisch und dienen
+  weiter dem Store); da Entity-ID-Präfixe Gerätenamen tragen können,
+  gibt es auf explizites Verlangen den Admin-Hard-Delete der
+  Rohzeilen (s. Admin-Endpoints).
 - `crowd_presets`: Aggregat je Identitäts-Key
   **(device_type, integration_domain, lower(vendor), lower(model))**
   mit status (`staged` | `approved` | `rejected`), contribution_count,
@@ -153,6 +157,15 @@ public Code; keiner davon taugt als Admin-Oberfläche.
     schalten reale Hardware). Verschwindet sofort aus dem Lookup;
     bereits angewendete Geräte behalten ihr Mapping (→ Re-Apply-Prompt,
     siehe Folgearbeit).
+  - `DELETE /admin/crowd-presets/{id}` (Preset inkl. Roh-Contributions)
+    und `DELETE /admin/crowd-presets/contributions/{id}` (einzelne
+    Contribution; Aggregat wird aus den verbleibenden neu berechnet,
+    ohne Rest → Preset weg). **Hard-Delete ist für DSGVO-/Abuse-Fälle**
+    (Löschverlangen, problematischer Notes-Inhalt) — der Normalfall
+    „Mapping ist schlecht" ist `reject` (Soft-Delete: raus aus dem
+    Lookup, Historie bleibt für Audit/Abuse-Muster). Der Audit-Eintrag
+    protokolliert die Löschung als Ereignis (wer/wann/Grund), ohne den
+    gelöschten Inhalt aufzubewahren.
 - **Auto-Checks** (Ampel pro Preset, vor dem Augen-Review): Pflicht-
   Slots vollständig (Spec-Mirror), Entity-Domain plausibel pro Slot
   (sensor auf Read-, select/number auf Steuer-Slots), **Suffix-
