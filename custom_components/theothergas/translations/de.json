@@ -3,15 +3,15 @@
     "step": {
       "user": {
         "title": "Mit Crowdergy verbinden",
-        "description": "Crowdergy steuert deine flexiblen Verbraucher und Speicher so, dass dein Strom günstiger wird — und stellt freie Kapazität dem Verbund deiner Nachbarschaft bereit. Du verdienst dafür Crowdergy Coins (CCs). Lege zuerst dein Konto in der Crowdergy iOS-App an und melde dich hier mit denselben Zugangsdaten an.",
-        "submit": "Weiter",
+        "description": "Crowdergy steuert deine flexiblen Verbraucher und Speicher so, dass dein Strom günstiger wird — und stellt freie Kapazität dem Verbund deiner Nachbarschaft bereit. Du verdienst dafür Crowdergy Coins (CCs). Erzeuge in der Crowdergy iOS-App unter Einstellungen → Verbindung einen Pairing-Code und tippe ihn hier ein — Home Assistant sieht nie dein Passwort.",
+        "submit": "Verbinden",
         "data": {
-          "email": "E-Mail",
-          "password": "Passwort"
+          "pairing_code": "Pairing-Code",
+          "api_url": "API-URL"
         },
         "data_description": {
-          "email": "E-Mail-Adresse deines Crowdergy-Kontos.",
-          "password": "Passwort deines Crowdergy-Kontos. Wird nur einmal gegen ein Token getauscht — nicht in Home Assistant gespeichert."
+          "pairing_code": "8-stelliger Code aus der Crowdergy-App (15 Minuten gültig, einmal verwendbar). Groß-/Kleinschreibung und Bindestrich egal.",
+          "api_url": "Nur ändern, wenn du ein eigenes (self-hosted) Crowdergy-Backend betreibst."
         }
       },
       "location": {
@@ -236,16 +236,15 @@
         }
       },
       "reauth_confirm": {
-        "title": "Crowdergy neu anmelden",
-        "description": "Die gespeicherten Crowdergy-Zugangstoken sind nicht mehr gültig. Melde dich für {email} neu an, um ein frisches Token-Paar zu erzeugen.",
+        "title": "Crowdergy neu verbinden",
+        "description": "Die gespeicherten Crowdergy-Zugangstoken sind nicht mehr gültig. Erzeuge in der Crowdergy-App ({email}) unter Einstellungen → Verbindung einen neuen Pairing-Code und tippe ihn hier ein.",
         "data": {
-          "email": "E-Mail",
-          "password": "Passwort"
+          "pairing_code": "Pairing-Code"
         },
         "data_description": {
-          "password": "Passwort deines Crowdergy-Kontos. Wird nur einmal gegen ein Token getauscht — nicht in Home Assistant gespeichert."
+          "pairing_code": "8-stelliger Code aus der Crowdergy-App (15 Minuten gültig, einmal verwendbar)."
         },
-        "submit": "Anmelden"
+        "submit": "Neu verbinden"
       }
     },
     "selector": {
@@ -265,7 +264,8 @@
     },
     "error": {
       "cannot_connect": "Verbindung zum Crowdergy-Server fehlgeschlagen. Bitte Internetverbindung prüfen.",
-      "invalid_auth": "Login fehlgeschlagen. Bitte E-Mail und Passwort prüfen — Konto wird in der Crowdergy iOS-App angelegt.",
+      "invalid_pairing_code": "Pairing-Code unbekannt, abgelaufen oder bereits verwendet. Bitte in der Crowdergy-App einen neuen Code erzeugen.",
+      "reauth_account_mismatch": "Der Code gehört zu einem anderen Crowdergy-Konto als diesem Eintrag. Bitte einen Code des ursprünglichen Kontos erzeugen.",
       "unknown": "Unerwarteter Fehler. Bitte erneut versuchen; bei wiederholtem Fehlschlag siehe Home-Assistant-Logs."
     },
     "abort": {

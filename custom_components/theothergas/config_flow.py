@@ -9,7 +9,7 @@ import voluptuous as vol
 from homeassistant.config_entries import ConfigEntry, ConfigFlow, ConfigFlowResult, OptionsFlow
 from homeassistant.core import callback
 from homeassistant.data_entry_flow import section
-from homeassistant.helpers import selector
+from homeassistant.helpers import instance_id, selector
 
 from .const import (
     CONF_ACCESS_TOKEN,
@@ -39,7 +39,7 @@ from .const import (
     CONF_ENTITY_ENERGY_TOTAL,
     CONF_ENTITY_ENERGY_DISCHARGED_TOTAL,  # noqa: F401 — used as slot key
     CONF_INVERT_POWER_SIGN,
-    CONF_PASSWORD,
+    CONF_PAIRING_CODE,
     CONF_REFRESH_TOKEN,
     CONF_REGION,
     CONF_USER_ID,
@@ -76,6 +76,13 @@ from .const import (
     DEVICE_TYPES,
     DOMAIN,
     USER_AGENT,
+)
+from .api_client import (
+    CannotConnect,
+    InvalidPairingCode,
+    authenticated_request,
+    claim_pairing_code,
+    fetch_account_email,
 )
 from .device_field_spec import build_payload
 from .entity_mapper import DeviceGroup, discover_devices, discover_devices_with_llm
@@ -1441,28 +1448,6 @@ async def _resolve_location_defaults(hass) -> dict[str, str]:
     }
 
 
-async def _refresh_token(
-    api_url: str, refresh_token: str
-) -> tuple[str, str] | None:
-    """One-shot token refresh for config-flow HTTP calls. The
-    coordinator has its own refresh path on `_authenticated_request`;
-    config-flow paths (register / update / delete) are too rare to
-    justify the same machinery, so this small helper covers them.
-    Returns (access_token, refresh_token) on success, None otherwise."""
-    try:
-        async with httpx.AsyncClient(timeout=10.0) as client:
-            response = await client.post(
-                f"{api_url}/api/v1/auth/refresh",
-                json={"refresh_token": refresh_token},
-            )
-        if response.status_code == 200:
-            tokens = response.json()
-            return tokens["access_token"], tokens["refresh_token"]
-    except (httpx.HTTPStatusError, httpx.RequestError) as err:
-        _LOGGER.error("Token refresh failed in config flow: %s", err)
-    return None
-
-
 async def _authenticated_config_request(
     hass,
     entry,
@@ -1473,65 +1458,23 @@ async def _authenticated_config_request(
     access_token: str | None = None,
     **kwargs,
 ) -> httpx.Response:
-    """Run an authenticated HTTP call against the backend from the
-    config / options flow. Retries once with a fresh access token
-    when the first attempt comes back 401 — same behaviour as the
-    coordinator's `_authenticated_request`, just without the
-    persistent `httpx.AsyncClient` (config-flow calls are rare and
-    short-lived). Persists rotated tokens back into the config
-    entry so the next call starts from the new pair.
-
-    CN-12 (2026-06-11): `entry=None` + explizite `api_url`/
-    `access_token` für Flows VOR Entry-Existenz (Initial-Flow).
-    Dort kein 401-Retry — der Token ist Sekunden alt und ein
-    Refresh würde das Token-Paar rotieren, ohne dass es irgendwo
-    persistiert werden könnte (Backend invalidiert per Use).
-    """
-    if entry is None:
-        if not api_url or not access_token:
-            raise ValueError(
-                "authenticated config request without entry needs "
-                "explicit api_url + access_token"
-            )
-        access = access_token
-        refresh = None
-    else:
-        api_url = entry.data[CONF_API_URL]
-        access = entry.data[CONF_ACCESS_TOKEN]
-        refresh = entry.data[CONF_REFRESH_TOKEN]
-
-    async def _do(token: str) -> httpx.Response:
-        # Client-Konstruktion ins Executor: httpx lädt beim Erzeugen
-        # synchron die CA-Zertifikate (load_verify_locations) — im
-        # Event-Loop wirft HA dafür eine Blocking-Call-Warnung (live
-        # gesehen im Box-Smoke-Test 2026-06-10, analog Coordinator-Fix
-        # v3.5.1).
-        client = await hass.async_add_executor_job(
-            lambda: httpx.AsyncClient(timeout=15.0)
-        )
-        try:
-            return await client.request(
-                method,
-                f"{api_url}{path}",
-                headers={"Authorization": f"Bearer {token}"},
-                **kwargs,
-            )
-        finally:
-            await client.aclose()
-
-    response = await _do(access)
-    if response.status_code == 401 and refresh is not None:
-        rotated = await _refresh_token(api_url, refresh)
-        if rotated is not None:
-            new_access, new_refresh = rotated
-            new_data = {
-                **entry.data,
-                CONF_ACCESS_TOKEN: new_access,
-                CONF_REFRESH_TOKEN: new_refresh,
-            }
-            hass.config_entries.async_update_entry(entry, data=new_data)
-            response = await _do(new_access)
-    return response
+    """Connector-Arch (2026-06-12): dünner Alias auf
+    `api_client.authenticated_request` — DER eine Auth-Pfad (Token-
+    Paar, Single-Flight-Refresh, 401-retry-once) lebt jetzt dort und
+    wird mit dem Coordinator geteilt (läuft dessen Session, wird sie
+    wiederverwendet — kein Refresh-Race zweier Token-Kopien mehr).
+    Name + Signatur bleiben für die ~dozen Options-Flow-Call-Sites
+    erhalten, inkl. CN-12-Modus `entry=None` + explizite `api_url`/
+    `access_token` für Flows VOR Entry-Existenz (kein 401-Retry)."""
+    return await authenticated_request(
+        hass,
+        entry,
+        method,
+        path,
+        api_url=api_url,
+        access_token=access_token,
+        **kwargs,
+    )
 
 
 # CN-12 (2026-06-11): das frühere `_delete_device_backend` (Single-
@@ -1599,66 +1542,82 @@ class CrowdergyConfigFlow(ConfigFlow, domain=DOMAIN):
     async def async_step_user(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
+        """Onboarding per Pairing-Code (Connector-Arch 2026-06-12).
+
+        Ersetzt den Email/Passwort-Login komplett: der User erzeugt
+        den Code in der Crowdergy-App und tippt ihn hier ein —
+        derselbe Claim-Flow, den die Crowdergy Box seit Phase 2 nutzt.
+        Damit sieht HA nie Account-Credentials, der Login funktioniert
+        auch für Sign-in-with-Apple-Accounts (kein Passwort), und das
+        Backend kann die Connector-Session gezielt revozieren
+        (`DELETE /users/me/connector`). Bestehende Entries aus der
+        Login-Ära laufen mit ihren gespeicherten Tokens unverändert
+        weiter.
+        """
         errors: dict[str, str] = {}
 
         if user_input is not None:
-            api_url = DEFAULT_API_URL
-            email = user_input[CONF_EMAIL]
-            password = user_input[CONF_PASSWORD]
-
+            api_url = (
+                user_input.get(CONF_API_URL) or DEFAULT_API_URL
+            ).strip().rstrip("/")
+            code = user_input[CONF_PAIRING_CODE].strip()
+            tokens: dict[str, Any] | None = None
             try:
-                async with httpx.AsyncClient(timeout=10.0) as client:
-                    response = await client.post(
-                        f"{api_url}/api/v1/auth/login",
-                        json={"email": email, "password": password},
-                    )
-                    if response.status_code == 401:
-                        errors["base"] = "invalid_auth"
-                    elif response.status_code >= 400:
-                        errors["base"] = "cannot_connect"
-                    else:
-                        tokens = response.json()
-                        self._data[CONF_API_URL] = api_url
-                        self._data[CONF_EMAIL] = email
-                        self._data[CONF_ACCESS_TOKEN] = tokens["access_token"]
-                        self._data[CONF_REFRESH_TOKEN] = tokens["refresh_token"]
-                        self._data[CONF_USER_ID] = tokens.get("user_id", "")
-            except httpx.RequestError:
+                # Selbstgemeldete Client-Kennung fürs Backend-Audit
+                # (Gegenstück zur Hardware-ID der Box) — informativ,
+                # keine Auth-Bedeutung.
+                client_id = await instance_id.async_get(self.hass)
+                tokens = await claim_pairing_code(
+                    self.hass, api_url, code, client_id
+                )
+            except InvalidPairingCode:
+                errors[CONF_PAIRING_CODE] = "invalid_pairing_code"
+            except (CannotConnect, ValueError):
                 errors["base"] = "cannot_connect"
 
-            if not errors:
-                # P3 (2026-06-11): unique_id auch im UI-Login-Flow
-                # setzen — vorher konnte derselbe Account beliebig
-                # oft als Duplikat-Entry angelegt werden (der Import-
-                # Flow setzte die unique_id längst). Ältere Backends
-                # ohne user_id im Login-Response bleiben ohne
-                # unique_id (Verhalten wie zuvor).
-                if self._data.get(CONF_USER_ID):
-                    await self.async_set_unique_id(self._data[CONF_USER_ID])
+            if not errors and tokens is not None:
+                user_id = str(tokens.get("user_id", "") or "")
+                # P3 (2026-06-11), gilt weiter: unique_id = User-ID —
+                # derselbe Account kann nicht als Duplikat-Entry
+                # angelegt werden (Token-Tausch gehört in den
+                # Reauth-Flow, nicht in einen Zweit-Entry).
+                if user_id:
+                    await self.async_set_unique_id(user_id)
                     self._abort_if_unique_id_configured()
-                # FEAT-1 v0.3 (2026-06-09): Onboarding-Flow gedroppt.
-                # Nach erfolgreichem Login direkt Entry erzeugen mit
-                # leerer Device-Liste. Ort + Außentemp + alle Geräte
-                # legt der User dann im Options-Flow Hauptmenü an
-                # (Grundeinstellungen + Gerät hinzufügen). Spart 4-5
-                # Onboarding-Steps und vermeidet die Reihenfolge-
-                # Abhängigkeit „erst Ort, dann Geräte".
+                # Claim-Response trägt bewusst keine E-Mail — für den
+                # Entry-Titel best-effort am Account nachschlagen.
+                email = await fetch_account_email(
+                    self.hass, api_url, tokens["access_token"]
+                ) or ""
+                self._data[CONF_API_URL] = api_url
+                self._data[CONF_EMAIL] = email
+                self._data[CONF_ACCESS_TOKEN] = tokens["access_token"]
+                self._data[CONF_REFRESH_TOKEN] = tokens["refresh_token"]
+                self._data[CONF_USER_ID] = user_id
+                # FEAT-1 v0.3 (2026-06-09): Entry direkt mit leerer
+                # Device-Liste erzeugen. Ort + Außentemp + alle Geräte
+                # legt der User im Options-Flow Hauptmenü an.
                 self._data[CONF_DEVICES] = []
                 self._data[CONF_DISTRICT] = ""
                 self._data[CONF_CITY] = ""
                 self._data[CONF_REGION] = ""
                 self._data[CONF_ENTITY_OUTDOOR_TEMP] = ""
-                return self.async_create_entry(
-                    title=f"Crowdergy ({email})",
-                    data=self._data,
-                )
+                if email:
+                    title = f"Crowdergy ({email})"
+                elif user_id:
+                    title = f"Crowdergy ({user_id[:8]})"
+                else:
+                    title = "Crowdergy"
+                return self.async_create_entry(title=title, data=self._data)
 
         return self.async_show_form(
             step_id="user",
             data_schema=vol.Schema(
                 {
-                    vol.Required(CONF_EMAIL): str,
-                    vol.Required(CONF_PASSWORD): str,
+                    vol.Required(CONF_PAIRING_CODE): str,
+                    # Backlog #17 (teilweise): API-URL beim Onboarding
+                    # überschreibbar (Self-Hosted/Dev-Backends).
+                    vol.Optional(CONF_API_URL, default=DEFAULT_API_URL): str,
                 }
             ),
             errors=errors,
@@ -1736,63 +1695,71 @@ class CrowdergyConfigFlow(ConfigFlow, domain=DOMAIN):
     async def async_step_reauth_confirm(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
-        """Minimaler Reauth: Login mit der bestehenden Mail (Feld nur
-        sichtbar, wenn der Entry keine gespeicherte Mail hat — z.B.
-        Box-Provisionierung ohne `email`). Erfolgreicher Login ersetzt
-        das Token-Paar und lädt den Entry neu."""
+        """Reauth per Pairing-Code (Connector-Arch 2026-06-12): der
+        User erzeugt in der Crowdergy-App einen frischen Code —
+        funktioniert damit auch für Sign-in-with-Apple-Accounts ohne
+        Passwort und für tokenrevozierte Sessions („Trennen" in iOS).
+        Ein Claim, der zu einem ANDEREN Account gehört, wird abgelehnt
+        (`reauth_account_mismatch`) — Reauth tauscht nur Tokens,
+        nie den Account des Entries."""
         errors: dict[str, str] = {}
         entry = self.hass.config_entries.async_get_entry(
             self.context["entry_id"]
         )
         if entry is None:
             return self.async_abort(reason="reauth_entry_missing")
-        stored_email = entry.data.get(CONF_EMAIL, "")
 
         if user_input is not None:
-            email = (user_input.get(CONF_EMAIL) or stored_email).strip()
-            password = user_input[CONF_PASSWORD]
             api_url = entry.data.get(CONF_API_URL, DEFAULT_API_URL)
+            code = user_input[CONF_PAIRING_CODE].strip()
+            tokens: dict[str, Any] | None = None
             try:
-                # Client-Bau im Executor (synchroner CA-Load), analog
-                # `_authenticated_config_request`.
-                client = await self.hass.async_add_executor_job(
-                    lambda: httpx.AsyncClient(timeout=10.0)
+                client_id = await instance_id.async_get(self.hass)
+                tokens = await claim_pairing_code(
+                    self.hass, api_url, code, client_id
                 )
-                try:
-                    response = await client.post(
-                        f"{api_url}/api/v1/auth/login",
-                        json={"email": email, "password": password},
-                    )
-                finally:
-                    await client.aclose()
-                if response.status_code == 401:
-                    errors["base"] = "invalid_auth"
-                elif response.status_code >= 400:
-                    errors["base"] = "cannot_connect"
+            except InvalidPairingCode:
+                errors[CONF_PAIRING_CODE] = "invalid_pairing_code"
+            except (CannotConnect, ValueError):
+                errors["base"] = "cannot_connect"
+
+            if not errors and tokens is not None:
+                stored_user_id = entry.data.get(CONF_USER_ID, "")
+                new_user_id = str(tokens.get("user_id", "") or "")
+                if (
+                    stored_user_id
+                    and new_user_id
+                    and new_user_id != stored_user_id
+                ):
+                    # Tokens des fremden Accounts verwerfen (sie sind
+                    # geclaimt, aber wir persistieren sie nirgends) —
+                    # der User holt einen Code des richtigen Accounts.
+                    errors[CONF_PAIRING_CODE] = "reauth_account_mismatch"
                 else:
-                    tokens = response.json()
                     new_data = {
                         **entry.data,
-                        CONF_EMAIL: email,
                         CONF_ACCESS_TOKEN: tokens["access_token"],
                         CONF_REFRESH_TOKEN: tokens["refresh_token"],
                     }
-                    if tokens.get("user_id"):
-                        new_data[CONF_USER_ID] = tokens["user_id"]
+                    if new_user_id:
+                        new_data[CONF_USER_ID] = new_user_id
+                    email = await fetch_account_email(
+                        self.hass, api_url, tokens["access_token"]
+                    )
+                    if email:
+                        new_data[CONF_EMAIL] = email
                     return self.async_update_reload_and_abort(
                         entry, data=new_data,
                     )
-            except (httpx.RequestError, ValueError):
-                errors["base"] = "cannot_connect"
 
-        schema_fields: dict[Any, Any] = {}
-        if not stored_email:
-            schema_fields[vol.Required(CONF_EMAIL)] = str
-        schema_fields[vol.Required(CONF_PASSWORD)] = str
         return self.async_show_form(
             step_id="reauth_confirm",
-            data_schema=vol.Schema(schema_fields),
-            description_placeholders={"email": stored_email or "—"},
+            data_schema=vol.Schema(
+                {vol.Required(CONF_PAIRING_CODE): str}
+            ),
+            description_placeholders={
+                "email": entry.data.get(CONF_EMAIL) or "—"
+            },
             errors=errors,
         )
 

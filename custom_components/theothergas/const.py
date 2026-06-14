@@ -17,7 +17,11 @@ DOMAIN = "theothergas"
 DEFAULT_API_URL = "https://api.theothergas.de"
 CONF_API_URL = "api_url"
 CONF_EMAIL = "email"
+# Connector-Arch (2026-06-12): Onboarding läuft über Pairing-Code aus
+# der Crowdergy-App (wie bei der Box) statt Email/Passwort.
+# CONF_PASSWORD bleibt nur als historischer Key (alte Entries/Strings).
 CONF_PASSWORD = "password"
+CONF_PAIRING_CODE = "pairing_code"
 CONF_ACCESS_TOKEN = "access_token"
 CONF_REFRESH_TOKEN = "refresh_token"
 CONF_USER_ID = "user_id"

@@ -103,13 +103,13 @@ def _get_entry(hass: HomeAssistant) -> ConfigEntry:
 
 def async_register_box_services(hass: HomeAssistant) -> None:
     async def _handle_list_presets(call: ServiceCall) -> ServiceResponse:
-        from .config_flow import _authenticated_config_request
+        from .api_client import authenticated_request
 
         entry = _get_entry(hass)
         params: dict[str, str] = {CONF_DEVICE_TYPE: call.data[CONF_DEVICE_TYPE]}
         if call.data.get("vendor"):
             params["vendor"] = call.data["vendor"]
-        response = await _authenticated_config_request(
+        response = await authenticated_request(
             hass, entry, "GET", "/api/v1/crowd-presets/lookup", params=params
         )
         if response.status_code >= 400:
@@ -145,7 +145,8 @@ def async_register_box_services(hass: HomeAssistant) -> None:
         # Import hier statt Modulkopf: config_flow ist groß und wird
         # sonst bei jedem HA-Boot mitgeladen, obwohl die Box-Services
         # auf normalen Installationen nie aufgerufen werden.
-        from .config_flow import _authenticated_config_request, _build_device_record
+        from .api_client import authenticated_request
+        from .config_flow import _build_device_record
 
         entry = _get_entry(hass)
         device_type: str = call.data[CONF_DEVICE_TYPE]
@@ -197,7 +198,7 @@ def async_register_box_services(hass: HomeAssistant) -> None:
                 CONF_REGION: entry.data.get(CONF_REGION, ""),
             },
         )
-        response = await _authenticated_config_request(
+        response = await authenticated_request(
             hass, entry, "POST", "/api/v1/devices", json=payload
         )
         if response.status_code >= 400:

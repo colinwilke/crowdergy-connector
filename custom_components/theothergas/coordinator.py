@@ -216,16 +216,37 @@ class CrowdergyCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
         )
         self.entry = entry
         self.api_url: str = entry.data[CONF_API_URL]
-        self._access_token: str = entry.data[CONF_ACCESS_TOKEN]
-        self._refresh_token: str = entry.data[CONF_REFRESH_TOKEN]
         self._user_id: str = entry.data.get(CONF_USER_ID, "")
         self.devices: list[dict[str, Any]] = entry.data.get(CONF_DEVICES, [])
-        # v3.5.1: httpx.AsyncClient + manifest read sind blocking I/O
-        # (SSL-Cert-Load synchron) — HA's event-loop checker meckert
-        # ab 2024.x. Beide werden in `async_init()` deferred angelegt;
-        # bis dahin als Placeholder None / "0.0.0" damit Attribut
-        # existiert falls etwas vor async_init darauf zugreift.
-        self._client: httpx.AsyncClient | None = None  # type: ignore[assignment]
+        # Connector-Arch (2026-06-12): Token-Paar, Refresh-Lock und
+        # httpx-Client leben jetzt in der geteilten
+        # `CrowdergyAuthSession` (api_client.py) — derselbe Pfad, den
+        # Options-Flow und Box-Services über `authenticated_request`
+        # wiederverwenden (kein Race zweier Token-Kopien mehr um das
+        # Single-Use-Refresh-Token). `_refresh_access_token` und
+        # `_authenticated_request` bleiben als dünne Wrapper für die
+        # bestehenden Call-Sites (TelemetryComposer, SSE-Wiring,
+        # Tests). Der HTTP-Client wird weiterhin lazy im Executor
+        # gebaut (v3.5.1: synchroner CA-Load blockt den Event-Loop).
+        from .api_client import CrowdergyAuthSession
+
+        def _persist_tokens(access: str, refresh: str) -> None:
+            self.hass.config_entries.async_update_entry(
+                self.entry,
+                data={
+                    **self.entry.data,
+                    CONF_ACCESS_TOKEN: access,
+                    CONF_REFRESH_TOKEN: refresh,
+                },
+            )
+
+        self.api = CrowdergyAuthSession(
+            hass,
+            api_url=self.api_url,
+            access_token=entry.data[CONF_ACCESS_TOKEN],
+            refresh_token=entry.data[CONF_REFRESH_TOKEN],
+            on_tokens_rotated=_persist_tokens,
+        )
         self._unsub_listeners: list[Any] = []
         self._entity_to_devices: dict[str, list[str]] = {}
         # FEAT-5 Phase B (2026-06-09): SSE-Stream-Reader in sse_client.py
@@ -245,15 +266,8 @@ class CrowdergyCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
         # / `_push_outdoor_temp` an `self._composer.*`.
         from .telemetry_composer import TelemetryComposer
         self._composer = TelemetryComposer(self)
-        # Cluster A Connector (2026-06-09): single-flight Lock + CAS für
-        # _refresh_access_token. Vorher konnten parallele 401s (Telemetry-
-        # PATCH + State-Resync GET + Outdoor-Temp POST treffen gleichzeitig
-        # nach Token-Expiry) jeweils einen eigenen /auth/refresh-Call
-        # starten — Backend invalidiert das alte Refresh-Token per Use,
-        # nur einer gewinnt, der Rest hat einen invaliden Refresh-Token →
-        # Logout-Kaskade. Mit Lock: erste Caller refresht, alle weiteren
-        # warten am Lock und sehen dann das neue Token via CAS-Check.
-        self._refresh_lock: asyncio.Lock = asyncio.Lock()
+        # (Cluster-A-Single-Flight-Lock + CAS leben jetzt in der
+        # CrowdergyAuthSession — Semantik unverändert.)
         # v2.5.4: dedicated liveness ping. Decoupled from the
         # per-device telemetry stream so a fully idle home no longer
         # has to PATCH N devices every 30 s purely to keep iOS's
@@ -379,7 +393,7 @@ class CrowdergyCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
             self._sse_client = self._SSEClient(
                 hass=self.hass,
                 api_url=self.api_url,
-                get_token=lambda: self._access_token,
+                get_token=lambda: self.api.access_token,
                 refresh_token=self._refresh_access_token,
                 on_auth_failed=self._start_reauth,
             )
@@ -421,23 +435,20 @@ class CrowdergyCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
     async def async_init(self) -> None:
         """v3.5.1 — Defered blocking I/O aus dem event loop.
 
-        HA 2024.x flagt zwei Operationen in `__init__` als blocking:
-        - `httpx.AsyncClient(...)` laedt das CA-Bundle synchron
-          (load_verify_locations → blocking ssl-init)
-        - `_load_manifest_version()` macht `open(... manifest.json)`
-
-        Beides hier per `async_add_executor_job` in einen Worker-Thread
-        ausgelagert, sodass der event loop frei bleibt. Wird einmalig
+        HA 2024.x flagt `_load_manifest_version()` (`open(...
+        manifest.json)`) in `__init__` als blocking — hier per
+        `async_add_executor_job` in einen Worker-Thread ausgelagert.
+        Der httpx-Client (synchroner CA-Load, gleiche Blocking-Falle)
+        wird seit Connector-Arch 2026-06-12 von der
+        CrowdergyAuthSession lazy im Executor gebaut. Wird einmalig
         in `__init__.py:async_setup_entry` direkt nach Coordinator-
         Konstruktion aufgerufen, bevor die ersten Refreshes/Listeners
         laufen.
         """
-        self._client = await self.hass.async_add_executor_job(
-            lambda: httpx.AsyncClient(base_url=self.api_url, timeout=15.0)
-        )
         self._connector_version = await self.hass.async_add_executor_job(
             _load_manifest_version
         )
+        self.api.connector_version = self._connector_version
 
     def start_heartbeat(self) -> None:
         """Start the dedicated liveness ping loop (v2.5.4+). Idempotent."""
@@ -486,70 +497,21 @@ class CrowdergyCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
         await self._composer.state_resync_loop()
 
 
-    def _auth_headers(self) -> dict[str, str]:
-        return {
-            "Authorization": f"Bearer {self._access_token}",
-            # Lets the backend stamp users.connector_version so the iOS
-            # app can compare against min_connector_version and surface
-            # an "Update verfügbar" banner. Read from manifest.json at
-            # config-flow time and threaded through `entry.data`.
-            "X-Crowdergy-Connector-Version": self._connector_version,
-        }
-
     async def _refresh_access_token(self, *, seen_token: str | None = None) -> bool:
-        """Single-flight Refresh mit Compare-and-Swap.
-
-        Cluster A Connector (2026-06-09): mehrere parallele 401-Responses
-        konnten vorher jeweils ein eigenes /auth/refresh feuern → das
-        Backend invalidiert das alte Refresh-Token, nur einer gewinnt,
-        Rest hat ungültige Token → kaskadiertem Logout. Jetzt:
-
-        - `seen_token`: das `_access_token`, das der Caller bei seinem
-          401 gesehen hat. Wenn beim Lock-Aquire ein anderer Thread das
-          Token bereits rotiert hat (CAS missed), refresh wir nicht
-          nochmal — der Caller sollte sein Original-Request mit dem
-          aktuellen Token retryen.
-        """
-        async with self._refresh_lock:
-            if seen_token is not None and self._access_token != seen_token:
-                # Anderer Caller hat während des Lock-Wait bereits
-                # rotiert — wir nehmen das neue Token kommentarlos.
-                return True
-            try:
-                response = await self._client.post(
-                    "/api/v1/auth/refresh",
-                    json={"refresh_token": self._refresh_token},
-                )
-                if response.status_code == 200:
-                    tokens = response.json()
-                    self._access_token = tokens["access_token"]
-                    self._refresh_token = tokens["refresh_token"]
-                    new_data = {**self.entry.data}
-                    new_data[CONF_ACCESS_TOKEN] = self._access_token
-                    new_data[CONF_REFRESH_TOKEN] = self._refresh_token
-                    self.hass.config_entries.async_update_entry(self.entry, data=new_data)
-                    return True
-                _LOGGER.warning("Token refresh returned %s", response.status_code)
-            except httpx.RequestError as err:
-                _LOGGER.error("Token refresh failed: %s", err)
-            return False
+        """Dünner Wrapper auf `CrowdergyAuthSession.async_refresh_tokens`
+        (Connector-Arch 2026-06-12) — Single-Flight + CAS leben dort.
+        Bleibt als Methode, weil das SSE-Wiring (`refresh_token=...`)
+        und Tests diese Signatur kennen."""
+        return await self.api.async_refresh_tokens(seen_token=seen_token)
 
     async def _authenticated_request(
         self, method: str, path: str, **kwargs: Any
     ) -> httpx.Response:
-        # Snapshot des aktuellen Tokens für CAS — wenn ein anderer
-        # Caller während unseres 401-Roundtrips bereits rotiert, lassen
-        # wir den nächsten Refresh dann sausen.
-        seen_token = self._access_token
-        response = await self._client.request(
-            method, path, headers=self._auth_headers(), **kwargs
-        )
-        if response.status_code == 401:
-            if await self._refresh_access_token(seen_token=seen_token):
-                response = await self._client.request(
-                    method, path, headers=self._auth_headers(), **kwargs
-                )
-        return response
+        """Dünner Wrapper auf `CrowdergyAuthSession.async_request`
+        (401 → Single-Flight-Refresh → ein Retry). Bleibt als Methode
+        für die ~bestehenden Call-Sites (TelemetryComposer, Hold-Loops,
+        delete_device_backend) und die Test-Mocks."""
+        return await self.api.async_request(method, path, **kwargs)
 
     async def delete_device_backend(self, device_id: str) -> bool:
         """Backend-DELETE für ein Device, mit Auth-Refresh.
@@ -622,11 +584,9 @@ class CrowdergyCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
             task.cancel()
         self.state.charge_mode_hold_tasks.clear()
         self.state.held_charge_mode.clear()
-        # P3 (2026-06-11): `_client` ist bis `async_init()` None —
-        # ein Shutdown vor/abseits des regulären Setups darf nicht
-        # an `None.aclose()` sterben.
-        if self._client is not None:
-            await self._client.aclose()
+        # Session schließt ihren httpx-Client selbst (None-safe, der
+        # Client wird lazy gebaut — P3-Garantie gilt weiter).
+        await self.api.async_close()
 
     @property
     def last_sse_event_at(self) -> float:
