@@ -89,13 +89,11 @@
           "entity_current_power_kw": "Leistung",
           "invert_power_sign": "Vorzeichen umkehren",
           "read_section": "Sensoren",
-          "control_section": "Steuerung",
-          "included_in_haushalt": "Im Haushaltsstrom enthalten?"
+          "control_section": "Steuerung"
         },
         "data_description": {
           "entity_current_power_kw": "Aktuelle Leistung in W oder kW.",
-          "invert_power_sign": "An, wenn dein Sensor die umgekehrte Vorzeichen-Konvention nutzt.",
-          "included_in_haushalt": "An, wenn dein Haushalts-Sensor diesen Verbraucher schon mitmisst (häufiger Fall am gemeinsamen Hauszähler). Crowdergy zieht ihn dann ab, damit nichts doppelt zählt."
+          "invert_power_sign": "An, wenn dein Sensor die umgekehrte Vorzeichen-Konvention nutzt."
         },
         "sections": {
           "read_section": {
@@ -351,13 +349,11 @@
           "entity_current_power_kw": "Leistung",
           "invert_power_sign": "Vorzeichen umkehren",
           "read_section": "Sensoren",
-          "control_section": "Steuerung",
-          "included_in_haushalt": "Im Haushaltsstrom enthalten?"
+          "control_section": "Steuerung"
         },
         "data_description": {
           "entity_current_power_kw": "Aktuelle Leistung in W oder kW.",
-          "invert_power_sign": "An, wenn dein Sensor die umgekehrte Vorzeichen-Konvention nutzt.",
-          "included_in_haushalt": "An, wenn dein Haushalts-Sensor diesen Verbraucher schon mitmisst (häufiger Fall am gemeinsamen Hauszähler). Crowdergy zieht ihn dann ab, damit nichts doppelt zählt."
+          "invert_power_sign": "An, wenn dein Sensor die umgekehrte Vorzeichen-Konvention nutzt."
         },
         "sections": {
           "read_section": {
@@ -506,14 +502,12 @@
           "entity_current_power_kw": "Leistung",
           "invert_power_sign": "Vorzeichen umkehren",
           "read_section": "Sensoren",
-          "control_section": "Steuerung",
-          "included_in_haushalt": "Im Haushaltsstrom enthalten?"
+          "control_section": "Steuerung"
         },
         "data_description": {
           "device_name": "Anzeigename in der Crowdergy-App und in Home Assistant.",
           "entity_current_power_kw": "Aktuelle Leistung in W oder kW.",
-          "invert_power_sign": "An, wenn dein Sensor die umgekehrte Vorzeichen-Konvention nutzt.",
-          "included_in_haushalt": "An, wenn dein Haushalts-Sensor diesen Verbraucher schon mitmisst (häufiger Fall am gemeinsamen Hauszähler)."
+          "invert_power_sign": "An, wenn dein Sensor die umgekehrte Vorzeichen-Konvention nutzt."
         },
         "sections": {
           "read_section": {

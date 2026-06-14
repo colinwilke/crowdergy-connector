@@ -3,12 +3,16 @@
 Release-Stand: **v3.25.0 getaggt; main konsolidiert v3.24.0
 (Mapping-Dictionary + Contribute v0.2 von `claude/beautiful-thompson`) +
 den Crowd-Preset-Store-Vertrag als v3.26.0** (Tag steht aus). Darauf
-integriert **v3.27.0**: Pairing-Code-Onboarding + Shared-`api_client.py`
-(vormals Branch `claude/connector-arch-abstraction-cnrs9w`), Tag steht
-aus — Backend mit `/connector/*`-Routen idealerweise zuerst deployen
-(Claim hat `/box/claim`-Fallback). Deploy-Reihenfolge generell:
-Backend-Migration `20260612_0001` zuerst (sonst 422 bei Beiträgen mit
-`value_map`). Box pinnt v3.25.0. HACS Custom-Component (Domain
+integriert **v3.27.0** (Pairing-Code-Onboarding + Shared-`api_client.py`,
+vormals Branch `claude/connector-arch-abstraction-cnrs9w`) und **v3.28.0**
+(`included_in_haushalt` entfernt → Backend-Topologie-Baum
+`parent_device_id`, vormals Branch
+`claude/device-hierarchy-power-snys2h`). Beide Tags stehen aus —
+Reihenfolge: Backend-Migration `20260612_0001` zuerst (sonst 422 bei
+Beiträgen mit `value_map` UND die parent_device_id-Topologie fehlt),
+Backend mit `/connector/*`-Routen idealerweise vor v3.27.0 (Claim hat
+`/box/claim`-Fallback), v3.28.0 erst nach Backend-Deploy von
+`20260612_0001`. Box pinnt v3.25.0. HACS Custom-Component (Domain
 `theothergas`, Legacy-Name) für Home Assistant: spiegelt Backend-Dispatch
 in HA-Entities und pusht Telemetrie zurück. Regeln + Backlog:
 `CLAUDE.md` hier bzw. `crowdergy-ios/CLAUDE.md` (Index).
@@ -55,7 +59,7 @@ in HA-Entities und pusht Telemetrie zurück. Regeln + Backlog:
 
 ## Config-Flow
 
-- **Onboarding per Pairing-Code (ab v3.26.0, Email/Passwort komplett
+- **Onboarding per Pairing-Code (ab v3.27.0, Email/Passwort komplett
   entfernt):** `user`-Step nimmt Code aus der Crowdergy-App (+ optionale
   API-URL für Self-Hosted, teil-erledigt Backlog #17), claimt via
   `claim_pairing_code` mit der HA-Instance-ID als `client_id`,
