@@ -64,6 +64,7 @@ def make_coordinator(
     coord.devices = devices
     coord.state = DeviceStateMirror()
     coord._consent_denied_logged = set()
+    coord._backend_gone_device_ids = set()  # v3.26.0: 404/410-Gate (siehe __init__)
     coord._last_sent_payload = {}
     coord._last_send_at = {}
     coord._last_mirror_at = {}
