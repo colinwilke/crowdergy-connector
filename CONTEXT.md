@@ -1,17 +1,10 @@
 # crowdergy-connector — aktueller Stand
 
-Release-Stand: **v3.25.0 auf main** (Box pinnt diesen Tag); **v3.26.0**
-(Manifest bereits gebumpt) wartet auf Tag durch den User und
-konsolidiert ZWEI Stränge: das getaggte v3.24.0
-(Mapping-Dictionary + Contribute v0.2 von
-`claude/beautiful-thompson-0a2wvl` — war NICHT in der
-v3.25.0-Konsolidierung!) und den Crowd-Preset-Store-Vertrag mit
-Backend-Umsetzung. Deploy-Reihenfolge: Backend-Migration
-`20260612_0001` zuerst (sonst 422 bei Beiträgen mit `value_map`).
 HACS Custom-Component (Domain `theothergas`, Legacy-Name) für Home
 Assistant: spiegelt Backend-Dispatch in HA-Entities und pusht
-Telemetrie zurück. Regeln + Backlog: `CLAUDE.md` hier bzw.
-`crowdergy-ios/CLAUDE.md` (Index).
+Telemetrie zurück. Aktuell released: **v3.26.0** (Tag `7a16a00`;
+Box pinnt diesen Tag). Regeln/Stolpersteine: `CLAUDE.md` hier;
+Backlog + Release-„Stand": `crowdergy-ios/CLAUDE.md` (SSOT).
 
 ## Modul-Struktur (`custom_components/theothergas/`)
 
@@ -110,25 +103,28 @@ einmal.
 
 ## Tests (`tests/`)
 
-pytest, Python ≥ 3.12. Pure-Logic-Unit-Tests: `test_device_field_spec`
-(SSOT-Regression-Guard), `test_preset_spec` (Vertrags-Invarianten,
-u.a. Entity-Slots ⊆ `MAPPABLE_ENTITY_DOMAINS`), `test_contribute_flow`,
-`test_sse_client`, `test_state_mirror`, `test_seconds_until_next_run`,
-`test_provisioning`, `test_box_services`, `test_integration_domain`.
-2 bekannte aiodns-Drift-Errors (siehe `CLAUDE.md`).
+pytest, Python ≥ 3.12. **CI `test.yml` läuft auf push→main + PRs**
+(`cache-dependency-path: requirements-test.txt`); die zwei
+aiodns-Drift-Tests `test_sse_client::test_start_is_idempotent` +
+`test_stop_cancels_running_task` werden in CI deterministisch
+deselektiert (siehe `CLAUDE.md`). Pure-Logic-Unit-Tests:
+`test_device_field_spec` (SSOT-Guard), `test_preset_spec`
+(Vertrags-Invarianten), `test_contribute_flow`, `test_state_mirror`,
+`test_provisioning`, `test_box_services`, `test_integration_domain`,
+`test_connector_pairing_alias` (#39 /connector/* = /box/*-Alias).
 Coordinator-/Full-Flow-Integration offen (Backlog #21).
 
 ## Offene Punkte
 
-Siehe Backlog #16–#22 in `crowdergy-ios/CLAUDE.md` (Domain-Rename,
-API-URL-Override, Telemetry-Retry, proaktives Token-Refresh,
-HACS-Default-Index, FEAT-5-Rest, Kostal-Template). Außerdem:
+→ Backlog Cluster C (#16–#22) + #39/#40 in `crowdergy-ios/CLAUDE.md`.
+Hier bewusst nicht re-listet (Schichtungs-Regel: offene Punkte nur im
+SSOT). Bekannte Architektur-Eigenschaft (kein Backlog-Item):
 Refresh-Tokens liegen im Klartext in `config_entries` (HA-Standard).
 
 ## Abhängigkeiten / Plattform
 
 - **Backend** wird aufgerufen (s.o.); **iOS**: keine Direktverbindung
   (Daten via Backend-SSE-Broadcast); **Box** vendored dieses Repo per
-  Git-Tag (`crowdergy-box/CONNECTOR_VERSION`, aktuell v3.25.0).
+  Git-Tag (`crowdergy-box/CONNECTOR_VERSION`, aktuell v3.26.0).
 - `manifest.json`: Version `3.26.0`, Domain `theothergas`,
   `iot_class: cloud_push`, `requirements: ["httpx>=0.24.0"]`.
