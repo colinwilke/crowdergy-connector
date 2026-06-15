@@ -46,8 +46,8 @@ dort: Cluster C (#16–#22).
   `tag-release.yml` bzw. User; vor dem Taggen prüfen, ob der Tag auf
   origin schon belegt ist. **Stand: v3.27.0 released** (2026-06-15, Tag
   `2f2ea76` via `tag-release.yml`: #39 `/connector/*`-Pairing-Alias +
-  #40 device_update-Preset-Apply). Box-Pin steht noch auf v3.26.0 →
-  Bump auf v3.27.0 ausstehend (`scripts/vendor-connector.sh`).
+  #40 device_update-Preset-Apply). Box-Pin auf **v3.27.0** gebumpt
+  (sha=2f2ea76, `65e4008`).
 - **Public-Repo-Disziplin:** Dieses Repo ist public (HACS =
   Contribute-Kanal für den Crowd-Preset-Store). Hier liegt nur das
   Slot-SCHEMA (`preset_spec.py`); Store-Daten/Kuration bleiben im Backend

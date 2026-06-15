@@ -4,7 +4,7 @@ HACS Custom-Component (Domain `theothergas`, Legacy-Name) für Home
 Assistant: spiegelt Backend-Dispatch in HA-Entities und pusht
 Telemetrie zurück. Aktuell released: **v3.27.0** (Tag `2f2ea76`,
 2026-06-15: #39 `/connector/*`-Alias + #40 device_update-Preset-Apply;
-Box-Pin-Bump auf v3.27.0 ausstehend). Regeln/Stolpersteine: `CLAUDE.md` hier;
+Box-Pin auf v3.27.0 gebumpt). Regeln/Stolpersteine: `CLAUDE.md` hier;
 Backlog + Release-„Stand": `crowdergy-ios/CLAUDE.md` (SSOT).
 
 ## Modul-Struktur (`custom_components/theothergas/`)
