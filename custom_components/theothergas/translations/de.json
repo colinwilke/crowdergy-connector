@@ -109,7 +109,11 @@
               "entity_vehicle_status": "Fahrzeugstatus",
               "entity_current_temp_c": "Ist-Temperatur",
               "entity_energy_total": "Gesamtzähler Bezug \/ Entladen (kWh)",
-              "entity_energy_discharged_total": "Gesamtzähler Einspeisung \/ Laden (kWh)"
+              "entity_energy_discharged_total": "Gesamtzähler Einspeisung \/ Laden (kWh)",
+              "entity_home_consumption_pv_power": "Hausverbrauch aus PV (W)",
+              "entity_home_consumption_battery_power": "Hausverbrauch aus Batterie (W)",
+              "entity_home_consumption_grid_power": "Hausverbrauch aus Netz (W)",
+              "entity_pv_to_battery_power": "PV→Batterie-Ladeleistung (W)"
             },
             "data_description": {
               "entity_current_power_kw": "Aktuelle Leistung in W oder kW. Bei Netz/Batterie: erste Richtung (Bezug bzw. Entladung). Bei Solar/WP/Wallbox: die einzige Richtung.",
@@ -119,7 +123,11 @@
               "entity_vehicle_status": "Sensor, der meldet ob ein Auto an der Wallbox steckt.",
               "entity_current_temp_c": "Aktuelle Temperatur in °C — Vorlauf der WP oder Innentemp des Boilers.",
               "entity_energy_total": "Netz: kWh vom Netz INS Haus (Bezug). Batterie: kWh aus dem Akku INS Haus (Entladen). Solar/Heizung/Wallbox/Haushalt: Lebenszeit-Zähler. Optional, daraus berechnet die App Tages-/Monats-/Jahresverbrauch.",
-              "entity_energy_discharged_total": "Netz: kWh vom Haus INS Netz (Einspeisung). Batterie: kWh vom Haus IN den Akku (Laden). Bei anderen Gerätetypen leer lassen."
+              "entity_energy_discharged_total": "Netz: kWh vom Haus INS Netz (Einspeisung). Batterie: kWh vom Haus IN den Akku (Laden). Bei anderen Gerätetypen leer lassen.",
+              "entity_home_consumption_pv_power": "Vendor-Sensor: wie viel des aktuellen Hausverbrauchs gerade aus PV gedeckt wird (Kostal: „Home Consumption from PV“). Speist das Hausverbrauchs-Diagramm — leer lassen, wenn dein Wechselrichter ihn nicht liefert.",
+              "entity_home_consumption_battery_power": "Vendor-Sensor: Hausverbrauch, der gerade aus der Batterie gedeckt wird (Kostal: „Home Consumption from Battery“). Speist das Hausverbrauchs-Diagramm.",
+              "entity_home_consumption_grid_power": "Vendor-Sensor: Hausverbrauch, der gerade aus dem Netz gedeckt wird (Kostal: „Home Consumption from Grid“). Speist das Hausverbrauchs-Diagramm.",
+              "entity_pv_to_battery_power": "Optional: direkt gemessene PV→Batterie-Ladeleistung (Kostal\/Fronius\/SMA-Hybrid). Wenn vorhanden nutzt das Diagramm diesen Wert statt den PV-\/Netz-Ladesplit abzuleiten. Sonst leer lassen."
             }
           },
           "control_section": {
@@ -371,7 +379,11 @@
               "entity_vehicle_status": "Fahrzeugstatus",
               "entity_current_temp_c": "Ist-Temperatur",
               "entity_energy_total": "Gesamtzähler Bezug \/ Entladen (kWh)",
-              "entity_energy_discharged_total": "Gesamtzähler Einspeisung \/ Laden (kWh)"
+              "entity_energy_discharged_total": "Gesamtzähler Einspeisung \/ Laden (kWh)",
+              "entity_home_consumption_pv_power": "Hausverbrauch aus PV (W)",
+              "entity_home_consumption_battery_power": "Hausverbrauch aus Batterie (W)",
+              "entity_home_consumption_grid_power": "Hausverbrauch aus Netz (W)",
+              "entity_pv_to_battery_power": "PV→Batterie-Ladeleistung (W)"
             },
             "data_description": {
               "entity_current_power_kw": "Aktuelle Leistung in W oder kW. Bei Netz/Batterie: erste Richtung (Bezug bzw. Entladung). Bei Solar/WP/Wallbox: die einzige Richtung.",
@@ -381,7 +393,11 @@
               "entity_vehicle_status": "Sensor, der meldet ob ein Auto an der Wallbox steckt.",
               "entity_current_temp_c": "Aktuelle Temperatur in °C — Vorlauf der WP oder Innentemp des Boilers.",
               "entity_energy_total": "Netz: kWh vom Netz ins Haus (Bezug). Batterie: kWh aus dem Akku ins Haus (Entladen). Solar/Heizung/Wallbox/Haushalt: Lebenszeit-Zähler. Optional, daraus berechnet die App Tages-/Monats-/Jahresverbrauch.",
-              "entity_energy_discharged_total": "Netz: kWh vom Haus ins Netz (Einspeisung). Batterie: kWh vom Haus in den Akku (Laden). Bei anderen Gerätetypen leer lassen."
+              "entity_energy_discharged_total": "Netz: kWh vom Haus ins Netz (Einspeisung). Batterie: kWh vom Haus in den Akku (Laden). Bei anderen Gerätetypen leer lassen.",
+              "entity_home_consumption_pv_power": "Vendor-Sensor: wie viel des aktuellen Hausverbrauchs gerade aus PV gedeckt wird (Kostal: „Home Consumption from PV“). Speist das Hausverbrauchs-Diagramm — leer lassen, wenn dein Wechselrichter ihn nicht liefert.",
+              "entity_home_consumption_battery_power": "Vendor-Sensor: Hausverbrauch, der gerade aus der Batterie gedeckt wird (Kostal: „Home Consumption from Battery“). Speist das Hausverbrauchs-Diagramm.",
+              "entity_home_consumption_grid_power": "Vendor-Sensor: Hausverbrauch, der gerade aus dem Netz gedeckt wird (Kostal: „Home Consumption from Grid“). Speist das Hausverbrauchs-Diagramm.",
+              "entity_pv_to_battery_power": "Optional: direkt gemessene PV→Batterie-Ladeleistung (Kostal\/Fronius\/SMA-Hybrid). Wenn vorhanden nutzt das Diagramm diesen Wert statt den PV-\/Netz-Ladesplit abzuleiten. Sonst leer lassen."
             }
           },
           "control_section": {
@@ -527,7 +543,11 @@
               "entity_vehicle_status": "Fahrzeugstatus",
               "entity_current_temp_c": "Ist-Temperatur",
               "entity_energy_total": "Gesamtzähler Bezug \/ Entladen (kWh)",
-              "entity_energy_discharged_total": "Gesamtzähler Einspeisung \/ Laden (kWh)"
+              "entity_energy_discharged_total": "Gesamtzähler Einspeisung \/ Laden (kWh)",
+              "entity_home_consumption_pv_power": "Hausverbrauch aus PV (W)",
+              "entity_home_consumption_battery_power": "Hausverbrauch aus Batterie (W)",
+              "entity_home_consumption_grid_power": "Hausverbrauch aus Netz (W)",
+              "entity_pv_to_battery_power": "PV→Batterie-Ladeleistung (W)"
             },
             "data_description": {
               "entity_current_power_kw": "Aktuelle Leistung in W oder kW. Bei Netz/Batterie: erste Richtung. Bei Solar/WP/Wallbox: die einzige Richtung.",
@@ -537,7 +557,11 @@
               "entity_vehicle_status": "Sensor, der Auto-an-Wallbox meldet.",
               "entity_current_temp_c": "Aktuelle Temperatur in °C.",
               "entity_energy_total": "Netz: kWh vom Netz ins Haus (Bezug). Batterie: kWh aus dem Akku ins Haus (Entladen). Solar/Heizung/Wallbox/Haushalt: Lebenszeit-Zähler. Optional.",
-              "entity_energy_discharged_total": "Netz: kWh vom Haus ins Netz (Einspeisung). Batterie: kWh vom Haus in den Akku (Laden). Bei anderen Gerätetypen leer lassen."
+              "entity_energy_discharged_total": "Netz: kWh vom Haus ins Netz (Einspeisung). Batterie: kWh vom Haus in den Akku (Laden). Bei anderen Gerätetypen leer lassen.",
+              "entity_home_consumption_pv_power": "Vendor-Sensor: wie viel des aktuellen Hausverbrauchs gerade aus PV gedeckt wird (Kostal: „Home Consumption from PV“). Speist das Hausverbrauchs-Diagramm — leer lassen, wenn dein Wechselrichter ihn nicht liefert.",
+              "entity_home_consumption_battery_power": "Vendor-Sensor: Hausverbrauch, der gerade aus der Batterie gedeckt wird (Kostal: „Home Consumption from Battery“). Speist das Hausverbrauchs-Diagramm.",
+              "entity_home_consumption_grid_power": "Vendor-Sensor: Hausverbrauch, der gerade aus dem Netz gedeckt wird (Kostal: „Home Consumption from Grid“). Speist das Hausverbrauchs-Diagramm.",
+              "entity_pv_to_battery_power": "Optional: direkt gemessene PV→Batterie-Ladeleistung (Kostal\/Fronius\/SMA-Hybrid). Wenn vorhanden nutzt das Diagramm diesen Wert statt den PV-\/Netz-Ladesplit abzuleiten. Sonst leer lassen."
             }
           },
           "control_section": {

@@ -58,6 +58,14 @@ Backlog + Release-„Stand": `crowdergy-ios/CLAUDE.md` (SSOT).
   `_maybe_proactive_refresh` vor jedem Call in `_authenticated_request`),
   single-flight via `seen_token`-CAS — der reaktive 401-Pfad bleibt als
   Fallback.
+- **Telemetry-`extra`-Bag (`_compose_extra` + `_SOLVER_EXTRA_FIELDS`):**
+  per-Typ registrierte Read-Sensoren laufen als JSONB-`extra` mit
+  (Reader `temp`→°C, `power`→kW). Heute: `vorlauf_temp_c` (heating/
+  warmwater, solver) + die HC-Flow-Triade `hc_pv/_battery/_grid_power_kw`
+  (solar/battery/grid) + optional `pv_to_battery_power_kw` (battery) für
+  den Hausverbrauchs-Chart (#42 → Backend #41, NICHT solver-gelesen).
+  Keys spiegeln 1:1 Backend-`SOLVER_FIELDS`. Vertrag:
+  `docs/house-consumption-chart.md`.
 
 ## Config-Flow
 

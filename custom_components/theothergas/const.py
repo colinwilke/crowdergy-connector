@@ -271,6 +271,28 @@ CONF_ENTITY_VORLAUF_TEMP = "entity_vorlauf_temp_c"
 # stillschweigend ignoriert (User kann später nachpflegen).
 CONF_ENTITY_VORLAUF_SETPOINT = "entity_vorlauf_setpoint_c"
 
+# ── Hausverbrauchs-Flow-Sensoren (CN-#42, 2026-06-15) ─────────────────
+# „House Consumption decomposed by source" — drei optionale Live-Power-
+# Sensoren (W ≥0), die der Vendor (Kostal/Fronius/SMA-Hybrid) direkt
+# misst: wie viel des aktuellen HAUSVERBRAUCHS aus PV, Batterie bzw.
+# Netz gedeckt wird. Sitzen je beim semantisch passenden Gerät:
+#   * HC-from-PV      → Solar-Device
+#   * HC-from-Battery → Battery-Device
+#   * HC-from-Grid    → Grid-Device
+# Plus EIN optionaler 4. Sensor (PV→Batterie-Ladeleistung, W ≥0) am
+# Battery-Device, falls der Inverter ihn direkt liefert.
+#
+# Diese Werte verlassen die Box NICHT als typed Columns, sondern laufen
+# über die `telemetry.extra`-Pipeline (wie `vorlauf_temp_c`) als kW mit.
+# Backend (#41, `GET /users/me/energy/today`) bucketet sie pro Slot und
+# leitet daraus den Hausverbrauchs-Stack-Chart ab (PV→Haus / Bat→Haus /
+# Netz→Haus + Lade-Split + Einspeisung). NICHT vom Solver gelesen —
+# reine Chart-Eingabe. Default-DENY-Allowlist unten erlaubt nur `sensor`.
+CONF_ENTITY_HC_PV_POWER = "entity_home_consumption_pv_power"
+CONF_ENTITY_HC_BATTERY_POWER = "entity_home_consumption_battery_power"
+CONF_ENTITY_HC_GRID_POWER = "entity_home_consumption_grid_power"
+CONF_ENTITY_PV_TO_BATTERY_POWER = "entity_pv_to_battery_power"
+
 # Hold loop timing. Initial 10 s lets the apply call's effect
 # propagate before the first rewrite. 30 s catches most auto-revert
 # cycles (Kostal's is 60 s).
@@ -387,6 +409,11 @@ MAPPABLE_ENTITY_DOMAINS: dict[str, frozenset[str]] = {
     CONF_ENTITY_ENERGY_TOTAL: _READ_SENSOR,
     CONF_ENTITY_ENERGY_DISCHARGED_TOTAL: _READ_SENSOR,
     CONF_ENTITY_VORLAUF_TEMP: _READ_SENSOR,
+    # Hausverbrauchs-Flow-Sensoren (#42) — reine Read-Power-Sensoren.
+    CONF_ENTITY_HC_PV_POWER: _READ_SENSOR,
+    CONF_ENTITY_HC_BATTERY_POWER: _READ_SENSOR,
+    CONF_ENTITY_HC_GRID_POWER: _READ_SENSOR,
+    CONF_ENTITY_PV_TO_BATTERY_POWER: _READ_SENSOR,
     CONF_ENTITY_OUTDOOR_TEMP: _READ_SENSOR,
     CONF_ENTITY_VEHICLE_STATUS: _READ_SENSOR_OR_BINARY,
     # current_temp: Sensor-Pfad ODER climate/water_heater (climate-first

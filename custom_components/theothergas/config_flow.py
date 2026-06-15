@@ -38,6 +38,10 @@ from .const import (
     CONF_ENTITY_VORLAUF_TEMP,
     CONF_ENTITY_ENERGY_TOTAL,
     CONF_ENTITY_ENERGY_DISCHARGED_TOTAL,  # noqa: F401 — used as slot key
+    CONF_ENTITY_HC_PV_POWER,
+    CONF_ENTITY_HC_BATTERY_POWER,
+    CONF_ENTITY_HC_GRID_POWER,
+    CONF_ENTITY_PV_TO_BATTERY_POWER,
     CONF_INVERT_POWER_SIGN,
     CONF_PASSWORD,
     CONF_REFRESH_TOKEN,
@@ -158,13 +162,20 @@ def _auto_fill_binary_vehicle_status(entity_input: dict[str, Any]) -> None:
 # capable types additionally get the control trio (entity_control +
 # value_on + value_off) rendered as a separate section.
 _READ_FIELDS: dict[str, list[str]] = {
-    "solar":     [CONF_ENTITY_POWER, CONF_ENTITY_ENERGY_TOTAL],
+    # #42: optionaler HC-from-PV-Sensor (Hausverbrauch aus PV, W ≥0) —
+    # speist den Hausverbrauchs-Stack-Chart (Backend #41).
+    "solar":     [
+        CONF_ENTITY_POWER, CONF_ENTITY_ENERGY_TOTAL,
+        CONF_ENTITY_HC_PV_POWER,
+    ],
     # v3.0 bidirektional: zweites Power-Sensor-Feld neben dem zweiten
     # Energie-Zähler. power_1 = Bezug (Energie raus aus Netz, ins Haus),
     # power_2 = Einspeisung. Coordinator computet signed power_1 - power_2.
+    # #42: optionaler HC-from-Grid-Sensor (Hausverbrauch aus dem Netz).
     "grid":      [
         CONF_ENTITY_POWER, CONF_ENTITY_ENERGY_TOTAL,
         CONF_ENTITY_POWER_2, CONF_ENTITY_ENERGY_DISCHARGED_TOTAL,
+        CONF_ENTITY_HC_GRID_POWER,
     ],
     "heating":   [
         CONF_ENTITY_POWER, CONF_ENTITY_ENERGY_TOTAL,
@@ -175,11 +186,14 @@ _READ_FIELDS: dict[str, list[str]] = {
     "haushalt":  [CONF_ENTITY_POWER, CONF_ENTITY_ENERGY_TOTAL],
     # Batterie: power_1 = Entladung, power_2 = Ladung, energy_1 +
     # energy_2 die zugehörigen kWh-Zähler. SoC zwischen den Power-
-    # Paaren damit visuell zusammengehört.
+    # Paaren damit visuell zusammengehört. #42: HC-from-Battery (Pflicht
+    # für Vendor-Wahrheit-Pfad) + optional der direkt gemessene
+    # PV→Batterie-Ladestrom (4. Sensor, nice-to-have).
     "battery":   [
         CONF_ENTITY_POWER, CONF_ENTITY_ENERGY_TOTAL,
         CONF_ENTITY_POWER_2, CONF_ENTITY_ENERGY_DISCHARGED_TOTAL,
         CONF_ENTITY_SOC,
+        CONF_ENTITY_HC_BATTERY_POWER, CONF_ENTITY_PV_TO_BATTERY_POWER,
     ],
     # Wallbox V2G "kommt später" — heute nur unidirektional.
     "wallbox":   [
@@ -278,6 +292,22 @@ _ENTITY_SELECTORS: dict[str, selector.EntitySelector] = {
     # discharge counter — splits charge / discharge into separate
     # streams server-side.
     CONF_ENTITY_ENERGY_DISCHARGED_TOTAL: selector.EntitySelector(
+        selector.EntitySelectorConfig(domain="sensor")
+    ),
+    # Hausverbrauchs-Flow-Sensoren (#42). Live-Power-Sensoren (W ≥0),
+    # die der Vendor direkt misst — wieviel des Hausverbrauchs aktuell
+    # aus PV / Batterie / Netz gedeckt wird, plus optional die
+    # PV→Batterie-Ladeleistung. Nur Sensor-Domain (wie alle Read-Slots).
+    CONF_ENTITY_HC_PV_POWER: selector.EntitySelector(
+        selector.EntitySelectorConfig(domain="sensor")
+    ),
+    CONF_ENTITY_HC_BATTERY_POWER: selector.EntitySelector(
+        selector.EntitySelectorConfig(domain="sensor")
+    ),
+    CONF_ENTITY_HC_GRID_POWER: selector.EntitySelector(
+        selector.EntitySelectorConfig(domain="sensor")
+    ),
+    CONF_ENTITY_PV_TO_BATTERY_POWER: selector.EntitySelector(
         selector.EntitySelectorConfig(domain="sensor")
     ),
 }

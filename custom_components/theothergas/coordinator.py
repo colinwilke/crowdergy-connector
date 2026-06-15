@@ -44,6 +44,10 @@ from .const import (
     CONF_ENTITY_OUTDOOR_TEMP,
     CONF_ENTITY_VORLAUF_SETPOINT,
     CONF_ENTITY_VORLAUF_TEMP,
+    CONF_ENTITY_HC_PV_POWER,
+    CONF_ENTITY_HC_BATTERY_POWER,
+    CONF_ENTITY_HC_GRID_POWER,
+    CONF_ENTITY_PV_TO_BATTERY_POWER,
     CONF_REFRESH_TOKEN,
     CONF_USER_ID,
     CONF_VALUE_OFF,
@@ -191,8 +195,9 @@ SEND_THRESHOLDS: dict[str, float] = {
 # Tick durch zum Solver.
 #
 # `reader` muss eine der Reader-Methoden auf der Coordinator-Klasse
-# sein (siehe `_read_extra_value` im Loop). Aktuell "temp" → liest
-# °C-Sensoren oder die `current_temperature` aus climate-Attributen.
+# sein (siehe `_compose_extra`). "temp" → liest °C-Sensoren oder die
+# `current_temperature` aus climate-Attributen; "power" → liest einen
+# Leistungssensor und normalisiert auf kW (W→kW über das HA-Unit-Attr).
 _SOLVER_EXTRA_FIELDS: dict[str, list[tuple[str, str, str]]] = {
     "heating": [
         ("vorlauf_temp_c", CONF_ENTITY_VORLAUF_TEMP, "temp"),
@@ -202,6 +207,20 @@ _SOLVER_EXTRA_FIELDS: dict[str, list[tuple[str, str, str]]] = {
         # fürs Aufheizen — typisch höher als HK-VL. Backend nutzt das
         # gleiche cop_at_outdoor_temp(t_vorlauf_c=…) Modell auch hier.
         ("vorlauf_temp_c", CONF_ENTITY_VORLAUF_TEMP, "temp"),
+    ],
+    # Hausverbrauchs-Flow-Sensoren (#42, NICHT solver-gelesen — reine
+    # Chart-Eingabe für Backend #41 `GET /users/me/energy/today`). Je
+    # Wert wird auf kW normalisiert und als `*_power_kw` im extra-Bag
+    # mitgeschickt; die Keys spiegeln 1:1 die Backend-`SOLVER_FIELDS`.
+    "solar": [
+        ("hc_pv_power_kw", CONF_ENTITY_HC_PV_POWER, "power"),
+    ],
+    "battery": [
+        ("hc_battery_power_kw", CONF_ENTITY_HC_BATTERY_POWER, "power"),
+        ("pv_to_battery_power_kw", CONF_ENTITY_PV_TO_BATTERY_POWER, "power"),
+    ],
+    "grid": [
+        ("hc_grid_power_kw", CONF_ENTITY_HC_GRID_POWER, "power"),
     ],
     # Andere Gerätetypen können ihre Solver-only-Felder hier
     # anhängen ohne den eigentlichen `_async_update_data`-Loop
@@ -938,6 +957,34 @@ class CrowdergyCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
             return value / 1000.0
         return value
 
+    def _compose_extra(self, dev: dict[str, Any]) -> dict[str, Any]:
+        """Read this device's registered `telemetry.extra` sensors into a
+        flat bag. Driven by `_SOLVER_EXTRA_FIELDS` (per device type) so a
+        new extra field is one registry line + one Backend `SolverField`
+        — the `_async_update_data` loop never changes.
+
+        Readers: "temp" → °C (sensor or climate `current_temperature`),
+        "power" → kW (W→kW normalised). Non-numeric / unavailable reads
+        are skipped so the bag only carries live values. Empty dict when
+        nothing maps — caller drops `extra` entirely then.
+        """
+        extra_payload: dict[str, Any] = {}
+        for payload_key, conf_key, reader in _SOLVER_EXTRA_FIELDS.get(
+            dev.get(CONF_DEVICE_TYPE, ""), []
+        ):
+            entity_id = dev.get(conf_key, "")
+            if not entity_id:
+                continue
+            if reader == "power":
+                value = self._read_power_kw(entity_id)
+            elif reader == "temp":
+                value = self._read_temp_c(entity_id)
+            else:
+                value = self._read_entity_state(entity_id)
+            if isinstance(value, (int, float)) and not isinstance(value, bool):
+                extra_payload[payload_key] = float(value)
+        return extra_payload
+
     def _read_string(self, entity_id: str) -> str | None:
         """Read an entity state as the raw `state.state` string.
 
@@ -1368,23 +1415,11 @@ class CrowdergyCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
             if cool_on is not None:
                 payload["cool_on"] = cool_on
 
-            # Solver-only extras (Vorlauf-Temp, später T_supply, …).
-            # JSONB-Bag im Backend; UI bekommt davon nichts mit. Nur
-            # senden wenn mindestens ein Feld einen Wert liefert,
-            # sonst Payload nicht aufblähen.
-            extra_payload: dict[str, Any] = {}
-            for payload_key, conf_key, reader in _SOLVER_EXTRA_FIELDS.get(
-                dev.get(CONF_DEVICE_TYPE, ""), []
-            ):
-                entity_id = dev.get(conf_key, "")
-                if not entity_id:
-                    continue
-                if reader == "temp":
-                    value = self._read_temp_c(entity_id)
-                else:
-                    value = self._read_entity_state(entity_id)
-                if isinstance(value, (int, float)):
-                    extra_payload[payload_key] = float(value)
+            # Solver-only + Chart-only extras (Vorlauf-Temp, HC-Flow-
+            # Sensoren #42, …). JSONB-Bag im Backend; UI bekommt davon
+            # nichts mit. Nur senden wenn mindestens ein Feld einen Wert
+            # liefert, sonst Payload nicht aufblähen.
+            extra_payload = self._compose_extra(dev)
 
             # v3.5.2: v3.4.6's Auto-Routing von `climate.current_temperature`
             # → `vorlauf_temp_c` ist hier raus. War zu aggressiv:

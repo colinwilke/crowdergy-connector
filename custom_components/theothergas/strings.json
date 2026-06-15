@@ -108,7 +108,11 @@
               "entity_vehicle_status": "Vehicle status",
               "entity_current_temp_c": "Current temperature",
               "entity_energy_total": "Total counter — drawn / discharged (kWh)",
-              "entity_energy_discharged_total": "Total counter — fed-in / charged (kWh)"
+              "entity_energy_discharged_total": "Total counter — fed-in / charged (kWh)",
+              "entity_home_consumption_pv_power": "House consumption from PV (W)",
+              "entity_home_consumption_battery_power": "House consumption from battery (W)",
+              "entity_home_consumption_grid_power": "House consumption from grid (W)",
+              "entity_pv_to_battery_power": "PV → battery charge power (W)"
             },
             "data_description": {
               "entity_current_power_kw": "Current power in W or kW. Grid/Battery: first direction (import / discharge). Solar/WP/Wallbox: the only direction.",
@@ -118,7 +122,11 @@
               "entity_vehicle_status": "Sensor that signals a car connected to the wallbox.",
               "entity_current_temp_c": "Current temperature in °C — heat-pump flow or boiler interior.",
               "entity_energy_total": "Grid: kWh drawn from the grid (into the home). Battery: kWh discharged (from the battery into the home). Solar/heating/wallbox/household: lifetime kWh counter. Optional — drives daily/monthly/yearly stats.",
-              "entity_energy_discharged_total": "Grid: kWh fed-in to the grid (from the home). Battery: kWh charged (from the home into the battery). Leave blank for other device types."
+              "entity_energy_discharged_total": "Grid: kWh fed-in to the grid (from the home). Battery: kWh charged (from the home into the battery). Leave blank for other device types.",
+              "entity_home_consumption_pv_power": "Vendor sensor: how much of the home's current consumption is covered by PV right now (Kostal: 'Home Consumption from PV'). Feeds the house-consumption chart — leave empty if your inverter doesn't expose it.",
+              "entity_home_consumption_battery_power": "Vendor sensor: home consumption currently covered by the battery (Kostal: 'Home Consumption from Battery'). Feeds the house-consumption chart.",
+              "entity_home_consumption_grid_power": "Vendor sensor: home consumption currently covered by the grid (Kostal: 'Home Consumption from Grid'). Feeds the house-consumption chart.",
+              "entity_pv_to_battery_power": "Optional: directly measured PV→battery charge power (Kostal/Fronius/SMA hybrid). When present the chart uses it instead of deriving the PV/grid charge split. Leave empty otherwise."
             }
           },
           "control_section": {
@@ -370,7 +378,11 @@
               "entity_vehicle_status": "Vehicle status",
               "entity_current_temp_c": "Current temperature",
               "entity_energy_total": "Total counter — drawn / discharged (kWh)",
-              "entity_energy_discharged_total": "Total counter — fed-in / charged (kWh)"
+              "entity_energy_discharged_total": "Total counter — fed-in / charged (kWh)",
+              "entity_home_consumption_pv_power": "House consumption from PV (W)",
+              "entity_home_consumption_battery_power": "House consumption from battery (W)",
+              "entity_home_consumption_grid_power": "House consumption from grid (W)",
+              "entity_pv_to_battery_power": "PV → battery charge power (W)"
             },
             "data_description": {
               "entity_current_power_kw": "Current power in W or kW.",
@@ -380,7 +392,11 @@
               "entity_vehicle_status": "Sensor that signals a car connected to the wallbox.",
               "entity_current_temp_c": "Current temperature in °C.",
               "entity_energy_total": "Grid: kWh drawn from the grid. Battery: kWh discharged. Solar/heating/wallbox/household: lifetime kWh counter. Optional.",
-              "entity_energy_discharged_total": "Grid: kWh fed-in to the grid. Battery: kWh charged. Leave blank for other device types."
+              "entity_energy_discharged_total": "Grid: kWh fed-in to the grid. Battery: kWh charged. Leave blank for other device types.",
+              "entity_home_consumption_pv_power": "Vendor sensor: home consumption covered by PV right now (Kostal: 'Home Consumption from PV'). Feeds the house-consumption chart.",
+              "entity_home_consumption_battery_power": "Vendor sensor: home consumption covered by the battery (Kostal: 'Home Consumption from Battery'). Feeds the house-consumption chart.",
+              "entity_home_consumption_grid_power": "Vendor sensor: home consumption covered by the grid (Kostal: 'Home Consumption from Grid'). Feeds the house-consumption chart.",
+              "entity_pv_to_battery_power": "Optional: directly measured PV→battery charge power (Kostal/Fronius/SMA hybrid). When present the chart uses it instead of deriving the split."
             }
           },
           "control_section": {
@@ -523,7 +539,11 @@
               "entity_vehicle_status": "Vehicle status",
               "entity_current_temp_c": "Current temperature",
               "entity_energy_total": "Total counter — drawn / discharged (kWh)",
-              "entity_energy_discharged_total": "Total counter — fed-in / charged (kWh)"
+              "entity_energy_discharged_total": "Total counter — fed-in / charged (kWh)",
+              "entity_home_consumption_pv_power": "House consumption from PV (W)",
+              "entity_home_consumption_battery_power": "House consumption from battery (W)",
+              "entity_home_consumption_grid_power": "House consumption from grid (W)",
+              "entity_pv_to_battery_power": "PV → battery charge power (W)"
             },
             "data_description": {
               "entity_current_power_kw": "Current power in W or kW.",
@@ -533,7 +553,11 @@
               "entity_vehicle_status": "Sensor that signals a car connected.",
               "entity_current_temp_c": "Current temperature in °C.",
               "entity_energy_total": "Grid: kWh drawn from the grid. Battery: kWh discharged. Solar/heating/wallbox/household: lifetime kWh counter. Optional.",
-              "entity_energy_discharged_total": "Grid: kWh fed-in to the grid. Battery: kWh charged. Leave blank for other device types."
+              "entity_energy_discharged_total": "Grid: kWh fed-in to the grid. Battery: kWh charged. Leave blank for other device types.",
+              "entity_home_consumption_pv_power": "Vendor sensor: home consumption covered by PV right now (Kostal: 'Home Consumption from PV'). Feeds the house-consumption chart.",
+              "entity_home_consumption_battery_power": "Vendor sensor: home consumption covered by the battery (Kostal: 'Home Consumption from Battery'). Feeds the house-consumption chart.",
+              "entity_home_consumption_grid_power": "Vendor sensor: home consumption covered by the grid (Kostal: 'Home Consumption from Grid'). Feeds the house-consumption chart.",
+              "entity_pv_to_battery_power": "Optional: directly measured PV→battery charge power (Kostal/Fronius/SMA hybrid). When present the chart uses it instead of deriving the split."
             }
           },
           "control_section": {
