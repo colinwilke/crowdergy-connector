@@ -223,10 +223,11 @@ class TelemetryComposer:
             if device_id in self.coord._backend_gone_device_ids:
                 continue
             try:
-                response = await self.coord._authenticated_request(
-                    "PATCH",
-                    f"/api/v1/devices/{device_id}/telemetry",
-                    json=mirror,
+                # #18: gleicher bounded Retry/Backoff wie der primäre
+                # Send — ein transienter Blip soll auch den Mirror nicht
+                # für eine ganze PER_DEVICE_MIRROR_INTERVAL aussetzen.
+                response = await self.coord._patch_telemetry_with_retry(
+                    device_id, mirror,
                 )
                 if response.status_code < 400:
                     self.coord._last_mirror_at[device_id] = now_ts

@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import asyncio
+import base64
 import json
 import logging
 import time
@@ -223,6 +224,54 @@ def _load_manifest_version() -> str:
         return "0.0.0"
 
 
+# ── #18 Telemetry-PATCH Retry/Backoff ────────────────────────────────
+#
+# Vorher: ein transienter Transport-Fehler (Netzwerk-Flap, kurzer
+# Backend-Hiccup) auf dem Telemetry-PATCH wurde nur geloggt; der Send
+# ging verloren und wurde erst beim nächsten `_should_send`-True-Tick
+# (bis zu PER_DEVICE_HEARTBEAT_INTERVAL/90 s später) wiederholt → iOS-
+# Tile flippte unnötig auf stale. Jetzt: kurzer bounded Retry mit
+# Exponential-Backoff direkt im Tick. Bewusst KURZ gehalten — das blockt
+# den Coordinator-Tick, der sequenziell über alle Geräte läuft. kWh geht
+# ohnehin nie verloren (Δ wird gegen `_prev_energy_kwh` gerechnet, das
+# nur bei Erfolg fortschreibt), hier geht es um die Frische des
+# power_kw/soc-Snapshots.
+TELEMETRY_RETRY_ATTEMPTS = 3
+"""Gesamt-Versuche inkl. des ersten (also max. 2 Retries)."""
+TELEMETRY_RETRY_BASE_BACKOFF_S = 0.5
+"""Backoff vor Retry: 0.5 s, dann 1.0 s. Worst-Case-Zusatzlatenz pro
+Gerät ~1.5 s — vertretbar im 30-s-Tick bei typisch 1–5 Geräten."""
+_TELEMETRY_RETRY_STATUS = frozenset({429, 500, 502, 503, 504})
+"""Nur DIESE Status-Codes werden retried. 4xx (inkl. 404/410-Eviction)
+gibt der Caller unverändert zurück — kein Retry auf permanente Fehler."""
+
+
+# ── #19 Proaktives Token-Refresh ─────────────────────────────────────
+PROACTIVE_REFRESH_MARGIN_S = 120.0
+"""Refresh das Access-Token proaktiv, sobald es in ≤ dieser Spanne
+abläuft — statt erst reaktiv auf einen 401 zu warten. > der höchsten
+periodischen Loop-Cadence (Heartbeat 25 s, Resync 90 s), damit ein
+laufender Loop das Token verlässlich erneuert, bevor es kippt. Refresh
+bleibt single-flight + CAS-sicher über `_refresh_lock`."""
+
+
+def _jwt_exp(token: str) -> float | None:
+    """Lies den `exp`-Claim (Unix-Sekunden) aus einem JWT ohne
+    Signatur-Verifikation. Wir vertrauen unserem eigenen Token; `exp`
+    dient nur dem Scheduling des proaktiven Refreshes (#19). Bei jedem
+    Defekt (kein JWT, kaputtes Base64, fehlender Claim) → None, dann
+    fällt der Pfad auf rein-reaktives 401-Refresh zurück."""
+    try:
+        payload_b64 = token.split(".")[1]
+        # JWT nutzt base64url ohne Padding — wieder auffüllen.
+        padded = payload_b64 + "=" * (-len(payload_b64) % 4)
+        claims = json.loads(base64.urlsafe_b64decode(padded))
+        exp = claims.get("exp")
+        return float(exp) if exp is not None else None
+    except Exception:  # noqa: BLE001
+        return None
+
+
 class CrowdergyCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
     """Pushes telemetry on entity state changes + periodic heartbeat,
     and listens on a WS channel for commands from the Crowdergy app."""
@@ -238,6 +287,10 @@ class CrowdergyCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
         self.api_url: str = entry.data[CONF_API_URL]
         self._access_token: str = entry.data[CONF_ACCESS_TOKEN]
         self._refresh_token: str = entry.data[CONF_REFRESH_TOKEN]
+        # #19: Ablauf-Zeitpunkt des Access-Tokens (Unix-s) für proaktiven
+        # Refresh. None = kein/kein-dekodierbares exp → rein reaktiver
+        # 401-Pfad. Wird bei jedem erfolgreichen Refresh fortgeschrieben.
+        self._access_token_exp: float | None = _jwt_exp(self._access_token)
         self._user_id: str = entry.data.get(CONF_USER_ID, "")
         self.devices: list[dict[str, Any]] = entry.data.get(CONF_DEVICES, [])
         # v3.5.1: httpx.AsyncClient + manifest read sind blocking I/O
@@ -553,6 +606,9 @@ class CrowdergyCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
                     tokens = response.json()
                     self._access_token = tokens["access_token"]
                     self._refresh_token = tokens["refresh_token"]
+                    # #19: neues exp übernehmen, damit der nächste
+                    # proaktive Check gegen das frische Token rechnet.
+                    self._access_token_exp = _jwt_exp(self._access_token)
                     new_data = {**self.entry.data}
                     new_data[CONF_ACCESS_TOKEN] = self._access_token
                     new_data[CONF_REFRESH_TOKEN] = self._refresh_token
@@ -563,9 +619,38 @@ class CrowdergyCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
                 _LOGGER.error("Token refresh failed: %s", err)
             return False
 
+    def _token_expires_within(self, margin_s: float) -> bool:
+        """True wenn das Access-Token in ≤ margin_s abläuft (oder schon
+        abgelaufen ist). Reine Funktion vom gecachten `_access_token_exp`
+        — None (kein dekodierbares exp) ⇒ False (kein proaktiver Refresh,
+        reaktiver 401-Pfad bleibt)."""
+        if self._access_token_exp is None:
+            return False
+        return self._access_token_exp - time.time() <= margin_s
+
+    async def _maybe_proactive_refresh(self) -> None:
+        """#19: Refresh das Token VOR Ablauf statt erst reaktiv auf 401.
+        Best-effort — schlägt der Refresh fehl (Backend kurz weg), läuft
+        der Caller mit dem aktuellen (ggf. noch gültigen) Token weiter
+        und fällt nötigenfalls auf den reaktiven 401-Pfad zurück. Der
+        `seen_token`-CAS macht parallele Aufrufe single-flight: erneuert
+        ein Loop bereits, sehen die anderen das frische Token, statt ein
+        zweites `/auth/refresh` zu feuern (Refresh-Token-Rotation!)."""
+        if not self._token_expires_within(PROACTIVE_REFRESH_MARGIN_S):
+            return
+        seen_token = self._access_token
+        try:
+            await self._refresh_access_token(seen_token=seen_token)
+        except Exception as err:  # noqa: BLE001
+            _LOGGER.debug("Proactive token refresh skipped: %s", err)
+
     async def _authenticated_request(
         self, method: str, path: str, **kwargs: Any
     ) -> httpx.Response:
+        # #19: vor dem Call proaktiv erneuern, wenn das Token bald
+        # abläuft — so erreichen reguläre Requests im Normalbetrieb nie
+        # den 401-Zustand. Best-effort, blockt den Request nicht.
+        await self._maybe_proactive_refresh()
         # Snapshot des aktuellen Tokens für CAS — wenn ein anderer
         # Caller während unseres 401-Roundtrips bereits rotiert, lassen
         # wir den nächsten Refresh dann sausen.
@@ -579,6 +664,51 @@ class CrowdergyCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
                     method, path, headers=self._auth_headers(), **kwargs
                 )
         return response
+
+    async def _patch_telemetry_with_retry(
+        self, device_id: str, payload: dict[str, Any]
+    ) -> httpx.Response:
+        """#18: PATCH /devices/{id}/telemetry mit bounded Retry/Backoff
+        auf transiente Fehler (Transport-Error + 5xx/429). Permanente
+        4xx (inkl. 404/410-Eviction) werden NICHT retried, sondern
+        unverändert zurückgegeben — der Caller interpretiert den Status.
+        Versuche/Backoff sind bewusst kurz (siehe Modul-Konstanten), weil
+        der Aufruf im Coordinator-Tick blockt.
+
+        Terminal-Verhalten ist identisch zum Vor-#18-Stand: nach
+        erschöpften Retries wird entweder die letzte (transiente)
+        Response zurückgegeben (Caller loggt/`raise_for_status`) oder der
+        letzte Transport-Fehler re-geraist (Caller fängt `RequestError`).
+        """
+        last_exc: httpx.RequestError | None = None
+        response: httpx.Response | None = None
+        for attempt in range(TELEMETRY_RETRY_ATTEMPTS):
+            try:
+                response = await self._authenticated_request(
+                    "PATCH",
+                    f"/api/v1/devices/{device_id}/telemetry",
+                    json=payload,
+                )
+            except httpx.RequestError as err:
+                last_exc = err
+                response = None
+            else:
+                last_exc = None
+                if response.status_code not in _TELEMETRY_RETRY_STATUS:
+                    return response  # Erfolg oder permanenter Fehler
+            if attempt < TELEMETRY_RETRY_ATTEMPTS - 1:
+                backoff = TELEMETRY_RETRY_BASE_BACKOFF_S * (2 ** attempt)
+                _LOGGER.debug(
+                    "Telemetry PATCH for %s transient-failed "
+                    "(attempt %d/%d) — retrying in %.1fs",
+                    device_id, attempt + 1, TELEMETRY_RETRY_ATTEMPTS, backoff,
+                )
+                await asyncio.sleep(backoff)
+        if last_exc is not None:
+            raise last_exc
+        # response ist hier gebunden (letzter Versuch lieferte einen
+        # transienten Status) — Caller behandelt ihn wie zuvor.
+        return response  # type: ignore[return-value]
 
     async def delete_device_backend(self, device_id: str) -> bool:
         """Backend-DELETE für ein Device, mit Auth-Refresh.
@@ -1271,10 +1401,11 @@ class CrowdergyCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
 
             if device_id and self._should_send(device_id, payload):
                 try:
-                    response = await self._authenticated_request(
-                        "PATCH",
-                        f"/api/v1/devices/{device_id}/telemetry",
-                        json=payload,
+                    # #18: bounded Retry/Backoff auf transiente Fehler
+                    # statt sofortigem Aufgeben + Warten auf den nächsten
+                    # Tick.
+                    response = await self._patch_telemetry_with_retry(
+                        device_id, payload,
                     )
                     response.raise_for_status()
                     # Bookkeeping only on successful send so the next

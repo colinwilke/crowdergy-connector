@@ -48,6 +48,15 @@ Backlog + Release-„Stand": `crowdergy-ios/CLAUDE.md` (SSOT).
   SSE-Drop und re-applied (consent-gated).
 - **Heartbeat:** leichter `POST /me/heartbeat` für den
   iOS-Connection-Dot (Liveness, bewusst nicht consent-gated).
+- **Resilienz (#18/#19):** Telemetry-`PATCH` (primärer Send *und*
+  Mirror) läuft über `_patch_telemetry_with_retry` — bounded
+  Retry/Backoff (3 Versuche, 0.5→1.0 s) auf transiente Fehler
+  (Transport-Error + 5xx/429); permanente 4xx inkl. 404/410-Eviction
+  gehen ohne Retry durch. Access-Token wird proaktiv ~120 s vor `exp`
+  erneuert (`_jwt_exp` liest den exp-Claim unverifiziert,
+  `_maybe_proactive_refresh` vor jedem Call in `_authenticated_request`),
+  single-flight via `seen_token`-CAS — der reaktive 401-Pfad bleibt als
+  Fallback.
 
 ## Config-Flow
 
@@ -75,8 +84,8 @@ v3.21.4); das Backend deriviert den signed Wert.
 `PUT|DELETE /devices/{id}`, `PATCH /devices/{id}/telemetry`,
 `POST /devices/{id}/commands`, `GET /api/v1/stream` (SSE),
 `POST /users/me/heartbeat`, `POST /users/me/outdoor`,
-Crowd-Preset-Lookup/Contribute. Auth-Wrapper refresht bei 401 und retried
-einmal.
+Crowd-Preset-Lookup/Contribute. Auth-Wrapper refresht proaktiv vor
+Token-Ablauf (#19) UND reaktiv bei 401 (retry einmal).
 
 ## Crowdergy-Box-Integration (nur mit `theothergas:`-YAML-Key aktiv)
 
@@ -129,6 +138,8 @@ Refresh-Tokens liegen im Klartext in `config_entries` (HA-Standard).
 
 - **Backend** wird aufgerufen (s.o.); **iOS**: keine Direktverbindung
   (Daten via Backend-SSE-Broadcast); **Box** vendored dieses Repo per
-  Git-Tag (`crowdergy-box/CONNECTOR_VERSION`, aktuell v3.26.0).
-- `manifest.json`: Version `3.26.0`, Domain `theothergas`,
-  `iot_class: cloud_push`, `requirements: ["httpx>=0.24.0"]`.
+  Git-Tag (`crowdergy-box/CONNECTOR_VERSION`, aktuell v3.27.0).
+- `manifest.json`: Version `3.27.0`, Domain `theothergas`,
+  `iot_class: cloud_push`, `requirements: ["httpx>=0.24.0"]`. #18/#19
+  sind auf `main`, aber noch nicht getaggt → shippen mit dem nächsten
+  Connector-Release.
