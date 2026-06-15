@@ -1,18 +1,16 @@
 name: Connector tests
 
-# Trigger pausiert wie backend.yml im Backend-Repo (GitHub-Actions-
-# Billing/Spending-Limit, seit 2026-05-25). `workflow_dispatch` hält den
-# Workflow manuell ausführbar; nach dem Billing-Fix die push/
-# pull_request-Trigger unten wieder einkommentieren (Backlog #15).
+# Trigger 2026-06-15 wieder scharf (Actions-Billing gefixt, Backlog #15):
+# push→main + PRs + manuell (workflow_dispatch).
 on:
   workflow_dispatch:
-  # push:
-  #   branches: [main]
-  #   paths-ignore:
-  #     - "**/*.md"
-  #     - "docs/**"
-  #     - "images/**"
-  # pull_request:
+  push:
+    branches: [main]
+    paths-ignore:
+      - "**/*.md"
+      - "docs/**"
+      - "images/**"
+  pull_request:
 
 concurrency:
   group: connector-test-${{ github.ref }}
