@@ -65,8 +65,28 @@ from .const import (
     CHARGE_MODE_HOLD_INTERVAL,
     SSE_STALE_THRESHOLD_S,
 )
+from .preset_spec import PRESET_VALUE_SLOTS
 
 _LOGGER = logging.getLogger(__name__)
+
+
+def _merge_preset_value_map(
+    device: dict[str, Any], value_map: dict | None
+) -> dict[str, Any]:
+    """#40: merge die value-Slots eines Vendor-Presets in einen Device-
+    Record. Default-DENY: nur Keys aus `PRESET_VALUE_SLOTS` werden
+    übernommen, verbatim als String. Die value_map-Keys SIND die
+    Connector-CONF-Keys (die Backend-`api_name`-Übersetzung ist
+    backend-seitig) → direkter Merge, kein Mapping nötig. Gibt denselben
+    dict zurück, wenn sich nichts ändert (Caller skippt dann den Reload)."""
+    changes = {
+        key: str(val)
+        for key, val in (value_map or {}).items()
+        if key in PRESET_VALUE_SLOTS and str(val) != str(device.get(key, ""))
+    }
+    if not changes:
+        return device
+    return {**device, **changes}
 
 HEARTBEAT_INTERVAL = 30
 """Coordinator's regular scheduled tick — every 30 s the coordinator
@@ -1409,6 +1429,15 @@ class CrowdergyCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
         # bleibt aktuell (der Stream selbst ist kein Steuer-Akt).
         if not self._consent(OPT_CONSENT_REMOTE_CONTROL):
             return
+        # #40: device_update — ein iOS-`apply-preset` hat ein Vendor-Preset
+        # auf dieses Gerät gestempelt + gebroadcastet. Wir ziehen den VOLLEN
+        # value_map aus dem Store und mergen ihn in die lokale Device-Config
+        # (insb. die non-1:1-Batterie-Modi, die das Backend bewusst nicht
+        # schreibt). Bewusst hinter dem Remote-Control-Consent-Gate — ohne
+        # Steuer-Consent steuert der Connector ohnehin nicht.
+        if data.get("type") == "device_update":
+            await self._apply_preset_from_backend(data.get("device_id"))
+            return
         # Telemetry mirror frames carry device-level state changes the user
         # may have driven from the iOS app. We watch two flags:
         #   - is_active (Crowdergize consent) — just update the local cache
@@ -1609,6 +1638,91 @@ class CrowdergyCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
                         self._cancel_charge_mode_hold(device_id)
                     else:
                         await self._apply_charge_mode(device_id, str(value))
+
+    async def _apply_preset_from_backend(self, device_id: str | None) -> None:
+        """#40 (Folge von Backend #38): auf ein `device_update` das vom
+        iOS-Picker gestempelte Vendor-Preset aus dem Store ziehen und den
+        VOLLEN value_map in die lokale Device-Config mergen. Das Backend
+        schreibt nur die 1:1-Spalten (charge_mode_value_*); die
+        non-1:1-Batterie-Modi (`value_battery_mode_active/passive`) löst der
+        Connector hier auf. NIE stumm — der iOS-Apply IST die
+        User-Bestätigung. Failures werden geloggt, crashen nie die
+        Dispatch-Loop.
+        """
+        if not device_id:
+            return
+        dev = next(
+            (d for d in self.devices if d.get(CONF_DEVICE_ID) == device_id),
+            None,
+        )
+        if dev is None:
+            _LOGGER.debug(
+                "device_update: unbekannte device_id %s — ignoriert", device_id
+            )
+            return
+        try:
+            resp = await self._authenticated_request(
+                "GET", f"/api/v1/devices/{device_id}"
+            )
+            if resp.status_code >= 400:
+                _LOGGER.warning(
+                    "device_update: GET device %s → %s", device_id, resp.status_code
+                )
+                return
+            body = resp.json()
+            vendor = body.get("vendor")
+            model = body.get("model")
+            if not vendor or not model:
+                # Kein Profil gesetzt (oder zurückgesetzt) — nichts anzuwenden.
+                return
+            dev_type = dev.get(CONF_DEVICE_TYPE) or body.get("type")
+            lookup = await self._authenticated_request(
+                "GET", "/api/v1/crowd-presets/lookup",
+                params={"device_type": dev_type, "vendor": vendor},
+            )
+            if lookup.status_code >= 400:
+                _LOGGER.warning(
+                    "device_update: preset-lookup (%s/%s) → %s",
+                    dev_type, vendor, lookup.status_code,
+                )
+                return
+            presets = (lookup.json() or {}).get("presets", [])
+            preset = next((p for p in presets if p.get("model") == model), None)
+            if preset is None:
+                _LOGGER.warning(
+                    "device_update: Preset %s/%s/%s nicht im Lookup",
+                    dev_type, vendor, model,
+                )
+                return
+            merged = _merge_preset_value_map(dev, preset.get("value_map"))
+            if merged is dev:
+                _LOGGER.debug(
+                    "device_update: value_map für %s unverändert — kein Reload",
+                    device_id,
+                )
+                return
+            new_devices = [
+                merged if d.get(CONF_DEVICE_ID) == device_id else d
+                for d in self.entry.data.get(CONF_DEVICES, [])
+            ]
+            self.hass.config_entries.async_update_entry(
+                self.entry,
+                data={**self.entry.data, CONF_DEVICES: new_devices},
+            )
+            _LOGGER.info(
+                "device_update: Preset %s/%s auf Gerät %s angewendet — Reload",
+                vendor, model, device_id,
+            )
+            # Reload ENTKOPPELT planen: ein direktes `async_reload` würde die
+            # SSE-Consumer-Task (in der dieser Handler läuft) mitten im Lauf
+            # canceln. `async_create_task` läuft erst nach der Rückkehr.
+            self.hass.async_create_task(
+                self.hass.config_entries.async_reload(self.entry.entry_id)
+            )
+        except Exception:  # noqa: BLE001 — Dispatch-Loop nie crashen lassen
+            _LOGGER.exception(
+                "device_update: Preset-Apply für %s fehlgeschlagen", device_id
+            )
 
     async def _apply_charge_mode(
         self, device_id: str, mode: str, *, schedule_hold: bool = True
