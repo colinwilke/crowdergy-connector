@@ -33,15 +33,19 @@ dort: Cluster C (#16–#22).
 - **Config-Flow Edit-Felder:** `vol.Optional(..., description=
   {"suggested_value": ...})`, NIE `default=` (HA re-injected, Felder
   werden unlöschbar).
-- **Entry-Schema-Regel (Box-Update-Stabilität, 2026-06-11):**
-  Änderungen an Entry-data/-options nur ADDITIV oder mit
-  Load-Time-Migration („Feld fehlt = Altverhalten") — ein
-  Vendor-Pin-Bump auf der Box darf NIE Re-Provisionierung brauchen.
-- **Release-Prozess:** Manifest-Bump + Tag; GitHub-Release via
-  `tag-release.yml` bzw. User. Die Remote-Session pusht nur auf den
-  Arbeitsbranch. Vor dem Taggen prüfen, ob der Tag auf origin schon
-  belegt ist (parallele Sessions) — im Zweifel weiter bumpen statt
-  Konflikt.
+- **Entry-Schema-Regel — [Alpha: gelockert, 2026-06-15]:** In der Alpha
+  dürfen Entry-data/-options breaking ändern (Test-User
+  re-provisionieren); KEINE „Feld fehlt = Altverhalten"-Load-Time-
+  Migration mehr nötig. Die alte Stabilitätsgarantie (additiv/migrierbar,
+  Pin-Bump ohne Re-Provisionierung) greift erst mit echten Prod-Usern
+  wieder.
+- **Release-Prozess:** Manifest-Bump + Tag passieren **nur beim Release
+  auf `main`**, durch den, der das Tag schneidet — NIE auf
+  Feature-Branches (sonst Versions-Kollision wie beim v3.26.0-Chaos: drei
+  Branches, dieselbe Nummer, verschiedene Arbeit). GitHub-Release via
+  `tag-release.yml` bzw. User; vor dem Taggen prüfen, ob der Tag auf
+  origin schon belegt ist. **Stand: v3.26.0 released** (Store-Vertrag +
+  Telemetry-404/410 für gelöschte Devices); Box-Pin steht auf v3.26.0.
 - **Public-Repo-Disziplin:** Dieses Repo ist public (HACS =
   Contribute-Kanal für den Crowd-Preset-Store). Hier liegt nur das
   Slot-SCHEMA (`preset_spec.py`); Store-Daten/Kuration bleiben im Backend
@@ -65,7 +69,10 @@ sauberem Stand gegenprüfen, bevor man eigene Änderungen verdächtigt.
   backend + box). Der lokale Mac-/Xcode-Agent besitzt `crowdergy-ios`.
 - Fremde Agents: dieses Repo LESEN ja (API-Verträge), schreiben nein —
   Ausnahme: CLAUDE.md/CONTEXT.md-Memory-Updates.
-- **Trunk-based (User-Entscheidung 2026-06-11):** Owner-Agent pusht direkt
-  auf `main`; Bedingung: Tests vorher grün. `claude/...`-Branches nur für
-  Riskantes/Experimentelles; nie auf fremden Arbeitsbranches committen.
-  Releases bleiben davon getrennt (nur via Tag).
+- **Trunk-based (User 2026-06-11; geschärft 2026-06-15):** Owner-Agent
+  pusht klein + grün direkt auf `main` (Tests grün). `claude/...`-Branches
+  nur für Riskantes/Experimentelles und **kurzlebig** (same-session
+  mergen/löschen). Handoff-Fenster: bei fremder Release-Übernahme komplett
+  stillstehen. Voller Workflow + Parallel-Agent-/Alpha-Regeln: SSOT
+  `crowdergy-ios/CLAUDE.md` (Abschnitte „Agent-Ownership & Branches" +
+  „Alpha-Phase").
