@@ -240,6 +240,43 @@ Admin-Bereich bleibt als abgestimmtes Design dokumentiert:
   CLI-Script; später Benachrichtigung „N neue staged Presets" +
   Telemetrie-Plausibilitäts-Loop nach Approve.
 
+## Konsument iOS: `apply-preset` (Backlog #38, implementiert 2026-06-15)
+
+Der iOS-Preset-Picker (Backlog #37) hat keine HA-Scope — er wendet ein
+Preset über das **Backend** an, nicht über den Connector:
+
+### `POST /api/v1/devices/{device_id}/apply-preset`
+
+Body `{"vendor": str, "model": str}` (auth-pflichtig, User-JWT). Server:
+
+1. Preset über `(device.type, vendor, model)` in `vendor_presets` suchen
+   (status ∈ {staged, approved}); sonst **404** `PRESET_NOT_FOUND`.
+2. **Provenance stempeln:** `device.vendor`, `device.model`,
+   `device.crowd_preset_updated_at = preset.last_updated_at` (= das
+   `updated_at` des Lookups). Letzteres trägt den „Verbessertes Profil
+   verfügbar"-Vergleich (`lookup.updated_at > device.crowd_preset_updated_at`).
+3. **`value_map`-Arbeitsteilung (Steuer-Slots → reale Hardware):**
+   - Das **Backend** schreibt NUR die value_map-Slots, deren Key EXAKT
+     einer schreibbaren Device-Spalte entspricht (Default-DENY-Allowlist:
+     `charge_mode_value_lock/power/solar`, `value_cool_on/off`) — 1:1,
+     verbatim, ungefährlich.
+   - Non-1:1-/inverter-abhängige Slots (Batterie-Modi
+     `value_battery_mode_active/passive` → `battery_value_charge/idle/
+     discharge/passive`, Flags) schreibt das Backend BEWUSST NICHT — die
+     Auflösung lebt im Connector-`device_field_spec`.
+   - `entity_map` ignoriert das Backend komplett (Connector-Owned).
+4. **SSE-Broadcast** `{"type": "device_update", "device_id": …}` an den
+   User-Stream + `kick_user_solve`.
+5. Response: aktualisiertes `DeviceResponse` (jetzt inkl. `vendor`,
+   `model`, `crowd_preset_updated_at`).
+
+**Connector-Folgearbeit (offen):** Der Connector soll on-`device_update`
+das Preset neu aus dem Store ziehen und den **vollen** `value_map` (inkl.
+Batterie-Modi) via `device_field_spec` auf HA anwenden — erst damit ist
+ein iOS-`apply-preset` für Batterie-Geräte end-to-end. Backlog-Item in
+`crowdergy-ios/CLAUDE.md` Cluster C. Bis dahin: Provenance + die
+Exakt-Match-Slots wirken, der Rest braucht den Connector-Hook.
+
 ## Offen / Folgearbeit
 
 - **Rate-Limit auf `/crowd-presets/lookup`** (+ moderat auf
