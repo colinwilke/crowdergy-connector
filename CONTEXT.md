@@ -31,6 +31,9 @@ Backlog + Release-„Stand": `crowdergy-ios/CLAUDE.md` (SSOT).
 - **Frame-Dispatch:** `type=telemetry` →
   `is_active`/`is_on`/`cool_on`/`vorlauf_setpoint_c` (manuelle
   App-Befehle); `type=command` → `set_charge_mode` (Battery/Wallbox);
+  `type=device_update` → `_apply_preset_from_backend` (#40: iOS-`apply-
+  preset` hat ein Vendor-Preset gestempelt → Gerät+Preset ziehen, vollen
+  `value_map` in die Device-Config mergen, entkoppelter Reload);
   `ping` → noop. Ohne Remote-Control-Consent werden Steuer-Frames
   ignoriert; das Gate sitzt zentral in allen `_apply_*`.
 - **Battery-Dispatch** (`_apply_battery_setpoint`): schreibt
