@@ -2,9 +2,10 @@
 
 HACS Custom-Component (Domain `theothergas`, Legacy-Name) für Home
 Assistant: spiegelt Backend-Dispatch in HA-Entities und pusht
-Telemetrie zurück. Aktuell released: **v3.27.0** (Tag `2f2ea76`,
-2026-06-15: #39 `/connector/*`-Alias + #40 device_update-Preset-Apply;
-Box-Pin auf v3.27.0 gebumpt). Regeln/Stolpersteine: `CLAUDE.md` hier;
+Telemetrie zurück. Aktuell released: **v3.27.1** (Tag `5a86843`,
+2026-06-15: #18 Telemetry-PATCH-Retry/Backoff + #19 proaktives
+Token-Refresh; davor v3.27.0 = #39-Alias + #40 device_update-Preset-Apply;
+Box-Pin auf v3.27.1 gebumpt). Regeln/Stolpersteine: `CLAUDE.md` hier;
 Backlog + Release-„Stand": `crowdergy-ios/CLAUDE.md` (SSOT).
 
 ## Modul-Struktur (`custom_components/theothergas/`)
@@ -138,8 +139,7 @@ Refresh-Tokens liegen im Klartext in `config_entries` (HA-Standard).
 
 - **Backend** wird aufgerufen (s.o.); **iOS**: keine Direktverbindung
   (Daten via Backend-SSE-Broadcast); **Box** vendored dieses Repo per
-  Git-Tag (`crowdergy-box/CONNECTOR_VERSION`, aktuell v3.27.0).
-- `manifest.json`: Version `3.27.0`, Domain `theothergas`,
+  Git-Tag (`crowdergy-box/CONNECTOR_VERSION`, aktuell v3.27.1).
+- `manifest.json`: Version `3.27.1`, Domain `theothergas`,
   `iot_class: cloud_push`, `requirements: ["httpx>=0.24.0"]`. #18/#19
-  sind auf `main`, aber noch nicht getaggt → shippen mit dem nächsten
-  Connector-Release.
+  sind mit v3.27.1 released (Tag `5a86843`).

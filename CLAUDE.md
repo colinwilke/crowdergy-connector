@@ -44,10 +44,11 @@ dort: Cluster C (#16–#22).
   Feature-Branches (sonst Versions-Kollision wie beim v3.26.0-Chaos: drei
   Branches, dieselbe Nummer, verschiedene Arbeit). GitHub-Release via
   `tag-release.yml` bzw. User; vor dem Taggen prüfen, ob der Tag auf
-  origin schon belegt ist. **Stand: v3.27.0 released** (2026-06-15, Tag
-  `2f2ea76` via `tag-release.yml`: #39 `/connector/*`-Pairing-Alias +
-  #40 device_update-Preset-Apply). Box-Pin auf **v3.27.0** gebumpt
-  (sha=2f2ea76, `65e4008`).
+  origin schon belegt ist. **Stand: v3.27.1 released** (2026-06-15, Tag
+  `5a86843` via `tag-release.yml`-MCP-Trigger: #18 Telemetry-PATCH-
+  Retry/Backoff + #19 proaktives Token-Refresh; davor v3.27.0 `2f2ea76`
+  = #39 `/connector/*`-Pairing-Alias + #40 device_update-Preset-Apply).
+  Box-Pin auf **v3.27.1** gebumpt (sha=5a86843).
 - **Public-Repo-Disziplin:** Dieses Repo ist public (HACS =
   Contribute-Kanal für den Crowd-Preset-Store). Hier liegt nur das
   Slot-SCHEMA (`preset_spec.py`); Store-Daten/Kuration bleiben im Backend
