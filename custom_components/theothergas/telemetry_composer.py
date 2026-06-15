@@ -219,6 +219,9 @@ class TelemetryComposer:
                 k: v for k, v in last_payload.items()
                 if k != "energy_kwh_delta"
             }
+            # v3.26.0: skip Mirror, wenn Device backend-seitig weg ist
+            if device_id in self.coord._backend_gone_device_ids:
+                continue
             try:
                 response = await self.coord._authenticated_request(
                     "PATCH",
@@ -227,6 +230,13 @@ class TelemetryComposer:
                 )
                 if response.status_code < 400:
                     self.coord._last_mirror_at[device_id] = now_ts
+                elif response.status_code in (404, 410):
+                    self.coord._backend_gone_device_ids.add(device_id)
+                    _LOGGER.info(
+                        "Mirror: Device %s vom Backend gelöscht (HTTP %s) — "
+                        "weitere PATCHes werden geskippt",
+                        device_id, response.status_code,
+                    )
                 else:
                     _LOGGER.debug(
                         "device-mirror PATCH %s returned %s: %s",

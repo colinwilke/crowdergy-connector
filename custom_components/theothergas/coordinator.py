@@ -313,6 +313,15 @@ class CrowdergyCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
         # hash identisch ist, hat der 90s-Soft-Heartbeat nichts neues
         # zu erzählen → skip bis IDENTICAL_HEARTBEAT_INTERVAL.
         self._last_sent_hash: dict[str, int] = {}
+        # v3.26.0 (2026-06-15): Device-IDs die das Backend mit 404/410
+        # auf einen Telemetry-PATCH quittiert hat. Backend-Fix für die
+        # FK-Violation-Race (Device gelöscht zwischen SELECT und INSERT)
+        # gibt jetzt 410 zurück. Der Connector merkt sich diese IDs
+        # in-memory und skippt weitere PATCHes, damit kein endloser
+        # Retry-Loop läuft. Reset bei HA-Restart oder Config-Reload —
+        # `async_remove_config_entry_device` / `async_unload_entry`
+        # legen das Set ohnehin neu an.
+        self._backend_gone_device_ids: set[str] = set()
         # Throttle bookkeeping for the event-driven `async_refresh`
         # path. The scheduled 30 s tick is unaffected.
         self._last_event_refresh_at: float = 0.0
@@ -699,6 +708,11 @@ class CrowdergyCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
           * `energy_kwh_delta` carries a positive value (any energy
             since last send is worth recording).
         """
+        # v3.26.0: Device wurde vom Backend mit 404/410 quittiert
+        # (User hat es in der iOS-App gelöscht). Kein weiterer PATCH
+        # bis HA-Restart bzw. Config-Reload.
+        if device_id in self._backend_gone_device_ids:
+            return False
         prev = self._last_sent_payload.get(device_id)
         if prev is None:
             return True
@@ -1259,12 +1273,23 @@ class CrowdergyCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
                             energy_kwh_total_out
                         )
                 except httpx.HTTPStatusError as err:
-                    _LOGGER.error(
-                        "Backend returned %s for device %s: %s",
-                        err.response.status_code,
-                        device_id,
-                        err.response.text,
-                    )
+                    sc = err.response.status_code
+                    # v3.26.0: 404/410 = Device existiert backend-seitig
+                    # nicht mehr (iOS-DELETE oder Race). Mirror evicten
+                    # statt endlosem Retry-Loop. INFO statt ERROR, weil
+                    # das ein erwarteter User-Flow ist.
+                    if sc in (404, 410):
+                        self._backend_gone_device_ids.add(device_id)
+                        _LOGGER.info(
+                            "Device %s vom Backend gelöscht (HTTP %s) — "
+                            "weitere PATCHes für diese ID werden geskippt",
+                            device_id, sc,
+                        )
+                    else:
+                        _LOGGER.error(
+                            "Backend returned %s for device %s: %s",
+                            sc, device_id, err.response.text,
+                        )
                 except httpx.RequestError as err:
                     _LOGGER.error("Cannot reach backend for device %s: %s", device_id, err)
 
