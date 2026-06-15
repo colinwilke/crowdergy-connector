@@ -49,8 +49,8 @@ dort: Cluster C (#16–#22).
   (HC-Triade) für den Hausverbrauchs-Chart; davor v3.27.1 `5a86843` =
   #18 Telemetry-Retry/Backoff + #19 proaktives Token-Refresh, v3.27.0
   `2f2ea76` = #39 `/connector/*`-Pairing-Alias + #40 device_update-
-  Preset-Apply). Box-Pin noch auf v3.27.1 — Re-Vendor auf v3.28.0
-  ausstehend.
+  Preset-Apply). Box-Pin auf **v3.28.0** gebumpt (sha=7548ecb, auf dem
+  Box-Arbeitsbranch — Box-`main` hängt #24-OTA-bedingt 15 Commits zurück).
 - **Public-Repo-Disziplin:** Dieses Repo ist public (HACS =
   Contribute-Kanal für den Crowd-Preset-Store). Hier liegt nur das
   Slot-SCHEMA (`preset_spec.py`); Store-Daten/Kuration bleiben im Backend

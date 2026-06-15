@@ -6,7 +6,7 @@ Telemetrie zurück. Aktuell released: **v3.28.0** (2026-06-15: #42
 Hausverbrauchs-Flow-Sensoren/HC-Triade für den Hausverbrauchs-Chart;
 davor v3.27.1 `5a86843` = #18 Telemetry-Retry/Backoff + #19 proaktives
 Token-Refresh; v3.27.0 = #39-Alias + #40 device_update-Preset-Apply).
-Box-Pin noch auf v3.27.1 (Re-Vendor ausstehend). Regeln/Stolpersteine: `CLAUDE.md` hier;
+Box-Pin auf v3.28.0 gebumpt (Box-Arbeitsbranch). Regeln/Stolpersteine: `CLAUDE.md` hier;
 Backlog + Release-„Stand": `crowdergy-ios/CLAUDE.md` (SSOT).
 
 ## Modul-Struktur (`custom_components/theothergas/`)
