@@ -3,16 +3,16 @@
     "step": {
       "user": {
         "title": "Connect to Crowdergy",
-        "description": "Sign in with your Crowdergy account. Create one in the Crowdergy iOS app first.",
+        "description": "Generate a pairing code in the Crowdergy app (Settings → Connection) and enter it here. Home Assistant never sees your password — works with Sign in with Apple too.",
         "data": {
-          "email": "Email",
-          "password": "Password"
+          "pairing_code": "Pairing code",
+          "api_url": "API URL"
         },
         "data_description": {
-          "email": "Email address of your Crowdergy account.",
-          "password": "Password of your Crowdergy account. Exchanged once for a token, not stored in Home Assistant."
+          "pairing_code": "Code from the Crowdergy app (valid 15 minutes, single use). Dashes don't matter.",
+          "api_url": "Only change this if you run your own (self-hosted) Crowdergy backend."
         },
-        "submit": "Next"
+        "submit": "Connect"
       },
       "location": {
         "title": "Location",
@@ -88,13 +88,11 @@
           "entity_current_power_kw": "Power",
           "invert_power_sign": "Invert sign",
           "read_section": "Sensors",
-          "control_section": "Control",
-          "included_in_haushalt": "Counted in haushalt sensor?"
+          "control_section": "Control"
         },
         "data_description": {
           "entity_current_power_kw": "Current power in W or kW.",
-          "invert_power_sign": "On when sensor uses the opposite sign convention.",
-          "included_in_haushalt": "On when your haushalt sensor already includes this consumer (common case: shared main meter). Crowdergy subtracts it so nothing is double-counted."
+          "invert_power_sign": "On when sensor uses the opposite sign convention."
         },
         "sections": {
           "read_section": {
@@ -244,16 +242,15 @@
         }
       },
       "reauth_confirm": {
-        "title": "Re-authenticate Crowdergy",
-        "description": "The stored Crowdergy tokens are no longer valid. Sign in again for {email} to issue a fresh token pair.",
+        "title": "Reconnect Crowdergy",
+        "description": "The stored Crowdergy tokens are no longer valid. Generate a fresh pairing code in the Crowdergy app ({email}) under Settings → Connection and enter it here.",
         "data": {
-          "email": "Email",
-          "password": "Password"
+          "pairing_code": "Pairing code"
         },
         "data_description": {
-          "password": "Password of your Crowdergy account. Exchanged once for a token, not stored in Home Assistant."
+          "pairing_code": "Code from the Crowdergy app (valid 15 minutes, single use)."
         },
-        "submit": "Sign in"
+        "submit": "Reconnect"
       }
     },
     "selector": {
@@ -274,6 +271,9 @@
     "error": {
       "cannot_connect": "Failed to connect to the Crowdergy server.",
       "invalid_auth": "Login failed. Check email and password — the account lives in the Crowdergy iOS app.",
+      "invalid_pairing_code": "Pairing code unknown, expired or already used. Generate a fresh code in the Crowdergy app.",
+      "rate_limited": "Too many attempts. Wait a moment and try again.",
+      "reauth_account_mismatch": "This code belongs to a different Crowdergy account than this entry. Generate a code for the original account.",
       "unknown": "Unexpected error."
     },
     "abort": {
@@ -358,13 +358,11 @@
           "entity_current_power_kw": "Power",
           "invert_power_sign": "Invert sign",
           "read_section": "Sensors",
-          "control_section": "Control",
-          "included_in_haushalt": "Counted in haushalt sensor?"
+          "control_section": "Control"
         },
         "data_description": {
           "entity_current_power_kw": "Current power in W or kW.",
-          "invert_power_sign": "On when sensor uses the opposite sign convention.",
-          "included_in_haushalt": "On when your haushalt sensor already includes this consumer (common case: shared main meter)."
+          "invert_power_sign": "On when sensor uses the opposite sign convention."
         },
         "sections": {
           "read_section": {
@@ -518,14 +516,12 @@
           "entity_current_power_kw": "Power",
           "invert_power_sign": "Invert sign",
           "read_section": "Sensors",
-          "control_section": "Control",
-          "included_in_haushalt": "Counted in haushalt sensor?"
+          "control_section": "Control"
         },
         "data_description": {
           "device_name": "Display name in the Crowdergy app and in Home Assistant.",
           "entity_current_power_kw": "Current power in W or kW.",
-          "invert_power_sign": "On when sensor uses the opposite sign convention.",
-          "included_in_haushalt": "On when your haushalt sensor already includes this consumer."
+          "invert_power_sign": "On when sensor uses the opposite sign convention."
         },
         "sections": {
           "read_section": {

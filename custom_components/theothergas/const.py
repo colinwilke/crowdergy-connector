@@ -18,6 +18,10 @@ DEFAULT_API_URL = "https://api.theothergas.de"
 CONF_API_URL = "api_url"
 CONF_EMAIL = "email"
 CONF_PASSWORD = "password"
+# Onboarding-Symmetrie #39 (2026-06-16): der HACS-Connector pairt jetzt
+# per Code (POST /connector/claim) statt Email/Passwort — wie die Box.
+# CONF_EMAIL/PASSWORD bleiben für Bestands-Entries + Box-Import erhalten.
+CONF_PAIRING_CODE = "pairing_code"
 CONF_ACCESS_TOKEN = "access_token"
 CONF_REFRESH_TOKEN = "refresh_token"
 CONF_USER_ID = "user_id"
@@ -231,12 +235,11 @@ ENTITY_CONTROL_HOLD_AUTO = "auto"
 ENTITY_CONTROL_HOLD_ALWAYS = "always"
 ENTITY_CONTROL_HOLD_NEVER = "never"
 
-# Classic-consumer Flag für den Haushalt-Doppelzähl-Fix. Wenn True,
-# zählt das Gerät bereits in den Haushalts-Sensor — das Backend zieht
-# es bei jeder Snapshot-Berechnung ab. Nur für heating / warmwater /
-# wallbox / generic; solar / grid / battery / haushalt selbst tragen
-# es nie.
-CONF_INCLUDED_IN_HAUSHALT = "included_in_haushalt"
+# v3.26: CONF_INCLUDED_IN_HAUSHALT entfernt — der Haushalt-Doppelzähl-
+# Fix ist durch den generischen parent_device_id-Baum im Backend
+# ersetzt (konfiguriert in der Crowdergy-App, „Übergeordnetes Gerät").
+# In Bestands-Config-Entries gespeicherte Werte bleiben schlafend
+# liegen und werden ignoriert.
 
 # Cooling-Capability für heating-family. Capability-Flag + entity /
 # value mappings für die Kühl-Seite. supports_cooling=True →
@@ -399,8 +402,8 @@ _NUMBER_DOMAINS = frozenset({"number", "input_number"})
 # Slot-Key → erlaubte HA-Domains. Default-DENY: ein Slot, der hier nicht
 # steht, wird im box_add_device abgelehnt (kein stilles Durchwinken
 # unbekannter Mapping-Ziele). Werte-/Flag-Slots (value_*, *_invert_sign,
-# shares_hardware_with, included_in_haushalt) tragen KEINE entity_id und
-# werden im box_services-Check übersprungen (Punkt enthält → Domain-Check).
+# shares_hardware_with) tragen KEINE entity_id und werden im
+# box_services-Check übersprungen (Punkt enthält → Domain-Check).
 MAPPABLE_ENTITY_DOMAINS: dict[str, frozenset[str]] = {
     # ── Read-Slots ──
     CONF_ENTITY_POWER: _READ_SENSOR,

@@ -128,8 +128,14 @@ async def async_unload_entry(hass: HomeAssistant, entry: CrowdergyConfigEntry) -
     unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
 
     if unload_ok:
-        coordinator: CrowdergyCoordinator = hass.data[DOMAIN].pop(entry.entry_id)
-        await coordinator.async_shutdown()
+        # Defensiv: pop mit Defaults, falls async_setup_entry nie lief
+        # (z. B. früher Fehlschlag) — ein KeyError beim Unload würde sonst
+        # den Entry hängen lassen.
+        coordinator: CrowdergyCoordinator | None = hass.data.get(
+            DOMAIN, {}
+        ).pop(entry.entry_id, None)
+        if coordinator is not None:
+            await coordinator.async_shutdown()
 
     return unload_ok
 

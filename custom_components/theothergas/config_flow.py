@@ -44,6 +44,7 @@ from .const import (
     CONF_ENTITY_PV_TO_BATTERY_POWER,
     CONF_INVERT_POWER_SIGN,
     CONF_PASSWORD,
+    CONF_PAIRING_CODE,
     CONF_REFRESH_TOKEN,
     CONF_REGION,
     CONF_USER_ID,
@@ -62,7 +63,6 @@ from .const import (
     CONF_ENTITY_BATTERY_POWER_SETPOINT,
     CONF_BATTERY_SETPOINT_INVERT_SIGN,
     CONF_SHARES_HARDWARE_WITH,
-    CONF_INCLUDED_IN_HAUSHALT,
     CONF_SUPPORTS_COOLING,
     CONF_ENTITY_COOL_CONTROL,
     CONF_VALUE_COOL_ON,
@@ -108,16 +108,6 @@ DEVICE_TYPE_LABELS_DE = {
 # user-mapped entity_control. CN-13 (2026-06-11): SSOT liegt jetzt in
 # const.py (CONTROLLABLE_TYPES); Alias bleibt für die ~10 Call-Sites.
 _CONTROLLABLE_TYPES = CONTROLLABLE_TYPES
-
-# v2.4: device types that can carry the "included in haushalt sensor"
-# flag. Classic consumers — their draw is plausibly already counted by
-# the user's haushalt-sensor (single home-meter). Solar / Grid /
-# Battery / Haushalt itself are excluded: solar generates, grid is the
-# meter itself, battery is bidirectional storage, haushalt is the
-# residual we're computing.
-_HAUSHALT_FLAG_TYPES = {
-    "heating", "warmwater", "aircon", "wallbox", "generic",
-}
 
 # Device-Typen die einen Kühl-Modus konfigurieren können — heating-
 # family only. Warmwater nie (DHW-Tank ist monotonic-heat), wallbox /
@@ -622,16 +612,11 @@ def _entities_schema(
             read_schema, {"collapsed": False}
         )
 
-    # v3.0: Haushalt-Toggle für Verbraucher direkt hier statt eigener
-    # Step am Ende. Default True für neue Geräte (häufigster Fall:
-    # Hauszähler sieht alles), Edit-Flow zieht stored value.
-    if device_type in _HAUSHALT_FLAG_TYPES:
-        haushalt_default = d.get(CONF_INCLUDED_IN_HAUSHALT, True)
-        schema_dict[
-            vol.Optional(
-                CONF_INCLUDED_IN_HAUSHALT, default=haushalt_default
-            )
-        ] = selector.BooleanSelector()
+    # v3.26: Haushalt-Toggle entfernt — die Zuordnung „Messung im
+    # übergeordneten Zähler enthalten" ist jetzt der generische
+    # parent_device_id-Baum und wird in der Crowdergy-App pro Gerät
+    # konfiguriert („Übergeordnetes Gerät"); auf der Box ist der
+    # HA-Config-Flow für Kunden ohnehin unerreichbar.
 
     if device_type == "wallbox":
         # Wallbox's full control surface lives behind ONE entity: a
@@ -1217,6 +1202,25 @@ def _shares_hardware_schema(
 # ── Persistence helpers ─────────────────────────────────────────────────────
 
 
+async def _fetch_account_email(api_url: str, access_token: str) -> str | None:
+    """Best-effort `GET /users/me` → email, nur für den Entry-Titel.
+
+    Der Pairing-Claim liefert keine Email; schlägt der Lookup fehl
+    (offline / alter Token), fällt der Titel auf die User-ID zurück.
+    """
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            resp = await client.get(
+                f"{api_url}/api/v1/users/me",
+                headers={"Authorization": f"Bearer {access_token}"},
+            )
+        if resp.status_code == 200:
+            return resp.json().get("email") or None
+    except (httpx.RequestError, ValueError):
+        pass
+    return None
+
+
 def _build_device_record(
     backend_device_id: str,
     device_type: str,
@@ -1325,13 +1329,6 @@ def _build_device_record(
         # backend can wire up the joint-power constraint.
         CONF_SHARES_HARDWARE_WITH: entity_input.get(
             CONF_SHARES_HARDWARE_WITH, ""
-        ),
-        # v2.4: classic-consumer flag for the haushalt double-counting
-        # fix. Defaults to False on types that don't carry it (solar /
-        # grid / battery / haushalt) — the backend ignores it anyway
-        # for those types.
-        CONF_INCLUDED_IN_HAUSHALT: bool(
-            entity_input.get(CONF_INCLUDED_IN_HAUSHALT, False)
         ),
         # v3.0: supports_cooling abgeleitet aus bool(value_cool_on).
         # User-spec "leer = kein cooling" — kein separater Toggle mehr.
@@ -1648,63 +1645,71 @@ class CrowdergyConfigFlow(ConfigFlow, domain=DOMAIN):
         errors: dict[str, str] = {}
 
         if user_input is not None:
-            api_url = DEFAULT_API_URL
-            email = user_input[CONF_EMAIL]
-            password = user_input[CONF_PASSWORD]
+            api_url = (
+                user_input.get(CONF_API_URL) or DEFAULT_API_URL
+            ).strip().rstrip("/")
+            code = user_input[CONF_PAIRING_CODE].strip()
+            tokens: dict[str, Any] | None = None
 
             try:
                 async with httpx.AsyncClient(timeout=10.0) as client:
                     response = await client.post(
-                        f"{api_url}/api/v1/auth/login",
-                        json={"email": email, "password": password},
+                        f"{api_url}/api/v1/connector/claim",
+                        json={"code": code},
                     )
-                    if response.status_code == 401:
-                        errors["base"] = "invalid_auth"
+                    if response.status_code == 404:
+                        # Generisches 404 vom Backend: unbekannt /
+                        # abgelaufen / bereits verbraucht.
+                        errors[CONF_PAIRING_CODE] = "invalid_pairing_code"
+                    elif response.status_code == 429:
+                        errors["base"] = "rate_limited"
                     elif response.status_code >= 400:
                         errors["base"] = "cannot_connect"
                     else:
                         tokens = response.json()
-                        self._data[CONF_API_URL] = api_url
-                        self._data[CONF_EMAIL] = email
-                        self._data[CONF_ACCESS_TOKEN] = tokens["access_token"]
-                        self._data[CONF_REFRESH_TOKEN] = tokens["refresh_token"]
-                        self._data[CONF_USER_ID] = tokens.get("user_id", "")
             except httpx.RequestError:
                 errors["base"] = "cannot_connect"
 
-            if not errors:
-                # P3 (2026-06-11): unique_id auch im UI-Login-Flow
-                # setzen — vorher konnte derselbe Account beliebig
-                # oft als Duplikat-Entry angelegt werden (der Import-
-                # Flow setzte die unique_id längst). Ältere Backends
-                # ohne user_id im Login-Response bleiben ohne
-                # unique_id (Verhalten wie zuvor).
-                if self._data.get(CONF_USER_ID):
-                    await self.async_set_unique_id(self._data[CONF_USER_ID])
+            if not errors and tokens is not None:
+                user_id = str(tokens.get("user_id", "") or "")
+                # P3 (2026-06-11): unique_id = user_id → derselbe Account
+                # kann kein Duplikat-Entry werden (Token-Tausch = Reauth).
+                if user_id:
+                    await self.async_set_unique_id(user_id)
                     self._abort_if_unique_id_configured()
-                # FEAT-1 v0.3 (2026-06-09): Onboarding-Flow gedroppt.
-                # Nach erfolgreichem Login direkt Entry erzeugen mit
-                # leerer Device-Liste. Ort + Außentemp + alle Geräte
-                # legt der User dann im Options-Flow Hauptmenü an
-                # (Grundeinstellungen + Gerät hinzufügen). Spart 4-5
-                # Onboarding-Steps und vermeidet die Reihenfolge-
-                # Abhängigkeit „erst Ort, dann Geräte".
+                # Der Claim-Response trägt keine Email — Best-Effort-Lookup
+                # nur für einen schönen Entry-Titel (Fallback: User-ID).
+                email = await _fetch_account_email(
+                    api_url, tokens["access_token"]
+                )
+                self._data[CONF_API_URL] = api_url
+                self._data[CONF_EMAIL] = email or ""
+                self._data[CONF_ACCESS_TOKEN] = tokens["access_token"]
+                self._data[CONF_REFRESH_TOKEN] = tokens["refresh_token"]
+                self._data[CONF_USER_ID] = user_id
+                # FEAT-1 v0.3: Entry direkt mit leerer Device-Liste; Ort +
+                # Außentemp + Geräte legt der User im Options-Flow an.
                 self._data[CONF_DEVICES] = []
                 self._data[CONF_DISTRICT] = ""
                 self._data[CONF_CITY] = ""
                 self._data[CONF_REGION] = ""
                 self._data[CONF_ENTITY_OUTDOOR_TEMP] = ""
-                return self.async_create_entry(
-                    title=f"Crowdergy ({email})",
-                    data=self._data,
-                )
+                if email:
+                    title = f"Crowdergy ({email})"
+                elif user_id:
+                    title = f"Crowdergy ({user_id[:8]})"
+                else:
+                    title = "Crowdergy"
+                return self.async_create_entry(title=title, data=self._data)
 
         return self.async_show_form(
             step_id="user",
             data_schema=vol.Schema(
                 {
-                    vol.Required(CONF_EMAIL): str,
-                    vol.Required(CONF_PASSWORD): str,
+                    vol.Required(CONF_PAIRING_CODE): str,
+                    # Backlog #17 (Teil): konfigurierbare API-URL für
+                    # Self-Hosted-/Dev-Backends.
+                    vol.Optional(CONF_API_URL, default=DEFAULT_API_URL): str,
                 }
             ),
             errors=errors,
@@ -1782,22 +1787,22 @@ class CrowdergyConfigFlow(ConfigFlow, domain=DOMAIN):
     async def async_step_reauth_confirm(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
-        """Minimaler Reauth: Login mit der bestehenden Mail (Feld nur
-        sichtbar, wenn der Entry keine gespeicherte Mail hat — z.B.
-        Box-Provisionierung ohne `email`). Erfolgreicher Login ersetzt
-        das Token-Paar und lädt den Entry neu."""
+        """Reauth per Pairing-Code (#39, 2026-06-16): der User erzeugt in
+        der App einen frischen Code (funktioniert für Sign-in-with-Apple +
+        widerrufene Sessions). Ein Code für ein ANDERES Konto wird
+        abgelehnt (`reauth_account_mismatch`) ohne fremde Tokens zu
+        persistieren — Reauth tauscht nur das Token-Paar, nie das Konto
+        des Entries."""
         errors: dict[str, str] = {}
         entry = self.hass.config_entries.async_get_entry(
             self.context["entry_id"]
         )
         if entry is None:
             return self.async_abort(reason="reauth_entry_missing")
-        stored_email = entry.data.get(CONF_EMAIL, "")
 
         if user_input is not None:
-            email = (user_input.get(CONF_EMAIL) or stored_email).strip()
-            password = user_input[CONF_PASSWORD]
             api_url = entry.data.get(CONF_API_URL, DEFAULT_API_URL)
+            code = user_input[CONF_PAIRING_CODE].strip()
             try:
                 # Client-Bau im Executor (synchroner CA-Load), analog
                 # `_authenticated_config_request`.
@@ -1806,39 +1811,51 @@ class CrowdergyConfigFlow(ConfigFlow, domain=DOMAIN):
                 )
                 try:
                     response = await client.post(
-                        f"{api_url}/api/v1/auth/login",
-                        json={"email": email, "password": password},
+                        f"{api_url}/api/v1/connector/claim",
+                        json={"code": code},
                     )
                 finally:
                     await client.aclose()
-                if response.status_code == 401:
-                    errors["base"] = "invalid_auth"
+                if response.status_code == 404:
+                    errors[CONF_PAIRING_CODE] = "invalid_pairing_code"
+                elif response.status_code == 429:
+                    errors["base"] = "rate_limited"
                 elif response.status_code >= 400:
                     errors["base"] = "cannot_connect"
                 else:
                     tokens = response.json()
-                    new_data = {
-                        **entry.data,
-                        CONF_EMAIL: email,
-                        CONF_ACCESS_TOKEN: tokens["access_token"],
-                        CONF_REFRESH_TOKEN: tokens["refresh_token"],
-                    }
-                    if tokens.get("user_id"):
-                        new_data[CONF_USER_ID] = tokens["user_id"]
-                    return self.async_update_reload_and_abort(
-                        entry, data=new_data,
-                    )
+                    stored_user_id = entry.data.get(CONF_USER_ID, "")
+                    new_user_id = str(tokens.get("user_id", "") or "")
+                    if (
+                        stored_user_id
+                        and new_user_id
+                        and new_user_id != stored_user_id
+                    ):
+                        # Fremd-Konto-Tokens NICHT persistieren — der User
+                        # soll einen Code fürs ursprüngliche Konto erzeugen.
+                        errors[CONF_PAIRING_CODE] = "reauth_account_mismatch"
+                    else:
+                        new_data = {
+                            **entry.data,
+                            CONF_ACCESS_TOKEN: tokens["access_token"],
+                            CONF_REFRESH_TOKEN: tokens["refresh_token"],
+                        }
+                        if new_user_id:
+                            new_data[CONF_USER_ID] = new_user_id
+                        return self.async_update_reload_and_abort(
+                            entry, data=new_data,
+                        )
             except (httpx.RequestError, ValueError):
                 errors["base"] = "cannot_connect"
 
-        schema_fields: dict[Any, Any] = {}
-        if not stored_email:
-            schema_fields[vol.Required(CONF_EMAIL)] = str
-        schema_fields[vol.Required(CONF_PASSWORD)] = str
         return self.async_show_form(
             step_id="reauth_confirm",
-            data_schema=vol.Schema(schema_fields),
-            description_placeholders={"email": stored_email or "—"},
+            data_schema=vol.Schema(
+                {vol.Required(CONF_PAIRING_CODE): str}
+            ),
+            description_placeholders={
+                "email": entry.data.get(CONF_EMAIL) or "—"
+            },
             errors=errors,
         )
 
@@ -2310,11 +2327,11 @@ class CrowdergyConfigFlow(ConfigFlow, domain=DOMAIN):
             self._pending_entity_input = entity_input
             return await self.async_step_device_shares_hardware()
 
-        # v3.0: legacy included_in_haushalt + cooling steps werden nicht
-        # mehr dispatched — beide Felder werden inline im device_entities
-        # bzw. device_values Step erfasst. Wenn die Schlüssel nicht in
-        # entity_input liegen, ist das v3.0-konformes "kein cooling" /
-        # "default-haushalt-flag" — nicht Anlass für einen extra Step.
+        # v3.0: legacy cooling step wird nicht mehr dispatched — das
+        # Feld wird inline im device_values Step erfasst; fehlt der
+        # Schlüssel, heißt das "kein cooling". (Das Haushalt-Flag ist
+        # seit v3.26 komplett raus — ersetzt durch den parent_device_id-
+        # Baum, konfiguriert in der Crowdergy-App.)
         return await self._register_with_entities(entity_input)
 
     async def async_step_device_charge_mode_values(
@@ -3025,8 +3042,9 @@ class CrowdergyOptionsFlow(OptionsFlow):
             self._pending_entity_input = entity_input
             return await self.async_step_add_device_shares_hardware()
 
-        # v3.0: legacy included_in_haushalt + cooling steps entfernt —
-        # beide Felder werden inline erfasst (siehe initial-Setup-Flow).
+        # v3.0: legacy cooling step entfernt — inline erfasst (siehe
+        # initial-Setup-Flow); Haushalt-Flag seit v3.26 komplett raus
+        # (parent_device_id-Baum, App-konfiguriert).
         return await self._options_register(entity_input)
 
     async def async_step_add_device_charge_mode_values(
@@ -3439,8 +3457,9 @@ class CrowdergyOptionsFlow(OptionsFlow):
             self._edit_pending_entity_input = entity_input
             return await self.async_step_edit_device_shares_hardware()
 
-        # v3.0: legacy included_in_haushalt + cooling steps entfernt —
-        # beide Felder werden inline erfasst.
+        # v3.0: legacy cooling step entfernt — inline erfasst;
+        # Haushalt-Flag seit v3.26 komplett raus (parent_device_id-
+        # Baum, App-konfiguriert).
         return await self._edit_save(target, entity_input)
 
     async def async_step_edit_device_charge_mode_values(
