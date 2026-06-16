@@ -1256,6 +1256,22 @@ def _build_device_record(
         CONF_ENTITY_ENERGY_DISCHARGED_TOTAL: entity_input.get(
             CONF_ENTITY_ENERGY_DISCHARGED_TOTAL, ""
         ),
+        # #42 HC-Triade (Hausverbrauchs-Chart, 2026-06-16 fix): die vier
+        # optionalen Read-Slots werden vom Schema gesammelt (read_fields +
+        # _ENTITY_SELECTORS) und vom Coordinator (_SOLVER_EXTRA_FIELDS) als
+        # Telemetrie-Extra gelesen — sie MÜSSEN hier in den persistierten
+        # Record, sonst droppt der Submit sie und der Vendor-Wahrheit-Pfad
+        # bleibt leer (v3.28.0-Defekt: Schema angefasst, Record vergessen).
+        CONF_ENTITY_HC_PV_POWER: entity_input.get(CONF_ENTITY_HC_PV_POWER, ""),
+        CONF_ENTITY_HC_BATTERY_POWER: entity_input.get(
+            CONF_ENTITY_HC_BATTERY_POWER, ""
+        ),
+        CONF_ENTITY_HC_GRID_POWER: entity_input.get(
+            CONF_ENTITY_HC_GRID_POWER, ""
+        ),
+        CONF_ENTITY_PV_TO_BATTERY_POWER: entity_input.get(
+            CONF_ENTITY_PV_TO_BATTERY_POWER, ""
+        ),
         CONF_ENTITY_CONTROL: entity_input.get(CONF_ENTITY_CONTROL, ""),
         CONF_VALUE_ON: entity_input.get(CONF_VALUE_ON, ""),
         CONF_VALUE_OFF: entity_input.get(CONF_VALUE_OFF, ""),

@@ -20,6 +20,7 @@ from pytest_homeassistant_custom_component.common import MockConfigEntry
 from custom_components.theothergas.config_flow import (
     _ENTITY_SELECTORS,
     _READ_FIELDS,
+    _build_device_record,
 )
 from custom_components.theothergas.const import (
     CONF_DEVICE_ID,
@@ -150,3 +151,31 @@ async def test_compose_extra_empty_for_device_without_hc(hass: HomeAssistant):
     dev = {CONF_DEVICE_ID: "s2", CONF_DEVICE_TYPE: "solar"}
     coord = _make_coordinator(hass, [dev])
     assert coord._compose_extra(dev) == {}
+
+
+def test_build_device_record_persists_hc_slots():
+    """Round-Trip-Regression (v3.28.0-Defekt 2026-06-16): die 4 HC-Slots,
+    die das Schema sammelt (`_READ_FIELDS`/`_ENTITY_SELECTORS`) und der
+    Coordinator liest (`_SOLVER_EXTRA_FIELDS`), MÜSSEN aus dem Submit in
+    den persistierten Device-Record gelangen. Vorher droppte
+    `_build_device_record` sie stumm → der Vendor-Wahrheit-Pfad blieb leer
+    (Schema angefasst, Record vergessen). Diese Naht Schema → Persistenz
+    decken die Registry-/Reader-Tests oben NICHT ab."""
+    entity_input = {
+        CONF_ENTITY_HC_PV_POWER: "sensor.hc_pv",
+        CONF_ENTITY_HC_BATTERY_POWER: "sensor.hc_batt",
+        CONF_ENTITY_HC_GRID_POWER: "sensor.hc_grid",
+        CONF_ENTITY_PV_TO_BATTERY_POWER: "sensor.pv_to_batt",
+    }
+    record = _build_device_record("dev-1", "solar", "Solar", entity_input)
+    for key, val in entity_input.items():
+        assert record[key] == val, f"{key} fehlt im persistierten Record"
+
+
+def test_build_device_record_hc_slots_default_empty():
+    """Ohne HC-Eingaben tragen die Slots leere Strings (wie alle anderen
+    Read-Slots) — kein KeyError, sauberer stale-Mapping-Drop bei
+    Typwechsel."""
+    record = _build_device_record("dev-2", "grid", "Netz", {})
+    for _type, key, _backend_key in _HC_FIELDS:
+        assert record[key] == ""
