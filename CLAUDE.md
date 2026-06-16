@@ -41,18 +41,11 @@ dort: Cluster C (#16–#22).
   wieder.
 - **Release-Prozess:** Manifest-Bump + Tag passieren **nur beim Release
   auf `main`**, durch den, der das Tag schneidet — NIE auf
-  Feature-Branches (sonst Versions-Kollision wie beim v3.26.0-Chaos: drei
-  Branches, dieselbe Nummer, verschiedene Arbeit). GitHub-Release via
+  Feature-Branches (sonst Versions-Kollision: mehrere Branches belegen
+  dieselbe Nummer für verschiedene Arbeit). GitHub-Release via
   `tag-release.yml` bzw. User; vor dem Taggen prüfen, ob der Tag auf
-  origin schon belegt ist. **Stand: v3.28.0 released** (2026-06-15, Tag
-  via `tag-release.yml`-MCP-Trigger: #42 Hausverbrauchs-Flow-Sensoren
-  (HC-Triade) für den Hausverbrauchs-Chart; davor v3.27.1 `5a86843` =
-  #18 Telemetry-Retry/Backoff + #19 proaktives Token-Refresh, v3.27.0
-  `2f2ea76` = #39 `/connector/*`-Pairing-Alias + #40 device_update-
-  Preset-Apply). Box-Pin auf **v3.28.0** (sha=7548ecb) auf Box-`main`
-  gelandet (2026-06-16, Cherry-pick `4d0dc53`) — Re-Vendor zieht #42 beim
-  nächsten Image-Build mit; Backend `6025d67` mit B1 + #41-Endpoint ist
-  2026-06-16 live in prod.
+  origin schon belegt ist. Aktuelle Version: `manifest.json`; Release-
+  „Stand": SSOT `crowdergy-ios/CLAUDE.md`.
 - **Public-Repo-Disziplin:** Dieses Repo ist public (HACS =
   Contribute-Kanal für den Crowd-Preset-Store). Hier liegt nur das
   Slot-SCHEMA (`preset_spec.py`); Store-Daten/Kuration bleiben im Backend
