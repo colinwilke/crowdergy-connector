@@ -62,13 +62,20 @@ kWh). Response = `HouseEnergyDay`:
 }
 ```
 
-- **Under-the-line sources** sum to `home_total` (= `Σ HC`):
-  `pv_to_home` / `battery_to_home` / `grid_to_home` are the HC-triade
-  verbatim.
+- **Under-the-line sources** sum to `Σ HC` (the raw vendor home
+  consumption): `pv_to_home` / `battery_to_home` / `grid_to_home` are the
+  HC-triade verbatim.
 - **Over-the-line surplus targets**: `pv_to_battery` / `grid_to_battery`
-  (battery charge split) + `pv_to_grid` (export).
-- **Lines** (iOS): black = `home_total − wallbox_total`, mint =
-  `home_total`.
+  (battery charge split) + `pv_to_grid` (export). They stack above the
+  mint ceiling.
+- **`home_total`** = `Σ HC` **+ a separately-metered wallbox** (#48, see
+  *Wallbox topology* below) — the chart's mint ceiling (= total site
+  consumption incl. the EV).
+- **`wallbox_total`** = the full wallbox draw; the gap between the black
+  and mint lines.
+- **Lines** (iOS): black = `home_total − wallbox_total` (the base
+  household line — equals `Σ HC` when the wallbox is metered separately),
+  mint = `home_total` (the ceiling incl. the EV).
 
 ### Decomposition (Phase 1, `app/house_energy.compute_house_flows`)
 
@@ -94,6 +101,33 @@ pv_to_grid = max(0, solar - HC_from_pv - pv_to_battery)
 The optional `pv_to_battery_power_kw` sensor, when present, **overrides**
 the derived `pv_to_battery` (grid charge = remainder); a >10 % disagreement
 with the derivation is logged as a warning (the sensor still wins).
+
+### Wallbox topology (#48)
+
+The HC-triade measures *home* consumption — and on real vendor setups
+(e.g. Kostal with the wallbox on a separate phase **after** the house
+meter) that triade does **not** include the wallbox. If iOS naively drew
+`black = home_total − wallbox_total` with `home_total = Σ HC`, the black
+line and the grid area would dip negative whenever the car charged.
+
+The backend resolves this from the `parent_device_id` tree
+(`app/topology.has_ancestor_of_type`):
+
+- **Separate** (default — the wallbox has **no** `haushalt` ancestor): its
+  draw is *not* in `Σ HC`, so the backend folds it back in:
+  `home_total = Σ HC + wallbox`. The under-line stack still tops out at
+  `Σ HC`, so the wallbox lands as a sliver **above** the household stack
+  (black at `Σ HC`, mint at `Σ HC + wallbox`).
+- **Cascade** (the user modelled `wallbox.parent_device_id` → a `haushalt`
+  device): the wallbox is already inside `Σ HC`, so nothing is added
+  (`home_total = Σ HC`) and it renders as the top slice **within** the
+  stack (black at `Σ HC − wallbox`).
+
+iOS needs **no** layout branch: its existing `baseHome =
+home_total − wallbox_total` math is correct in both cases by construction.
+The closure check (`degraded`) stays on the raw `Σ HC`, so the folded-in
+wallbox never skews it. Mixed multi-wallbox setups split per device (only
+the separately-metered wallboxes are added).
 
 ### `source` selection + `degraded`
 
