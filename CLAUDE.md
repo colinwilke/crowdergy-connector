@@ -20,6 +20,17 @@ dort: Cluster C (#16–#22).
     `preset_spec.PRESET_SLOT_SPEC`; Entity-Slots dort müssen in
     `MAPPABLE_ENTITY_DOMAINS` stehen (Test-gesichert). Vertrag:
     `docs/crowd-preset-store.md`.
+  - **Entity-Picker-Mess-Typ (#46):** `_ENTITY_SELECTORS` in
+    `config_flow.py` ist SSOT dafür, WAS ein Slot anbietet. Eindeutige
+    Read-Slots tragen einen `device_class`-Filter (power/energy/battery/
+    temperature) → kW/kWh-Typsicherheit (Power-Slot zeigt nur W/kW,
+    kWh-Zähler-Slot nur Energie). HA-Form: flacher `device_class=`-kwarg
+    neben `domain` in `EntitySelectorConfig`. **NUR an eindeutigen
+    Read-Slots** — NIE an Multi-Domain-/Control-Slots (climate/
+    water_heater tragen keine sensor-device_class → würden ausgeblendet;
+    `CONF_ENTITY_CURRENT_TEMP` & Co. bewusst ungefiltert). Hard-Filter:
+    Entities ohne passende device_class werden versteckt (ok, moderne
+    Integrationen inkl. kostal_plenticore setzen sie).
 - **Consent-Semantik (entschieden):** Telemetrie-Consent gated NUR
   Energiedaten. Liveness-Traffic (Heartbeat/Version/Device-Polling) ist
   bewusst NICHT gegated — dokumentiert in `services.yaml` +

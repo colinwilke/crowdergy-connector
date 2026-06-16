@@ -200,17 +200,30 @@ _READ_FIELDS: dict[str, list[str]] = {
 _BIDIRECTIONAL_TYPES = {"grid", "battery"}
 
 # Entity-selector configs keyed by the CONF_ENTITY_* name.
+#
+# kW/kWh-Typsicherheit (#46): eindeutige Read-Slots tragen zusätzlich
+# einen device_class-Filter, damit der Picker je Slot NUR den passenden
+# Mess-Typ anbietet — Leistungs-Slots (W/kW → device_class="power") zeigen
+# nur Leistungs-Entities, Energie-Zähler-Slots (kWh → "energy") nur
+# Energie-Entities. Das verhindert die häufige kW/kWh-Verwechslung beim
+# Mapping (z. B. ein Leistungssensor in einen kWh-Slot). Der HA-Filter ist
+# HART (Entities ohne passende device_class werden ausgeblendet) — bewusst
+# nur an eindeutigen Read-Slots, NICHT an Multi-Domain-/Control-Slots
+# (climate/water_heater tragen keine sensor-device_class). Moderne
+# Integrationen inkl. kostal_plenticore (verifizierte Hardware) setzen
+# device_class auf ihren Power-/Energy-Sensoren.
 _ENTITY_SELECTORS: dict[str, selector.EntitySelector] = {
     CONF_ENTITY_POWER: selector.EntitySelector(
-        selector.EntitySelectorConfig(domain="sensor")
+        selector.EntitySelectorConfig(domain="sensor", device_class="power")
     ),
     # v3.0 zweites Power-Sensor-Feld (bidirektional) — selber
     # Selector-Typ wie CONF_ENTITY_POWER.
     CONF_ENTITY_POWER_2: selector.EntitySelector(
-        selector.EntitySelectorConfig(domain="sensor")
+        selector.EntitySelectorConfig(domain="sensor", device_class="power")
     ),
+    # SoC % → HA device_class "battery".
     CONF_ENTITY_SOC: selector.EntitySelector(
-        selector.EntitySelectorConfig(domain="sensor")
+        selector.EntitySelectorConfig(domain="sensor", device_class="battery")
     ),
     CONF_ENTITY_VEHICLE_STATUS: selector.EntitySelector(
         selector.EntitySelectorConfig(domain=["sensor", "binary_sensor"])
@@ -229,8 +242,12 @@ _ENTITY_SELECTORS: dict[str, selector.EntitySelector] = {
     # gegenüber dem statischen W35-Annahme-Modell. Nur Sensor-Domain
     # — die Vorlauf-Temp sitzt typisch in einer eigenen Modbus-/
     # Number-Entity, nicht als Attribut einer Climate-Entity.
+    # device_class="temperature" möglich, da reiner Sensor-Slot (anders als
+    # CONF_ENTITY_CURRENT_TEMP, das auch climate/water_heater zulässt).
     CONF_ENTITY_VORLAUF_TEMP: selector.EntitySelector(
-        selector.EntitySelectorConfig(domain="sensor")
+        selector.EntitySelectorConfig(
+            domain="sensor", device_class="temperature"
+        )
     ),
     # Phase 2b (2026-06-02): Write-Side Vorlauf-Setpoint. Bei
     # modulierenden Heizungen sendet der Solver pro Tick °C, der
@@ -276,29 +293,30 @@ _ENTITY_SELECTORS: dict[str, selector.EntitySelector] = {
     # cumulative). Restricted to plain sensor entities; the backend
     # rejects non-monotonic data via a delta clamp.
     CONF_ENTITY_ENERGY_TOTAL: selector.EntitySelector(
-        selector.EntitySelectorConfig(domain="sensor")
+        selector.EntitySelectorConfig(domain="sensor", device_class="energy")
     ),
     # Battery-only: second `total_increasing` kWh sensor for the
     # discharge counter — splits charge / discharge into separate
     # streams server-side.
     CONF_ENTITY_ENERGY_DISCHARGED_TOTAL: selector.EntitySelector(
-        selector.EntitySelectorConfig(domain="sensor")
+        selector.EntitySelectorConfig(domain="sensor", device_class="energy")
     ),
     # Hausverbrauchs-Flow-Sensoren (#42). Live-Power-Sensoren (W ≥0),
     # die der Vendor direkt misst — wieviel des Hausverbrauchs aktuell
     # aus PV / Batterie / Netz gedeckt wird, plus optional die
-    # PV→Batterie-Ladeleistung. Nur Sensor-Domain (wie alle Read-Slots).
+    # PV→Batterie-Ladeleistung. Nur Sensor-Domain mit device_class="power"
+    # (W-Live-Werte → kW/kWh-Typsicherheit, #46).
     CONF_ENTITY_HC_PV_POWER: selector.EntitySelector(
-        selector.EntitySelectorConfig(domain="sensor")
+        selector.EntitySelectorConfig(domain="sensor", device_class="power")
     ),
     CONF_ENTITY_HC_BATTERY_POWER: selector.EntitySelector(
-        selector.EntitySelectorConfig(domain="sensor")
+        selector.EntitySelectorConfig(domain="sensor", device_class="power")
     ),
     CONF_ENTITY_HC_GRID_POWER: selector.EntitySelector(
-        selector.EntitySelectorConfig(domain="sensor")
+        selector.EntitySelectorConfig(domain="sensor", device_class="power")
     ),
     CONF_ENTITY_PV_TO_BATTERY_POWER: selector.EntitySelector(
-        selector.EntitySelectorConfig(domain="sensor")
+        selector.EntitySelectorConfig(domain="sensor", device_class="power")
     ),
 }
 
