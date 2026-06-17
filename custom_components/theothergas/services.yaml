@@ -106,6 +106,42 @@ box_add_device:
       selector:
         object: {}
 
+box_update_device:
+  name: Box update device
+  description: >-
+    Re-apply an updated/new vendor preset mapping to an ALREADY registered
+    device in place (PUT, same payload path as the interactive edit) — no
+    backend duplicate, the device keeps its id, telemetry history and
+    topology. Used by the Crowdergy Box for the "improved profile
+    available" prompt (#28); only after explicit user confirmation, since
+    control slots switch real hardware. Requires an existing config entry
+    and a device with the given id.
+  fields:
+    device_id:
+      name: Device id
+      description: Backend id of the already-registered device to update.
+      required: true
+      selector:
+        text: {}
+    device_type:
+      name: Device type
+      description: One of the Crowdergy device types (solar, battery, grid, ...).
+      required: true
+      selector:
+        text: {}
+    device_name:
+      name: Device name
+      description: Display name for the device.
+      required: true
+      selector:
+        text: {}
+    entities:
+      name: Entities
+      description: Mapping of Crowdergy entity slots to HA entity ids.
+      required: true
+      selector:
+        object: {}
+
 box_set_consent:
   name: Box set consent flags
   description: >-

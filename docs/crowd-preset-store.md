@@ -8,7 +8,7 @@ umgesetzten Backend-Seite (2026-06-12).
 
 | Partei | Rolle | Code |
 |---|---|---|
-| **Connector** (dieses Repo, public) | Contribute-Kanal („share setup") + Lookup im Onboarding; trägt das **Slot-Schema** | `preset_spec.py` (SSOT), `config_flow` Contribute-/Picker-Steps, `box_services.box_list_presets` |
+| **Connector** (dieses Repo, public) | Contribute-Kanal („share setup") + Lookup im Onboarding; trägt das **Slot-Schema** | `preset_spec.py` (SSOT), `config_flow` Contribute-/Picker-Steps, `box_services.{box_list_presets,box_add_device,box_update_device}` |
 | **Backend** (privat) | Store-**Daten**, Staging/Promotion, Kuration — alles hinter Auth (Moat-Regel) | `app/routers/crowd_presets.py` |
 | **Box** (privat) | Konsument im Per-Device-Wizard; wendet Presets deterministisch an | `box-manager/app/devices.py` |
 
@@ -206,9 +206,17 @@ normales User-JWT, kein separater Auth-Pfad. Nicht-Kurator → 403
 2. Steuer-Slots schalten reale Hardware: bereits registrierte Geräte
    NIE stumm auf ein neueres Preset re-applien (Re-Apply nur mit
    explizitem User-Prompt, Backlog #28; `updated_at` liefert das
-   Vergleichs-Signal).
+   Vergleichs-Signal). **Box-Implementierung (2026-06-17):** der
+   box-manager vergleicht `lookup.updated_at > device.crowd_preset_updated_at`
+   (`GET /setup/preset-updates`) und re-applied auf User-Klick
+   (`POST /setup/device/{id}/reapply-preset`) IN PLACE über den
+   Connector-Service **`box_update_device`** (PUT statt POST → kein
+   Backend-Duplikat; das Gerät behält `device_id`, Telemetrie-Historie
+   und Topologie). Statisch (Heuristik-Fallback) gemappte Geräte bekommen
+   denselben Prompt, sobald erstmals ein kuratiertes Preset auftaucht.
 3. Herkunft (`vendor`/`model`/`integration_domain`/`source`) pro Gerät
-   persistieren.
+   persistieren (Box zusätzlich: `crowd_preset_updated_at` = `updated_at`
+   des angewandten Presets, Baseline für #28).
 
 ## Admin-Ausbau (Design-Vorschlag 2026-06-12 — Stufe 2, noch nicht umgesetzt)
 

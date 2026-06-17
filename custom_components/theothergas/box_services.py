@@ -15,6 +15,12 @@ Zwei Services für den box-manager der Crowdergy-Appliance:
 * `box_add_device`: registriert EIN Gerät am Backend (zentrale
   `device_field_spec`-Payload, derselbe Pfad wie der interaktive
   Flow) und hängt es an den Config-Entry; Entry wird neu geladen.
+* `box_update_device`: aktualisiert die Slot-Zuordnung eines bereits
+  registrierten Geräts IN PLACE (PUT statt POST — kein Backend-Duplikat,
+  Telemetrie-Historie/Topologie bleiben am selben device_id). Pfad für
+  den Profil-Update-Prompt (#28): die Box hat ein verbessertes/neues
+  Preset gefunden und re-applied es nach EXPLIZITER User-Bestätigung
+  (Steuer-Slots schalten reale Hardware → nie stumm).
 
 Beide setzen einen bestehenden Config-Entry voraus (Box-Pairing,
 Phase 2). Wie `provision_box` sind sie nur aktiv, wenn die Appliance
@@ -57,6 +63,7 @@ _LOGGER = logging.getLogger(__name__)
 
 SERVICE_BOX_LIST_PRESETS = "box_list_presets"
 SERVICE_BOX_ADD_DEVICE = "box_add_device"
+SERVICE_BOX_UPDATE_DEVICE = "box_update_device"
 SERVICE_BOX_SET_CONSENT = "box_set_consent"
 
 BOX_SET_CONSENT_SCHEMA = vol.Schema(
@@ -83,6 +90,17 @@ BOX_ADD_DEVICE_SCHEMA = vol.Schema(
     }
 )
 
+BOX_UPDATE_DEVICE_SCHEMA = vol.Schema(
+    {
+        # Backend-device_id des bereits registrierten Geräts (muss auf
+        # diesem Entry existieren — sonst Fehler statt stillem No-op).
+        vol.Required(CONF_DEVICE_ID): cv.string,
+        vol.Required(CONF_DEVICE_TYPE): vol.In(DEVICE_TYPES),
+        vol.Required(CONF_DEVICE_NAME): cv.string,
+        vol.Required("entities"): vol.Schema({cv.string: cv.string}),
+    }
+)
+
 
 def _get_entry(hass: HomeAssistant) -> ConfigEntry:
     entries = hass.config_entries.async_entries(DOMAIN)
@@ -99,6 +117,39 @@ def _get_entry(hass: HomeAssistant) -> ConfigEntry:
             "need exactly one (remove the stale entry first)"
         )
     return entries[0]
+
+
+def _validate_entity_mapping(entity_input: dict[str, Any]) -> None:
+    """Default-DENY domain allowlist per mapping slot (Security-Model #5
+    der Box, E-6 / CN-10). Shared by box_add_device + box_update_device,
+    damit der Re-Apply-Pfad (#28) dieselbe Privacy-Garantie trägt: keine
+    Kamera-/Personen-/Tracker-/Media-Entity kann in den Telemetrie- oder
+    Steuer-Pfad gelangen.
+
+    Die Slot-ART entscheidet (nicht „enthält der Wert einen Punkt"):
+    Value-/Flag-Slots aus dem Preset (`PRESET_VALUE_SLOTS`) dürfen
+    beliebige Strings tragen (Select-Optionen wie "7.4 kW Mode");
+    unbekannte Slot-Keys bleiben Default-DENY.
+    """
+    for slot, value in entity_input.items():
+        if value in ("", None):
+            continue
+        allowed = MAPPABLE_ENTITY_DOMAINS.get(slot)
+        if allowed is not None:
+            entity_id = str(value)
+            domain = entity_id.split(".", 1)[0] if "." in entity_id else ""
+            if domain not in allowed:
+                raise HomeAssistantError(
+                    f"entity domain '{domain or entity_id}' not allowed "
+                    f"in slot '{slot}' "
+                    f"(allowed: {', '.join(sorted(allowed))})"
+                )
+            continue
+        if slot not in PRESET_VALUE_SLOTS:
+            raise HomeAssistantError(
+                f"slot '{slot}' is not a mappable entity or preset "
+                f"value slot (value '{value}' rejected)"
+            )
 
 
 def async_register_box_services(hass: HomeAssistant) -> None:
@@ -152,39 +203,9 @@ def async_register_box_services(hass: HomeAssistant) -> None:
         device_name: str = call.data[CONF_DEVICE_NAME]
         entity_input: dict[str, Any] = dict(call.data["entities"])
 
-        # Security-Model #5 (Box), E-6 / CN-10 (2026-06-11): Allowlist
-        # statt Blocklist. Default-DENY — pro Mapping-Slot ist nur eine
-        # explizite Menge HA-Domains zugelassen (`MAPPABLE_ENTITY_
-        # DOMAINS` in const.py). Damit kann keine Kamera-/Personen-/
-        # Tracker-/Media-Entity (oder irgendeine andere unerwartete
-        # Domain) in den Telemetrie- oder Steuer-Pfad gelangen.
-        #
-        # v3.24 (Mapping-Dictionary): die Slot-ART entscheidet die
-        # Prüfung, nicht mehr „enthält der Wert einen Punkt". Value-/
-        # Flag-Slots aus dem Preset (`PRESET_VALUE_SLOTS`) dürfen
-        # beliebige Strings tragen — auch mit Punkt (Select-Optionen
-        # wie "7.4 kW Mode" liefen vorher in den Entity-Check und
-        # wurden fälschlich abgelehnt). Unbekannte Slot-Keys bleiben
-        # Default-DENY, jetzt auch ohne Punkt im Wert.
-        for slot, value in entity_input.items():
-            if value in ("", None):
-                continue
-            allowed = MAPPABLE_ENTITY_DOMAINS.get(slot)
-            if allowed is not None:
-                entity_id = str(value)
-                domain = entity_id.split(".", 1)[0] if "." in entity_id else ""
-                if domain not in allowed:
-                    raise HomeAssistantError(
-                        f"entity domain '{domain or entity_id}' not allowed "
-                        f"in slot '{slot}' "
-                        f"(allowed: {', '.join(sorted(allowed))})"
-                    )
-                continue
-            if slot not in PRESET_VALUE_SLOTS:
-                raise HomeAssistantError(
-                    f"slot '{slot}' is not a mappable entity or preset "
-                    f"value slot (value '{value}' rejected)"
-                )
+        # Security-Model #5 (Box), E-6 / CN-10: Default-DENY-Allowlist
+        # pro Mapping-Slot (geteilt mit box_update_device).
+        _validate_entity_mapping(entity_input)
 
         payload = build_payload(
             mode="create",
@@ -240,6 +261,70 @@ def async_register_box_services(hass: HomeAssistant) -> None:
             CONF_DEVICE_NAME: device_name,
         }
 
+    async def _handle_update_device(call: ServiceCall) -> ServiceResponse:
+        """Re-apply (#28): update a device's slot mapping IN PLACE.
+
+        PUT /api/v1/devices/{id} (mode='update', same spec path as the
+        interactive edit) instead of POST — the backend device keeps its
+        id, telemetry history and topology links; we just swap the entity
+        mapping the connector polls/controls. The device must already
+        exist on this entry (no silent create-on-miss)."""
+        from .config_flow import _authenticated_config_request, _build_device_record
+
+        entry = _get_entry(hass)
+        device_id: str = call.data[CONF_DEVICE_ID]
+        device_type: str = call.data[CONF_DEVICE_TYPE]
+        device_name: str = call.data[CONF_DEVICE_NAME]
+        entity_input: dict[str, Any] = dict(call.data["entities"])
+
+        _validate_entity_mapping(entity_input)
+
+        devices = list(entry.data.get(CONF_DEVICES, []))
+        index = next(
+            (
+                i
+                for i, d in enumerate(devices)
+                if d.get(CONF_DEVICE_ID) == device_id
+            ),
+            None,
+        )
+        if index is None:
+            raise HomeAssistantError(
+                f"box_update_device: no device {device_id!r} on this entry"
+            )
+
+        payload = build_payload(
+            mode="update",
+            dtype=device_type,
+            name=device_name,
+            entity_input=entity_input,
+        )
+        response = await _authenticated_config_request(
+            hass, entry, "PUT", f"/api/v1/devices/{device_id}", json=payload
+        )
+        if response.status_code >= 400:
+            raise HomeAssistantError(
+                f"backend device update failed: {response.status_code}"
+            )
+
+        devices[index] = _build_device_record(
+            device_id, device_type, device_name, entity_input
+        )
+        hass.config_entries.async_update_entry(
+            entry, data={**entry.data, CONF_DEVICES: devices}
+        )
+        await hass.config_entries.async_reload(entry.entry_id)
+        _LOGGER.info(
+            "box_update_device: re-applied mapping for %s (%s)",
+            device_name,
+            device_type,
+        )
+        return {
+            CONF_DEVICE_ID: device_id,
+            CONF_DEVICE_TYPE: device_type,
+            CONF_DEVICE_NAME: device_name,
+        }
+
     async def _handle_set_consent(call: ServiceCall) -> None:
         """Phase 4: Enforcement-Flags in die Entry-Options schreiben.
         Der Coordinator gated damit Telemetrie-Push (`_async_update_data`)
@@ -277,5 +362,12 @@ def async_register_box_services(hass: HomeAssistant) -> None:
         SERVICE_BOX_ADD_DEVICE,
         _handle_add_device,
         schema=BOX_ADD_DEVICE_SCHEMA,
+        supports_response=SupportsResponse.OPTIONAL,
+    )
+    hass.services.async_register(
+        DOMAIN,
+        SERVICE_BOX_UPDATE_DEVICE,
+        _handle_update_device,
+        schema=BOX_UPDATE_DEVICE_SCHEMA,
         supports_response=SupportsResponse.OPTIONAL,
     )
