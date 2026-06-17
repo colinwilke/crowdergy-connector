@@ -20,10 +20,8 @@ from custom_components.theothergas.const import (
     CONF_DEVICES,
     DOMAIN,
 )
-from custom_components.theothergas.coordinator import (
-    CrowdergyCoordinator,
-    _merge_preset_value_map,
-)
+from custom_components.theothergas.coordinator import CrowdergyCoordinator
+from custom_components.theothergas.command_dispatcher import _merge_preset_value_map
 
 
 # ── Pure: _merge_preset_value_map ────────────────────────────────────────────
