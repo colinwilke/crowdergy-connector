@@ -14,6 +14,7 @@ from pytest_homeassistant_custom_component.common import MockConfigEntry
 from custom_components.theothergas.box_services import (
     SERVICE_BOX_ADD_DEVICE,
     SERVICE_BOX_LIST_PRESETS,
+    SERVICE_BOX_UPDATE_DEVICE,
 )
 from custom_components.theothergas.const import (
     CONF_ACCESS_TOKEN,
@@ -418,6 +419,149 @@ async def test_add_device_allows_kostal_solar_preset(hass: HomeAssistant):
     assert entry.data[CONF_DEVICES][0][CONF_DEVICE_ID] == "backend-pv-1"
 
 
+# ── #28 Re-Apply: box_update_device (in-place, kein Duplikat) ─────────────────
+
+
+async def _setup_with_devices(
+    hass: HomeAssistant, devices: list[dict]
+) -> MockConfigEntry:
+    assert await async_setup_component(hass, DOMAIN, {DOMAIN: {}})
+    await hass.async_block_till_done()
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        unique_id="user-1",
+        data={**ENTRY_DATA, CONF_DEVICES: devices},
+    )
+    entry.add_to_hass(hass)
+    return entry
+
+
+async def test_update_device_in_place_no_duplicate(hass: HomeAssistant):
+    """#28: box_update_device PUTet das neue Mapping am SELBEN device_id
+    (kein Backend-Duplikat) und ERSETZT den Connector-Record statt ihn
+    anzuhängen — die Telemetrie-Historie/Topologie bleibt am Gerät."""
+    from custom_components.theothergas.config_flow import _build_device_record
+
+    seed = _build_device_record(
+        "backend-dev-1", "solar", "Plenticore Solar",
+        {CONF_ENTITY_POWER: "sensor.alte_power"},
+    )
+    entry = await _setup_with_devices(hass, [seed])
+
+    seen: dict = {}
+
+    async def fake_request(hass_, entry_, method, path, **kwargs):
+        seen["method"], seen["path"] = method, path
+        seen["payload"] = kwargs["json"]
+        return _response(200, {"id": "backend-dev-1"})
+
+    with patch(
+        "custom_components.theothergas.config_flow._authenticated_config_request",
+        new=AsyncMock(side_effect=fake_request),
+    ):
+        response = await hass.services.async_call(
+            DOMAIN,
+            SERVICE_BOX_UPDATE_DEVICE,
+            {
+                CONF_DEVICE_ID: "backend-dev-1",
+                CONF_DEVICE_TYPE: "solar",
+                CONF_DEVICE_NAME: "Plenticore Solar",
+                "entities": {
+                    CONF_ENTITY_POWER: "sensor.sum_power_of_all_pv_dc_inputs"
+                },
+            },
+            blocking=True,
+            return_response=True,
+        )
+
+    assert (seen["method"], seen["path"]) == (
+        "PUT",
+        "/api/v1/devices/backend-dev-1",
+    )
+    assert seen["payload"]["type"] == "solar"
+    assert response[CONF_DEVICE_ID] == "backend-dev-1"
+    devices = entry.data[CONF_DEVICES]
+    assert len(devices) == 1  # ersetzt, NICHT angehängt
+    assert devices[0][CONF_ENTITY_POWER] == "sensor.sum_power_of_all_pv_dc_inputs"
+
+
+async def test_update_device_unknown_id_raises(hass: HomeAssistant):
+    """Kein stilles Create-on-Miss: eine unbekannte device_id ist ein
+    Fehler (das Gerät muss auf dem Entry existieren)."""
+    entry = await _setup_with_devices(hass, [])
+    with pytest.raises(HomeAssistantError, match="no device"):
+        await hass.services.async_call(
+            DOMAIN,
+            SERVICE_BOX_UPDATE_DEVICE,
+            {
+                CONF_DEVICE_ID: "ghost",
+                CONF_DEVICE_TYPE: "solar",
+                CONF_DEVICE_NAME: "X",
+                "entities": {CONF_ENTITY_POWER: "sensor.power"},
+            },
+            blocking=True,
+            return_response=True,
+        )
+    assert entry.data[CONF_DEVICES] == []
+
+
+async def test_update_device_shares_allowlist(hass: HomeAssistant):
+    """Re-Apply trägt dieselbe Default-DENY-Allowlist wie add_device:
+    eine camera.* auf einem Control-Slot wird abgewiesen, der Record
+    bleibt unverändert (kein PUT)."""
+    from custom_components.theothergas.config_flow import _build_device_record
+
+    seed = _build_device_record(
+        "backend-dev-1", "generic", "Ding",
+        {CONF_ENTITY_POWER: "sensor.power", "entity_control": "switch.alt"},
+    )
+    entry = await _setup_with_devices(hass, [seed])
+    with pytest.raises(HomeAssistantError, match="not allowed"):
+        await hass.services.async_call(
+            DOMAIN,
+            SERVICE_BOX_UPDATE_DEVICE,
+            {
+                CONF_DEVICE_ID: "backend-dev-1",
+                CONF_DEVICE_TYPE: "generic",
+                CONF_DEVICE_NAME: "Ding",
+                "entities": {"entity_control": "camera.wohnzimmer"},
+            },
+            blocking=True,
+            return_response=True,
+        )
+    assert entry.data[CONF_DEVICES][0]["entity_control"] == "switch.alt"
+
+
+async def test_update_device_backend_error_keeps_record(hass: HomeAssistant):
+    """PUT-Fehler (5xx) → der Connector-Record wird NICHT getauscht (der
+    Swap passiert erst nach erfolgreichem Backend-PUT)."""
+    from custom_components.theothergas.config_flow import _build_device_record
+
+    seed = _build_device_record(
+        "backend-dev-1", "solar", "PV",
+        {CONF_ENTITY_POWER: "sensor.alte_power"},
+    )
+    entry = await _setup_with_devices(hass, [seed])
+    with patch(
+        "custom_components.theothergas.config_flow._authenticated_config_request",
+        new=AsyncMock(return_value=_response(500, {})),
+    ):
+        with pytest.raises(HomeAssistantError, match="update failed"):
+            await hass.services.async_call(
+                DOMAIN,
+                SERVICE_BOX_UPDATE_DEVICE,
+                {
+                    CONF_DEVICE_ID: "backend-dev-1",
+                    CONF_DEVICE_TYPE: "solar",
+                    CONF_DEVICE_NAME: "PV",
+                    "entities": {CONF_ENTITY_POWER: "sensor.neue_power"},
+                },
+                blocking=True,
+                return_response=True,
+            )
+    assert entry.data[CONF_DEVICES][0][CONF_ENTITY_POWER] == "sensor.alte_power"
+
+
 # ── CN-9: YAML-Gate + eindeutiger Entry ──────────────────────────────────────
 
 
@@ -431,6 +575,7 @@ async def test_services_not_registered_without_yaml_key(hass: HomeAssistant):
     assert not hass.services.has_service(DOMAIN, "provision_box")
     assert not hass.services.has_service(DOMAIN, SERVICE_BOX_LIST_PRESETS)
     assert not hass.services.has_service(DOMAIN, SERVICE_BOX_ADD_DEVICE)
+    assert not hass.services.has_service(DOMAIN, SERVICE_BOX_UPDATE_DEVICE)
     assert not hass.services.has_service(DOMAIN, "box_set_consent")
 
 
