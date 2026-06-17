@@ -109,9 +109,13 @@ Token-Ablauf UND reaktiv bei 401 (retry einmal).
   merged Consent-Options im `already_configured`-Pfad. `consent_*`-Felder
   landen atomar als Entry-Options (kein Default-True-Fenster).
 - **`box_services.py`**: `box_list_presets` (proxied approved
-  Vendor-Preset-Lookup inkl. `integration_domain`, status, capabilities),
-  `box_add_device` (Registrierung über `device_field_spec`; Value-Slots
-  mit Punkt in Werten ab v3.24.0), `box_set_consent` (Entry-Options).
+  Vendor-Preset-Lookup inkl. `integration_domain`, status, capabilities,
+  `updated_at`), `box_add_device` (Registrierung über `device_field_spec`,
+  POST; Value-Slots mit Punkt in Werten ab v3.24.0), `box_update_device`
+  (#28 Re-Apply: PUT eines bestehenden Geräts in place — kein
+  Backend-Duplikat, gleiche `device_id`/Historie/Topologie),
+  `box_set_consent` (Entry-Options). Domain-Allowlist (`_validate_entity_
+  mapping`) geteilt von add + update.
 - **Consent-Gates:** ohne `consent_telemetry` kein Telemetrie-/
   Outdoor-Push; ohne `consent_remote_control` keine Steuer-Frames.
   Fehlende Flags = Alt-Verhalten (True).
