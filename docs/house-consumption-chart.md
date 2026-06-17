@@ -102,6 +102,49 @@ The optional `pv_to_battery_power_kw` sensor, when present, **overrides**
 the derived `pv_to_battery` (grid charge = remainder); a >10 % disagreement
 with the derivation is logged as a warning (the sensor still wins).
 
+### Decomposition (Phase 2, `app/house_energy.compute_house_flows_from_net`)
+
+For setups **without** the HC-triade. Uses only the signed net-flow
+meters (`solar_kw`, `battery_kw`, `grid_kw`) — same sign convention as
+Phase 1. The total home load is the energy balance at the home bus, then
+split by a deterministic **self-consumption priority** (PV → battery
+discharge → grid for the load; PV-surplus → battery → export for the
+surplus):
+
+```
+home_total      = max(0, solar + grid_signed + battery_signed)
+
+pv_to_home      = min(solar, home_total)
+battery_to_home = min(max(battery_signed, 0), home_total - pv_to_home)
+grid_to_home    = home_total - pv_to_home - battery_to_home
+
+pv_surplus      = max(0, solar - pv_to_home)
+charge          = max(0, -battery_signed)
+pv_to_battery   = min(pv_surplus, charge)
+grid_to_battery = charge - pv_to_battery
+pv_to_grid      = pv_surplus - pv_to_battery        # == grid export
+```
+
+Under-the-line sources sum to `home_total` (no separate `Σ HC`). This is
+the standard self-consumption model and resolves the night-grid-charge
+case correctly (the charge falls on the grid, not on absent PV).
+
+**Deliberate choices** (delegated to the implementing session, 2026-06-17):
+
+- **No wallbox add-back** (unlike the vendor path below): a wallbox sits
+  behind the grid meter, so its draw is already inside `grid_signed` →
+  `home_total` is the plain net total and the wallbox renders *within*
+  the stack (like the cascade case). iOS' `baseHome = home_total −
+  wallbox_total` stays consistent. (A truly separately-metered wallbox
+  not behind the grid meter would under-count — the v1.6.23 iOS clamp
+  keeps that from going negative; rare, accepted.)
+- **`degraded` always `false`** — the reconstruction is self-consistent
+  by construction; a `haushalt` meter may exclude battery/wallbox, so a
+  closure check would raise false flags.
+- **Battery→grid export is not a series** (parity with the vendor path);
+  in a rare discharge-while-exporting slot that fraction is not drawn
+  above the line (home + under-line stay correct).
+
 ### Wallbox topology (#48)
 
 The HC-triade measures *home* consumption — and on real vendor setups
@@ -132,19 +175,25 @@ the separately-metered wallboxes are added).
 ### `source` selection + `degraded`
 
 - `vendor` — the HC-triade actually reported (PV + grid always, battery
-  too when a battery device exists).
-- `none` — triade absent (or no solar/grid device) → empty `slots`; iOS
-  shows the "needs a vendor profile with self-consumption sensors" empty
-  state. **Phase 2** net-flow reconstruction will return `allocator`.
-- `degraded` (per slot) — when an independent whole-home meter
-  (`haushalt` device power) exists and `Σ HC` deviates from it by > 5 %.
-  No haushalt meter ⇒ no closure check ⇒ never degraded.
+  too when a battery device exists). Phase-1 decomposition.
+- `allocator` — triade absent but solar+grid devices reported net power:
+  Phase-2 net-flow reconstruction (below).
+- `none` — no relevant telemetry at all for the day (or no solar/grid
+  device) → empty `slots`; iOS shows the "needs solar + grid metering"
+  empty state.
+- `degraded` (per slot) — vendor path only: when an independent
+  whole-home meter (`haushalt` device power) exists and `Σ HC` deviates
+  from it by > 5 %. No haushalt meter ⇒ no closure check ⇒ never
+  degraded. The allocator path is self-consistent by construction →
+  always `false`.
 
 ## Known Phase-1 limitations
 
 - Flows are computed on slot-**averages**, so a slot where the battery
   both charged and discharged can mis-split (smaller with `15min`).
-- The full HC-triade must report; a partial setup falls back to the
-  empty state rather than showing wrong zeros.
+- The full HC-triade must report for the vendor path; a partial setup
+  falls back to the Phase-2 allocator (net-flow reconstruction) rather
+  than showing wrong vendor zeros, and only to the empty state when not
+  even solar+grid net power is available.
 - Kostal-Vendor-Template auto-prefill of these slots is backlog #22
   (parked) — for now the user maps the four sensors by hand.
