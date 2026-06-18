@@ -68,9 +68,9 @@ kWh). Response = `HouseEnergyDay`:
 - **Over-the-line surplus targets**: `pv_to_battery` / `grid_to_battery`
   (battery charge split) + `pv_to_grid` (export). They stack above the
   mint ceiling.
-- **`home_total`** = `Σ HC` **+ a separately-metered wallbox** (#48, see
-  *Wallbox topology* below) — the chart's mint ceiling (= total site
-  consumption incl. the EV).
+- **`home_total`** = `Σ HC` **+ any wallbox not behind the smart meter**
+  (#48/#66, see *Wallbox topology* below) — the chart's mint ceiling
+  (= total site consumption incl. the EV).
 - **`wallbox_total`** = the full wallbox draw; the gap between the black
   and mint lines.
 - **Lines** (iOS): black = `home_total − wallbox_total` (the base
@@ -145,32 +145,40 @@ case correctly (the charge falls on the grid, not on absent PV).
   in a rare discharge-while-exporting slot that fraction is not drawn
   above the line (home + under-line stay correct).
 
-### Wallbox topology (#48)
+### Wallbox topology (#48, classifier corrected in #66)
 
-The HC-triade measures *home* consumption — and on real vendor setups
-(e.g. Kostal with the wallbox on a separate phase **after** the house
-meter) that triade does **not** include the wallbox. If iOS naively drew
-`black = home_total − wallbox_total` with `home_total = Σ HC`, the black
-line and the grid area would dip negative whenever the car charged.
+The HC-triade measures *home* consumption behind the smart meter. Whether a
+wallbox is inside `Σ HC` depends on **where the smart meter sits relative to
+the wallbox** — not on a device naming convention.
 
-The backend resolves this from the `parent_device_id` tree
-(`app/topology.has_ancestor_of_type`):
+The backend classifies each wallbox against the **smart-meter anchor** = the
+grid device that actually reports `hc_grid_power_kw`
+(`app/routers/users/energy.py`, walk-up via `app/topology.has_ancestor_id`):
 
-- **Separate** (default — the wallbox has **no** `haushalt` ancestor): its
-  draw is *not* in `Σ HC`, so the backend folds it back in:
-  `home_total = Σ HC + wallbox`. The under-line stack still tops out at
-  `Σ HC`, so the wallbox lands as a sliver **above** the household stack
-  (black at `Σ HC`, mint at `Σ HC + wallbox`).
-- **Cascade** (the user modelled `wallbox.parent_device_id` → a `haushalt`
-  device): the wallbox is already inside `Σ HC`, so nothing is added
-  (`home_total = Σ HC`) and it renders as the top slice **within** the
-  stack (black at `Σ HC − wallbox`).
+- **Cascade** (the wallbox is a **descendant** of an HC-grid anchor): it is
+  behind the smart meter, so its draw is already inside `Σ HC`. Nothing is
+  added (`home_total = Σ HC`); it renders as the top slice **within** the
+  stack (black at `Σ HC − wallbox`). This covers the common case — a Kostal
+  root smart meter with the wallbox wired as a child of that grid (directly
+  or through a sub-grid), **with or without** an explicit `haushalt` device.
+- **Separate** (the wallbox is **not** behind any HC-grid anchor — its own
+  meter, or a phase the smart meter doesn't see): its draw is *not* in
+  `Σ HC`, so the backend folds it back in: `home_total = Σ HC + wallbox`.
+  The under-line stack still tops out at `Σ HC`, so the wallbox lands as a
+  sliver **above** the household stack (black at `Σ HC`, mint at `Σ HC +
+  wallbox`).
+
+> **#66 fix:** the original classifier keyed "cascade" on a `haushalt`-type
+> ancestor. Setups without an explicit `haushalt` device (the smart meter is
+> just the root grid) then mis-classified *every* wallbox as "separate" and
+> double-counted it on `home_total`. Anchoring on the HC-grid-reporting grid
+> instead makes a behind-the-meter wallbox cascade correctly.
 
 iOS needs **no** layout branch: its existing `baseHome =
 home_total − wallbox_total` math is correct in both cases by construction.
 The closure check (`degraded`) stays on the raw `Σ HC`, so the folded-in
 wallbox never skews it. Mixed multi-wallbox setups split per device (only
-the separately-metered wallboxes are added).
+the wallboxes not behind an HC-grid anchor are added).
 
 ### `source` selection + `degraded`
 
