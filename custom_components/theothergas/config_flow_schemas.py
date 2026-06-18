@@ -106,6 +106,13 @@ _READ_FIELDS: dict[str, list[str]] = {
     "warmwater": [
         CONF_ENTITY_POWER, CONF_ENTITY_ENERGY_TOTAL,
     ],
+    # aircon teilt das heating/warmwater-Schema (control_section unten),
+    # braucht aber wie sie den optionalen kWh-Zähler im read_section — sonst
+    # fällt der Picker via _READ_FIELDS.get(..., [POWER]) auf Power-only
+    # zurück und der Energiezähler-Slot fehlt im Klima-Mapping.
+    "aircon":    [
+        CONF_ENTITY_POWER, CONF_ENTITY_ENERGY_TOTAL,
+    ],
     "haushalt":  [CONF_ENTITY_POWER, CONF_ENTITY_ENERGY_TOTAL],
     # Batterie: power_1 = Entladung, power_2 = Ladung, energy_1 +
     # energy_2 die zugehörigen kWh-Zähler. SoC zwischen den Power-

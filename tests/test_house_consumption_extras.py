@@ -72,6 +72,17 @@ def test_hc_fields_registered_in_read_fields():
     assert CONF_ENTITY_HC_GRID_POWER not in _READ_FIELDS["solar"]
 
 
+def test_thermal_loads_expose_energy_total_read_field():
+    """Die steuerbaren thermischen Lasten (heating/warmwater/aircon) bieten
+    alle den optionalen kWh-Zähler im Read-Schritt an. Regression: aircon
+    fehlte in `_READ_FIELDS` → der Picker fiel auf Power-only zurück und der
+    Energiezähler-Slot fehlte im Klima-Mapping (Connector-Bug 2026-06-18)."""
+    from custom_components.theothergas.const import CONF_ENTITY_ENERGY_TOTAL
+
+    for dtype in ("heating", "warmwater", "aircon"):
+        assert CONF_ENTITY_ENERGY_TOTAL in _READ_FIELDS[dtype], dtype
+
+
 def test_hc_fields_have_sensor_selectors_and_allowlist():
     """Jedes Read-Feld braucht einen EntitySelector und einen Default-
     DENY-Allowlist-Eintrag (nur `sensor`)."""
