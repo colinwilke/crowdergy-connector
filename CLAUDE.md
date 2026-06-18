@@ -20,8 +20,10 @@ dort: Cluster C (#16–#22).
     `preset_spec.PRESET_SLOT_SPEC`; Entity-Slots dort müssen in
     `MAPPABLE_ENTITY_DOMAINS` stehen (Test-gesichert). Vertrag:
     `docs/crowd-preset-store.md`.
-  - **Entity-Picker-Mess-Typ (#46):** `_ENTITY_SELECTORS` in
-    `config_flow.py` ist SSOT dafür, WAS ein Slot anbietet. Eindeutige
+  - **Entity-Picker-Mess-Typ (#46):** `_ENTITY_SELECTORS` ist SSOT dafür,
+    WAS ein Slot anbietet — seit dem #50-Split in `config_flow_schemas.py`
+    definiert und aus `config_flow.py` re-exportiert (Zugriffspfad
+    `config_flow._ENTITY_SELECTORS` bleibt gültig). Eindeutige
     Read-Slots tragen einen `device_class`-Filter (power/energy/battery/
     temperature) → kW/kWh-Typsicherheit (Power-Slot zeigt nur W/kW,
     kWh-Zähler-Slot nur Energie). HA-Form: flacher `device_class=`-kwarg
