@@ -36,7 +36,13 @@ COMPLETE_BATTERY = {
 
 
 def test_capable_types_match_user_concept():
-    assert PRESET_CAPABLE_TYPES == {"solar", "grid", "battery", "wallbox"}
+    # #68 (2026-06-18): die steuerbaren thermischen Lasten kamen dazu, damit
+    # Presets für sie beigetragen werden können (Box-Wizard-Phase-5).
+    # haushalt (Residual) + generic (Catch-all) bleiben ohne Spec.
+    assert PRESET_CAPABLE_TYPES == {
+        "solar", "grid", "battery", "wallbox",
+        "heating", "warmwater", "aircon",
+    }
 
 
 def test_every_entity_slot_is_domain_allowlisted():
@@ -78,6 +84,14 @@ def test_required_sets_per_device_type():
         "entity_energy_total",
         "entity_charge_mode",
     }
+    # #68: steuerbare thermische Lasten — Pflicht = Leistung + Steuer-Entity
+    # (analog wallbox). value_on/off bleiben optional: binäre Steuer-
+    # Entities (switch/…) schalten implizit, leeres value_on/off ist gültig.
+    for dtype in ("heating", "warmwater", "aircon"):
+        assert required[dtype] == {
+            "entity_current_power_kw",
+            "entity_control",
+        }, dtype
 
 
 def test_extract_battery_maps_splits_entity_and_value():
@@ -104,8 +118,9 @@ def test_extract_battery_maps_splits_entity_and_value():
 
 
 def test_extract_unknown_type_yields_empty_maps():
+    # generic hat (bewusst) keine Spec → leere Maps, egal welche Keys da sind.
     entity_map, value_map = extract_preset_maps(
-        {"device_type": "heating", "entity_current_power_kw": "sensor.x"}
+        {"device_type": "generic", "entity_current_power_kw": "sensor.x"}
     )
     assert entity_map == {} and value_map == {}
 
@@ -124,10 +139,91 @@ def test_missing_required_lists_labels_for_incomplete_battery():
     assert len(missing) == 2
 
 
-def test_value_slots_cover_future_control_values():
-    """value_on/off (+cool) sind heute keinem preset-fähigen Typ
-    zugeordnet, bleiben aber in der box_add_device-Allowlist, damit
-    ein künftiger heating-/generic-Pfad nicht hier scheitert."""
+def test_value_slots_cover_control_values():
+    """value_on/off (+cool) sind seit #68 heating/aircon zugeordnet und
+    bleiben in der box_add_device-Allowlist (auch als generic-Backstop)."""
     assert {"value_on", "value_off", "value_cool_on", "value_cool_off"} <= (
         PRESET_VALUE_SLOTS
     )
+
+
+# ── #68: steuerbare thermische Lasten (heating/warmwater/aircon) ─────────────
+
+COMPLETE_HEATING_CLIMATE = {
+    "device_type": "heating",
+    "device_name": "Wärmepumpe",
+    "entity_current_power_kw": "sensor.wp_power_consumption",
+    # climate-first: Steuer-Entity ist die climate.* Entity, value_on/off
+    # tragen die hvac-Modi.
+    "entity_control": "climate.wp_heizkreis",
+    "value_on": "heat",
+    "value_off": "off",
+    "entity_current_temp_c": "sensor.wp_ruecklauf_temp",
+    "entity_vorlauf_setpoint_c": "number.wp_vorlauf_soll",
+    # install-spezifisch / nicht-spec → darf NIE in die Maps:
+    "shares_hardware_with_device_id": "dev-9",
+    "district": "Altona",
+}
+
+COMPLETE_WARMWATER_SWITCH = {
+    "device_type": "warmwater",
+    "device_name": "Brauchwasser",
+    "entity_current_power_kw": "sensor.ww_power",
+    # binäre Steuer-Entity → value_on/off bewusst leer (turn_on/turn_off).
+    "entity_control": "switch.ww_boost",
+}
+
+
+def test_extract_heating_splits_entity_and_value():
+    entity_map, value_map = extract_preset_maps(COMPLETE_HEATING_CLIMATE)
+    assert entity_map == {
+        "entity_current_power_kw": "sensor.wp_power_consumption",
+        "entity_control": "climate.wp_heizkreis",
+        "entity_current_temp_c": "sensor.wp_ruecklauf_temp",
+        "entity_vorlauf_setpoint_c": "number.wp_vorlauf_soll",
+    }
+    assert value_map == {"value_on": "heat", "value_off": "off"}
+    flat = {**entity_map, **value_map}
+    assert "shares_hardware_with_device_id" not in flat
+    assert "district" not in flat
+
+
+def test_missing_required_heating_climate_is_complete():
+    assert missing_required_labels(COMPLETE_HEATING_CLIMATE) == []
+
+
+def test_missing_required_warmwater_switch_is_complete():
+    # Binäre Steuer-Entity ohne value_on/off ist vollständig (implizit
+    # turn_on/turn_off) — der Contribute-Flow darf das nicht ablehnen.
+    assert missing_required_labels(COMPLETE_WARMWATER_SWITCH) == []
+
+
+def test_missing_required_heating_without_control_lists_it():
+    incomplete = dict(COMPLETE_HEATING_CLIMATE)
+    incomplete.pop("entity_control")
+    missing = missing_required_labels(incomplete)
+    assert missing == ["Steuerung (An/Aus)"]
+
+
+def test_aircon_extract_includes_cool_slots_when_present():
+    entity_map, value_map = extract_preset_maps(
+        {
+            "device_type": "aircon",
+            "entity_current_power_kw": "sensor.klima_power",
+            "entity_control": "climate.klima",
+            "value_on": "cool",
+            "value_off": "off",
+            "value_cool_on": "cool",
+            "value_cool_off": "off",
+        }
+    )
+    assert entity_map == {
+        "entity_current_power_kw": "sensor.klima_power",
+        "entity_control": "climate.klima",
+    }
+    assert value_map == {
+        "value_on": "cool",
+        "value_off": "off",
+        "value_cool_on": "cool",
+        "value_cool_off": "off",
+    }

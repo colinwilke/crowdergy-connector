@@ -55,6 +55,16 @@ HEATING_DEV = {
     "device_name": "WP",
     "device_type": "heating",
     "entity_current_power_kw": "sensor.wp_power",
+    "entity_control": "climate.wp",
+}
+
+# generic ist (wie haushalt) bewusst NICHT preset-fähig — Catch-all ohne
+# Slot-Spec. Dient hier als „nicht beitragbarer" Typ.
+GENERIC_DEV = {
+    "device_id": "dev-generic",
+    "device_name": "Sonstiges",
+    "device_type": "generic",
+    "entity_current_power_kw": "sensor.misc_power",
 }
 
 
@@ -82,19 +92,20 @@ def _response(status: int, payload: dict) -> httpx.Response:
 
 
 async def test_contribute_offers_all_preset_capable_types(hass: HomeAssistant):
-    """v0.2: Batterie taucht im Picker auf (vorher solar-only),
-    heating bleibt draußen (nicht preset-fähig)."""
-    flow = _make_flow(hass, [SOLAR_DEV, BATTERY_DEV, HEATING_DEV])
+    """Solar + Batterie + (seit #68) heating sind preset-fähig und tauchen
+    im Picker auf; generic (Catch-all ohne Spec) bleibt draußen."""
+    flow = _make_flow(hass, [SOLAR_DEV, BATTERY_DEV, HEATING_DEV, GENERIC_DEV])
     result = await flow.async_step_contribute_preset()
     assert result["type"] == "form"
     schema = result["data_schema"].schema
     selector_cfg = next(iter(schema.values())).config
     values = [o["value"] for o in selector_cfg["options"]]
-    assert values == ["dev-solar", "dev-bat"]
+    assert values == ["dev-solar", "dev-bat", "dev-heat"]
 
 
 async def test_contribute_without_capable_devices_aborts(hass: HomeAssistant):
-    flow = _make_flow(hass, [HEATING_DEV])
+    # Nur ein generic-Gerät → kein preset-fähiger Typ → Abbruch.
+    flow = _make_flow(hass, [GENERIC_DEV])
     result = await flow.async_step_contribute_preset()
     assert result["type"] == "abort"
     assert result["reason"] == "contribute_no_devices"
