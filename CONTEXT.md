@@ -15,7 +15,7 @@ Version: `manifest.json`.
 | `state_mirror.py` | `DeviceStateMirror`: active/on/cool-State + Hold-Tasks + `last_sse_event_at` |
 | `telemetry_composer.py` | Background-Loops (Heartbeat, Device-Mirror mit eigenem `_last_mirror_at`, State-Resync), `bootstrap_active_state()`, `push_outdoor_temp()`; Mirror ist auf Telemetrie-Consent gegated |
 | `device_field_spec.py` | SSOT für Device-Felder im create/update-Roundtrip (`build_payload(mode, …)`) |
-| `preset_spec.py` | Slot-Schema für Crowd-Presets (public Teil des Store-Vertrags, SSOT): `PRESET_SLOT_SPEC` je Typ (solar/grid/battery/wallbox; Slot-Arten entity/value/flag + `required`), `PRESET_VALUE_SLOTS` (box_add_device-Allowlist), `extract_preset_maps()` + `missing_required_labels()` für den Contribute-Pfad |
+| `preset_spec.py` | Slot-Schema für Crowd-Presets (public Teil des Store-Vertrags, SSOT): `PRESET_SLOT_SPEC` je Typ (solar/grid/battery/wallbox + heating/warmwater/aircon seit #68; Slot-Arten entity/value/flag + `required`), `PRESET_VALUE_SLOTS` (box_add_device-Allowlist), `extract_preset_maps()` + `missing_required_labels()` für den Contribute-Pfad |
 | `config_flow.py` | Pairing-Code-Onboarding (User erzeugt Code in der App → Flow claimt `POST /api/v1/connector/claim`, kein Email/Passwort im UI; Reauth ebenso per Code) + 3-Step-Geräte-Anlage + Nominatim-Reverse-Geocoding + Import-Flow für Box-Provisioning; Options-Flow persistiert sofort |
 | `provisioning.py` / `box_services.py` | Box-Pfade (nur mit `theothergas:`-YAML-Key) |
 | `const.py` | Domain, `DEVICE_TYPES`, `CONTROLLABLE_TYPES` (SSOT), `CONF_ENTITY_*`, `MAPPABLE_ENTITY_DOMAINS` (Allowlist), Intervalle |
@@ -119,7 +119,8 @@ Token-Ablauf UND reaktiv bei 401 (retry einmal).
 - **Consent-Gates:** ohne `consent_telemetry` kein Telemetrie-/
   Outdoor-Push; ohne `consent_remote_control` keine Steuer-Frames.
   Fehlende Flags = Alt-Verhalten (True).
-- **Contribute** (alle vier preset-fähigen Typen, Vollständigkeits-
+- **Contribute** (alle sieben preset-fähigen Typen — solar/grid/battery/
+  wallbox + heating/warmwater/aircon, Vollständigkeits-
   Gate `contribute_incomplete`) schickt `integration_domain` mit
   (`entity_mapper.dominant_integration_domain`) und
   `entity_map`/`value_map` per `preset_spec.extract_preset_maps`

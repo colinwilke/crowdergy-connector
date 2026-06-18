@@ -49,16 +49,25 @@ from .const import (
     CONF_ENTITY_BATTERY_MODE,
     CONF_ENTITY_BATTERY_POWER_SETPOINT,
     CONF_ENTITY_CHARGE_MODE,
+    CONF_ENTITY_CONTROL,
     CONF_ENTITY_CONTROL_HOLD,
+    CONF_ENTITY_COOL_CONTROL,
+    CONF_ENTITY_CURRENT_TEMP,
     CONF_ENTITY_ENERGY_DISCHARGED_TOTAL,
     CONF_ENTITY_ENERGY_TOTAL,
     CONF_ENTITY_POWER,
     CONF_ENTITY_POWER_2,
     CONF_ENTITY_SOC,
     CONF_ENTITY_VEHICLE_STATUS,
+    CONF_ENTITY_VORLAUF_SETPOINT,
+    CONF_ENTITY_VORLAUF_TEMP,
     CONF_INVERT_POWER_SIGN,
     CONF_VALUE_BATTERY_MODE_ACTIVE,
     CONF_VALUE_BATTERY_MODE_PASSIVE,
+    CONF_VALUE_COOL_OFF,
+    CONF_VALUE_COOL_ON,
+    CONF_VALUE_OFF,
+    CONF_VALUE_ON,
     CONF_VEHICLE_STATUS_VALUE_ERROR,
     CONF_VEHICLE_STATUS_VALUE_PLUGGED,
     CONF_VEHICLE_STATUS_VALUE_UNPLUGGED,
@@ -160,14 +169,73 @@ PRESET_SLOT_SPEC: dict[str, tuple[PresetSlot, ...]] = {
         PresetSlot(CONF_INVERT_POWER_SIGN, "flag", False, "Leistungs-Vorzeichen umkehren"),
         PresetSlot(CONF_ENTITY_CONTROL_HOLD, "value", False, "Hold-Modus"),
     ),
+    # ── Steuerbare thermische Lasten (#68, 2026-06-18) ──────────────────
+    # Gemeinsames Steuer-Muster: EINE Steuer-Entity (entity_control) +
+    # optionale on/off-Werte. value_on/value_off sind OPTIONAL, nicht
+    # required — bei binären Steuer-Entities (switch/input_boolean/light/
+    # fan) schaltet der Connector implizit per turn_on/turn_off, ein leeres
+    # value_on/off ist also legitim; nur select/climate/water_heater
+    # brauchen die Strings (command_dispatcher._write_control). Pflicht ist
+    # daher nur Leistung + Steuer-Entity (analog wallbox = kW + Lademodus).
+    # Anonymisierungssicher: nur diese spezifizierten Slots verlassen die
+    # Installation (entity-IDs + Integrations-Select-Strings, keine PII;
+    # `shares_hardware_with_device_id` ist install-spezifisch → NICHT hier).
+    "heating": (
+        PresetSlot(CONF_ENTITY_POWER, "entity", True, "Aktuelle Leistung (kW)"),
+        PresetSlot(CONF_ENTITY_CONTROL, "entity", True, "Steuerung (An/Aus)"),
+        PresetSlot(CONF_VALUE_ON, "value", False, "Steuerwert „An“"),
+        PresetSlot(CONF_VALUE_OFF, "value", False, "Steuerwert „Aus“"),
+        PresetSlot(CONF_ENTITY_CURRENT_TEMP, "entity", False, "Ist-Temperatur (°C)"),
+        PresetSlot(CONF_ENTITY_ENERGY_TOTAL, "entity", False, "Energiezähler (kWh)"),
+        # Modulierende WPs: Solver sendet einen Vorlauf-Sollwert pro Tick.
+        PresetSlot(
+            CONF_ENTITY_VORLAUF_SETPOINT, "entity", False,
+            "Vorlauf-Sollwert (°C, modulierend)",
+        ),
+        PresetSlot(CONF_ENTITY_VORLAUF_TEMP, "entity", False, "Vorlauf-Ist (°C, Sensor)"),
+        # Heizung-die-auch-kühlt (Dual-Mode): supports_cooling wird im
+        # Backend aus value_cool_on/aircon-Typ abgeleitet, nicht hier.
+        PresetSlot(CONF_ENTITY_COOL_CONTROL, "entity", False, "Kühl-Steuerung (separat)"),
+        PresetSlot(CONF_VALUE_COOL_ON, "value", False, "Kühlmodus-Wert „An“"),
+        PresetSlot(CONF_VALUE_COOL_OFF, "value", False, "Kühlmodus-Wert „Aus“"),
+        PresetSlot(CONF_INVERT_POWER_SIGN, "flag", False, "Leistungs-Vorzeichen umkehren"),
+        PresetSlot(CONF_ENTITY_CONTROL_HOLD, "value", False, "Hold-Modus"),
+    ),
+    "warmwater": (
+        PresetSlot(CONF_ENTITY_POWER, "entity", True, "Aktuelle Leistung (kW)"),
+        PresetSlot(CONF_ENTITY_CONTROL, "entity", True, "Steuerung (An/Aus)"),
+        PresetSlot(CONF_VALUE_ON, "value", False, "Steuerwert „An“"),
+        PresetSlot(CONF_VALUE_OFF, "value", False, "Steuerwert „Aus“"),
+        PresetSlot(CONF_ENTITY_CURRENT_TEMP, "entity", False, "Speicher-Temperatur (°C)"),
+        PresetSlot(CONF_ENTITY_ENERGY_TOTAL, "entity", False, "Energiezähler (kWh)"),
+        PresetSlot(CONF_INVERT_POWER_SIGN, "flag", False, "Leistungs-Vorzeichen umkehren"),
+        PresetSlot(CONF_ENTITY_CONTROL_HOLD, "value", False, "Hold-Modus"),
+    ),
+    "aircon": (
+        PresetSlot(CONF_ENTITY_POWER, "entity", True, "Aktuelle Leistung (kW)"),
+        PresetSlot(CONF_ENTITY_CONTROL, "entity", True, "Steuerung (Kühlen An/Aus)"),
+        PresetSlot(CONF_VALUE_ON, "value", False, "Steuerwert „An“"),
+        PresetSlot(CONF_VALUE_OFF, "value", False, "Steuerwert „Aus“"),
+        # supports_cooling ist für aircon backend-seitig immer True; eine
+        # separate Kühl-Entity ist optional (manche melden Kühlen über
+        # entity_control selbst).
+        PresetSlot(CONF_ENTITY_COOL_CONTROL, "entity", False, "Kühl-Steuerung (separat)"),
+        PresetSlot(CONF_VALUE_COOL_ON, "value", False, "Kühlmodus-Wert „An“"),
+        PresetSlot(CONF_VALUE_COOL_OFF, "value", False, "Kühlmodus-Wert „Aus“"),
+        PresetSlot(CONF_ENTITY_CURRENT_TEMP, "entity", False, "Raumtemperatur (°C)"),
+        PresetSlot(CONF_ENTITY_ENERGY_TOTAL, "entity", False, "Energiezähler (kWh)"),
+        PresetSlot(CONF_INVERT_POWER_SIGN, "flag", False, "Leistungs-Vorzeichen umkehren"),
+        PresetSlot(CONF_ENTITY_CONTROL_HOLD, "value", False, "Hold-Modus"),
+    ),
 }
 
 PRESET_CAPABLE_TYPES = frozenset(PRESET_SLOT_SPEC)
 
 # Allowlist der Nicht-Entity-Slots, die `box_add_device` akzeptiert —
 # Gegenstück zu MAPPABLE_ENTITY_DOMAINS (Default-DENY auch für Werte).
-# value_on/off (+cool) gehören heutigen Box-Typen nicht, bleiben aber
-# erlaubt, damit ein künftiger heating-/generic-Preset-Pfad nicht an
+# value_on/off (+cool) sind seit #68 über die heating/aircon-Spec
+# abgedeckt; die explizite Union bleibt als Backstop für `generic`
+# (noch ohne Spec), damit ein künftiger generic-Preset-Pfad nicht an
 # dieser Liste scheitert.
 PRESET_VALUE_SLOTS: frozenset[str] = frozenset(
     slot.key

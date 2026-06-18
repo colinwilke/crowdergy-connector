@@ -20,7 +20,8 @@ Promotion-Logik und Kuration bleiben im Backend hinter Auth
 
 1. **Self-Hosted-HA-User submitten ihre Mappings** („share setup" im
    Options-Flow) — seit v3.24.0 für alle preset-fähigen Typen
-   (solar, grid, battery, wallbox), mit Vollständigkeits-Gate.
+   (solar, grid, battery, wallbox; seit #68 auch heating, warmwater,
+   aircon), mit Vollständigkeits-Gate.
 2. **Staging statt Sofort-Veröffentlichung als Endzustand:** jede
    Submission ist eine Contribution-Zeile; das aggregierte Preset hat
    einen Status `staged` → `approved`. Staged Presets werden bewusst
@@ -70,6 +71,18 @@ Contribute-Flow; das Backend prüft das bewusst NICHT, s.u.):
   `value_battery_mode_passive`, `entity_battery_power_setpoint_w`
 - **wallbox**: `entity_current_power_kw`, `entity_energy_total`,
   `entity_charge_mode`
+- **heating / warmwater / aircon** (steuerbare thermische Lasten, #68):
+  `entity_current_power_kw`, `entity_control`. Optional: `value_on` /
+  `value_off` (Steuerwerte — bei binären Steuer-Entities wie
+  switch/input_boolean/light/fan **leer lassen**, der Connector schaltet
+  implizit per turn_on/turn_off; nur select/climate/water_heater brauchen
+  die Strings), `entity_current_temp_c`, `entity_energy_total`,
+  `invert_power_sign`. Zusätzlich heating/aircon: `entity_cool_control`,
+  `value_cool_on`, `value_cool_off` (Kühl-Seite — `supports_cooling`
+  leitet das Backend daraus + dem aircon-Typ ab, ist KEIN Preset-Slot);
+  nur heating: `entity_vorlauf_setpoint_c`, `entity_vorlauf_temp_c`
+  (modulierende WP). Pflicht ist also nur Leistung + Steuer-Entity
+  (analog wallbox = kW + Lademodus).
 
 kWh-Zähler bei battery/grid sind bewusst optional (nicht jede
 Integration exposed getrennte Lade-/Entlade-Zähler); Capabilities
