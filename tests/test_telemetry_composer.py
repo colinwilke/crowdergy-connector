@@ -120,6 +120,38 @@ async def test_mirror_does_not_reset_last_send_at(hass: HomeAssistant):
     assert coord._last_mirror_at["d1"] > sent_at
 
 
+async def test_mirror_strips_all_energy_delta_fields(hass: HomeAssistant):
+    """#62: der Mirror replayt das letzte Payload, muss aber JEDES
+    Energie-Δ-Feld droppen — den signed `energy_kwh_delta` UND das
+    unsigned `energy_kwh_in_delta`/`energy_kwh_out_delta`-Paar, das das
+    Backend bevorzugt und (signed) re-derivt. Vorher blieb das
+    unsigned Paar im Mirror → Backend zählte die Δ-kWh ein zweites Mal
+    (Solar-kWh-Counter zu hoch)."""
+    coord = make_coordinator(hass)
+    coord._last_sent_payload["d1"] = {
+        "power_kw": 0.4,
+        "is_online": True,
+        "energy_kwh_delta": 0.4,
+        "energy_kwh_in_delta": 0.4,
+        "energy_kwh_out_delta": 0.0,
+    }
+    coord._last_send_at["d1"] = time.time() - 70.0
+    coord._authenticated_request = AsyncMock(return_value=_response(200, {}))
+    composer = TelemetryComposer(coord)
+
+    await composer.mirror_once()
+
+    coord._authenticated_request.assert_awaited_once()
+    sent = coord._authenticated_request.await_args.kwargs["json"]
+    # Kein Δ-Feld darf im Mirror landen.
+    assert "energy_kwh_delta" not in sent
+    assert "energy_kwh_in_delta" not in sent
+    assert "energy_kwh_out_delta" not in sent
+    # Non-Δ-Felder reiten weiter mit (Freshness-Mirror).
+    assert sent["power_kw"] == 0.4
+    assert sent["is_online"] is True
+
+
 async def test_mirror_respects_own_interval(hass: HomeAssistant):
     """Frischer Mirror → kein erneuter PATCH, auch wenn der letzte
     echte Send lange her ist (Mirror-Kadenz bleibt 60 s)."""

@@ -39,6 +39,18 @@ PER_DEVICE_MIRROR_INTERVAL = 60.0
 STATE_RESYNC_INTERVAL = 90.0
 _HEARTBEAT_BACKOFF_MAX_S = 120.0
 
+# #62: the device-mirror replays the last real payload verbatim to keep
+# the backend freshness clock ticking for idle devices — but it must NOT
+# resend ANY energy-Δ field, or the backend lands that Δ a second time
+# (double-counting kWh). Both the legacy signed `energy_kwh_delta` AND the
+# unsigned `energy_kwh_in_delta`/`energy_kwh_out_delta` pair (sent since
+# v3.21.4; the backend prefers it and re-derives the signed Δ from it)
+# carry energy. They live here as a single set so a future Δ field is
+# stripped centrally by name instead of being forgotten one more time.
+_DELTA_FIELDS = frozenset(
+    {"energy_kwh_delta", "energy_kwh_in_delta", "energy_kwh_out_delta"}
+)
+
 
 class TelemetryComposer:
     """Owns die langlebigen Background-Tasks die Telemetry zum Backend
@@ -186,9 +198,12 @@ class TelemetryComposer:
         """Eine Mirror-Iteration: für jedes Gerät mit früherem Payload
         PATCHen wir den letzten Payload erneut wenn
         ≥ PER_DEVICE_MIRROR_INTERVAL seit dem letzten echten Send UND
-        dem letzten Mirror vergangen ist. `energy_kwh_delta` wird
-        weggelassen — das hat beim Original-Send seine Δ-kWh ins
-        Backend gebracht, doppelt zu senden würde doppelt zählen.
+        dem letzten Mirror vergangen ist. JEDES Energie-Δ-Feld
+        (`_DELTA_FIELDS`) wird weggelassen — der Original-Send hat seine
+        Δ-kWh schon ins Backend gebracht, ein zweites Mal würde doppelt
+        zählen (#62: vorher fiel nur `energy_kwh_delta` raus, das
+        unsigned `energy_kwh_in/out_delta`-Paar blieb drin → Backend
+        re-derivte daraus den signed Δ und zählte ihn erneut).
 
         CN-5 (2026-06-11): der Mirror bucht auf den EIGENEN Timestamp
         `_last_mirror_at`. Vorher hat er `_last_send_at` resettet und
@@ -217,7 +232,7 @@ class TelemetryComposer:
                 continue
             mirror = {
                 k: v for k, v in last_payload.items()
-                if k != "energy_kwh_delta"
+                if k not in _DELTA_FIELDS
             }
             # v3.26.0: skip Mirror, wenn Device backend-seitig weg ist
             if device_id in self.coord._backend_gone_device_ids:
