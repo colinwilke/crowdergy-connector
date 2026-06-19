@@ -232,6 +232,52 @@ _TELEMETRY_RETRY_STATUS = frozenset({429, 500, 502, 503, 504})
 gibt der Caller unverändert zurück — kein Retry auf permanente Fehler."""
 
 
+# ── Energie-Δ aus total_increasing-Zählern ───────────────────────────
+ENERGY_RESET_RATIO = 0.9
+"""Schwelle für die Reset- vs. Rausch-Unterscheidung eines
+`total_increasing`-Zählers (analog HA-Core-Statistik). Fällt der
+Zählerstand auf < diesem Anteil des letzten Werts, werten wir es als
+echten Meter-Reset (Firmware-Update/Geräte-Austausch); ein kleinerer
+Rückschritt ist Sensor-Rauschen/Rundung."""
+
+
+def _counter_delta(
+    current: float, prev: float | None
+) -> tuple[float | None, float]:
+    """Positiver kWh-Δ eines `total_increasing`-Zählers seit dem letzten
+    GESENDETEN Wert `prev`, plus die Baseline, die als Nächstes
+    gespeichert werden soll. Gibt `(delta, next_baseline)` zurück.
+
+    `delta` ist `None`, wenn noch keine Baseline existiert (erster Read
+    nach Coordinator-Restart) — dann gibt es nichts zu buchen.
+
+    **High-Water-Mark (Fix: Solar-kWh 10–15 % zu hoch):** ein
+    Rückschritt (`current < prev`) wird NICHT mit fortgeschriebener
+    Baseline auf den niedrigeren Wert quittiert. Sonst zählt der
+    Wieder-Anstieg ein zweites Mal und der Backend-Summen-Zähler driftet
+    systematisch nach oben — gerade Solar-Zähler jittern im µ-kWh-Bereich
+    und der aktive Inverter sendet quasi jeden Tick (Power-Schwelle), so
+    dass jeder Dip die Baseline regressierte und der Re-Anstieg doppelt
+    landete:
+
+    * `current >= prev`               → normaler Δ, Baseline = `current`.
+    * kleiner Dip (Rauschen)          → Δ = 0, Baseline GEHALTEN (`prev`).
+    * großer Sturz (Meter-Reset)      → Δ = 0, Baseline neu = `current`
+      (ab dem nächsten Tick wieder ab `current` zählen, KEIN Spike vom
+      Re-Anstieg auf den alten Stand).
+    """
+    if prev is None:
+        return None, current
+    raw = current - prev
+    if raw >= 0:
+        return raw, current
+    if current >= ENERGY_RESET_RATIO * prev:
+        # Kleiner Rückschritt → Sensor-Rauschen: kein Δ, Baseline halten.
+        return 0.0, prev
+    # Großer Sturz → echter Zähler-Reset: neu baseline-n, nichts buchen.
+    return 0.0, current
+
+
 # ── #19 Proaktives Token-Refresh ─────────────────────────────────────
 PROACTIVE_REFRESH_MARGIN_S = 120.0
 """Refresh das Access-Token proaktiv, sobald es in ≤ dieser Spanne
@@ -1294,16 +1340,21 @@ class CrowdergyCoordinator(CommandDispatcherMixin, DataUpdateCoordinator[dict[st
             )
             in_delta: float | None = None
             out_delta: float | None = None
+            # Baseline, die nach erfolgreichem Send gespeichert wird —
+            # High-Water-Mark-aware (siehe `_counter_delta`), damit ein
+            # Zähler-Dip die Baseline NICHT regressiert (sonst doppelt
+            # gezählter Re-Anstieg → Solar-kWh 10–15 % zu hoch).
+            next_prev_in = energy_kwh_total
+            next_prev_out = energy_kwh_total_out
             if energy_kwh_total is not None:
-                prev_in = self._prev_energy_kwh.get(device_id)
-                if prev_in is not None:
-                    raw = energy_kwh_total - prev_in
-                    in_delta = raw if raw > 0 else 0.0
+                in_delta, next_prev_in = _counter_delta(
+                    energy_kwh_total, self._prev_energy_kwh.get(device_id)
+                )
             if energy_kwh_total_out is not None:
-                prev_out = self._prev_energy_kwh_discharged.get(device_id)
-                if prev_out is not None:
-                    raw = energy_kwh_total_out - prev_out
-                    out_delta = raw if raw > 0 else 0.0
+                out_delta, next_prev_out = _counter_delta(
+                    energy_kwh_total_out,
+                    self._prev_energy_kwh_discharged.get(device_id),
+                )
             # E2E-Konvention 2026-06-11 (v3.21.4): zwei UNSIGNED
             # Felder pro Tick, eines pro Richtung. Backend ≥ heutiger
             # Deploy weiß was zu tun ist (deriviert signed
@@ -1420,10 +1471,13 @@ class CrowdergyCoordinator(CommandDispatcherMixin, DataUpdateCoordinator[dict[st
                     self._last_send_at[device_id] = time.time()
                     self._last_sent_hash[device_id] = self._payload_hash(payload)
                     if energy_kwh_total is not None:
-                        self._prev_energy_kwh[device_id] = energy_kwh_total
+                        # next_prev_in = energy_kwh_total bei Anstieg/Reset,
+                        # = alter Wert bei einem Rausch-Dip (Baseline halten,
+                        # nicht auf den niedrigeren Wert regressieren).
+                        self._prev_energy_kwh[device_id] = next_prev_in
                     if energy_kwh_total_out is not None:
                         self._prev_energy_kwh_discharged[device_id] = (
-                            energy_kwh_total_out
+                            next_prev_out
                         )
                 except httpx.HTTPStatusError as err:
                     sc = err.response.status_code
