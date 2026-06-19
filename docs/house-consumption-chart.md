@@ -195,6 +195,85 @@ the wallboxes not behind an HC-grid anchor are added).
   degraded. The allocator path is self-consistent by construction →
   always `false`.
 
+## Live house-consumption value (#63)
+
+The daily chart above answers "where did the home's power come from over the
+day". The **live** counterpart answers "how much is the household consuming
+*right now*" — the instantaneous Haushalt slice the iOS HomeView hexagon and
+the EnergyBalanceTile used to each re-derive from the per-device live power.
+Those three iOS derivations drifted on cascade-awareness, sign conventions and
+`generic` handling; the backend now computes the value **once** as the single
+source of truth, cascade-aware and consistent with `home_total` above.
+
+### Definition
+
+```
+house_consumption_kw = max(0, home_total
+                              − heatpump (heating + warmwater + aircon)
+                              − wallbox
+                              − generic)
+```
+
+`home_total` is the SAME vendor (HC-triade) / allocator (net-flow)
+decomposition the daily chart runs — same `_separate_wallbox_ids` #66
+classifier, same `compute_house_flows` / `compute_house_flows_from_net` — fed
+**one slot built from each device's latest fresh telemetry row** instead of
+date-binned slot-averages. Subtracting the individually-metered loads behind
+the meter leaves the unmetered household baseload (lights, fridge, standby).
+
+- A **cascade** wallbox is already inside `Σ HC`/`home_total`; subtracting
+  `wallbox` nets it out of the household.
+- A **separate** wallbox is *added* into `home_total` (`Σ HC + wallbox`) AND
+  subtracted here → cancels, so only the behind-the-meter remainder counts.
+- An explicit `haushalt` meter is **not** read for this value: the residual
+  IS the household by definition. This deliberately collapses the iOS
+  Case-A-meter / Case-B-residual split into the one definition that always
+  stays consistent with `home_total`.
+- Result clamped ≥ 0 (metered loads exceeding the reconstructed total →
+  slot-average sign ambiguity / a missing source meter; reads better as 0).
+
+### Transport
+
+- **`GET /api/v1/users/me/energy/live`** → `LiveHouseConsumption`:
+
+  ```jsonc
+  {
+    "house_consumption_kw": 1.3,   // household baseload; null = no usable balance
+    "home_total_kw": 6.5,          // total site consumption (mint ceiling); null with source=none
+    "wallbox_total_kw": 3.5,       // current wallbox draw (for labelling)
+    "source": "vendor",            // "vendor" | "allocator" | "none"
+    "as_of": "2026-06-18T12:00:30Z"// newest contributing telemetry ts (staleness gauge)
+  }
+  ```
+
+  iOS seeds the hexagon Haushalt node from this on load.
+
+- **SSE `house_consumption` frame** — pushed on the existing `/stream`
+  channel whenever a *meaningful* telemetry change lands (gated on the
+  near-duplicate detector + a device type in the home balance, so it fires on
+  real changes, not every 30 s heartbeat). Same `LiveHouseConsumption` body
+  under `data`. iOS keeps the node live off this frame instead of
+  re-deriving the residual.
+
+### Liveness / source rules
+
+- A device contributes its latest power only if it reported within ~5 min and
+  is not explicitly `is_online=false` (a dead connector must not pin a stale
+  number — mirrors the `/me/ticker` liveness gate).
+- Requires at least one **fresh grid** device (the boundary meter); without a
+  grid anchor the balance is unanchored → `source="none"`,
+  `house_consumption_kw=null` (matches iOS' old "no top grid online → nil").
+- Unlike the daily chart, **solar is not required** — a grid-only home still
+  has a meaningful household residual (`grid import − metered loads`).
+
+### iOS adoption (consumer task, iOS lane)
+
+Backlog #63 backend side is done. iOS should render the Haushalt node from
+`house_consumption_kw` (endpoint seed + `house_consumption` SSE frame) and
+retire the three local derivations (`HomeRenderState.computeHaushaltKW`, the
+`EnergyBalanceTile.Slices` residual, the DeviceTile reads). Until then the
+iOS computed-fallback stays and the backend value is purely additive.
+
 ## Known Phase-1 limitations
 
 - Flows are computed on slot-**averages**, so a slot where the battery
