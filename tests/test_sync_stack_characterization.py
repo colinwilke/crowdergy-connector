@@ -22,6 +22,7 @@ from __future__ import annotations
 import time
 from unittest.mock import AsyncMock
 
+import pytest
 from homeassistant.core import HomeAssistant
 from pytest_homeassistant_custom_component.common import (
     MockConfigEntry,
@@ -42,6 +43,7 @@ from custom_components.theothergas.coordinator import (
     IDENTICAL_HEARTBEAT_INTERVAL,
     PER_DEVICE_HEARTBEAT_INTERVAL,
     CrowdergyCoordinator,
+    _counter_delta,
 )
 from custom_components.theothergas.state_mirror import DeviceStateMirror
 
@@ -385,3 +387,57 @@ async def test_dispatch_ping_updates_liveness_clock(hass: HomeAssistant):
     coord.state.last_sse_event_at = 0.0
     await coord._handle_ws_message({"type": "ping"})
     assert coord.state.last_sse_event_at > 0.0
+
+
+# ════════════════════════════════════════════════════════════════════
+# E. `_counter_delta` — High-Water-Mark-Δ aus total_increasing-Zählern
+#    (Fix: Solar-/PV-kWh 10–15 % zu hoch trotz Mirror-Dedup #62)
+# ════════════════════════════════════════════════════════════════════
+
+
+def test_counter_delta_first_read_has_no_delta():
+    """Ohne Baseline (erster Read nach Restart) gibt es nichts zu buchen,
+    aber die Baseline wird auf den aktuellen Stand gesetzt."""
+    delta, next_prev = _counter_delta(123.4, None)
+    assert delta is None
+    assert next_prev == 123.4
+
+
+def test_counter_delta_normal_increase():
+    delta, next_prev = _counter_delta(100.5, 100.0)
+    assert delta == pytest.approx(0.5)
+    assert next_prev == 100.5
+
+
+def test_counter_delta_noise_dip_holds_baseline():
+    """Kernfall des Fixes: ein kleiner Rückschritt (Sensor-Rauschen) darf
+    KEINEN negativen Δ buchen UND die Baseline NICHT regressieren —
+    sonst zählt der Re-Anstieg ein zweites Mal."""
+    delta, next_prev = _counter_delta(99.99, 100.0)
+    assert delta == 0.0
+    # High-Water-Mark gehalten, nicht auf 99.99 gefallen.
+    assert next_prev == 100.0
+
+
+def test_counter_delta_noise_dip_then_recovery_counts_once():
+    """End-to-End des Über-Zähler-Bugs: 100 → 99.99 (Dip) → 100.10.
+    Korrekt summiert sind das +0.10, NICHT +0.11 (Dip + voller
+    Re-Anstieg)."""
+    prev = 100.0
+    d1, prev = _counter_delta(99.99, prev)   # Dip
+    d2, prev = _counter_delta(100.10, prev)  # Erholung + echte Produktion
+    assert d1 == 0.0
+    assert d2 == pytest.approx(0.10)
+    assert (d1 + d2) == pytest.approx(0.10)
+
+
+def test_counter_delta_large_drop_is_meter_reset():
+    """Ein großer Sturz (< 90 % des letzten Werts) ist ein echter
+    Zähler-Reset: kein Δ buchen, aber neu baseline-n, damit der nächste
+    Tick wieder ab `current` zählt (kein Spike vom Re-Anstieg)."""
+    delta, next_prev = _counter_delta(2.0, 100.0)
+    assert delta == 0.0
+    assert next_prev == 2.0
+    # Folge-Tick zählt wieder normal ab dem Reset-Punkt.
+    d2, _ = _counter_delta(2.5, next_prev)
+    assert d2 == pytest.approx(0.5)

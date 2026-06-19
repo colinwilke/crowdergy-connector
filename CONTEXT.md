@@ -92,6 +92,20 @@ Version: `manifest.json`.
 schickt explizite `energy_kwh_in_delta` + `energy_kwh_out_delta` (ab
 v3.21.4); das Backend deriviert den signed Wert.
 
+**Δ-Berechnung (`_counter_delta`, High-Water-Mark):** der Per-Tick-Δ
+ist `current − prev` gegen den letzten GESENDETEN Stand
+(`_prev_energy_kwh`/`_prev_energy_kwh_discharged`, fortgeschrieben nur
+bei erfolgreichem Send). Ein Rückschritt des `total_increasing`-Zählers
+regressiert die Baseline NICHT: kleiner Dip (≥ `ENERGY_RESET_RATIO`=0.9
+des letzten Werts) = Sensor-Rauschen → Δ=0, Baseline gehalten; großer
+Sturz (< 90 %) = echter Meter-Reset → Δ=0, Baseline neu auf `current`.
+**Bug-Fix:** vorher wurde jeder Dip mit `in_delta=0` quittiert, ABER die
+Baseline auf den niedrigeren Wert fortgeschrieben → der Re-Anstieg
+zählte doppelt. Bei jitternden Solar-Zählern + dem quasi jeden Tick
+sendenden aktiven Inverter (Power-Schwelle 50 W) summierte sich das zu
+~10–15 % zu hohen PV-kWh (zusätzlich zum bereits gefixten Mirror-Double-
+Count #62).
+
 ## Backend-API (alle Bearer im `Authorization`-Header)
 
 `POST /auth/login`, `POST /auth/refresh`, `GET|POST /devices`,
