@@ -29,6 +29,7 @@ from .const import (
     CONF_DEVICE_TYPE,
     CONF_DEVICES,
     CONF_ENTITY_CHARGE_MODE,
+    CONF_ENTITY_WALLBOX_CHARGE_CURRENT,
     CONF_ENTITY_CONTROL,
     CONF_ENTITY_CONTROL_HOLD,
     CONF_ENTITY_VORLAUF_SETPOINT,
@@ -382,11 +383,22 @@ class CommandDispatcherMixin:
                         float(setpoint_kw) if setpoint_kw is not None else 0.0,
                     )
                 else:
-                    # Wallbox: bisher unverändert.
+                    # Wallbox: Lademodus-String + optionaler Ladestrom.
+                    # `current_a` (ganze Ampere) kommt vom Backend NUR im
+                    # Power-Modus auf Boxen mit gemappter Ladestrom-Entity
+                    # (2026-06-20). Connector schreibt ihn VOR dem Modus.
                     if value is None:
                         self._cancel_charge_mode_hold(device_id)
                     else:
-                        await self._apply_charge_mode(device_id, str(value))
+                        current_a = data.get("current_a")
+                        await self._apply_charge_mode(
+                            device_id, str(value),
+                            charge_current_a=(
+                                int(current_a)
+                                if current_a is not None
+                                else None
+                            ),
+                        )
 
     async def _apply_preset_from_backend(self, device_id: str | None) -> None:
         """#40 (Folge von Backend #38): auf ein `device_update` das vom
@@ -474,7 +486,12 @@ class CommandDispatcherMixin:
             )
 
     async def _apply_charge_mode(
-        self, device_id: str, mode: str, *, schedule_hold: bool = True
+        self,
+        device_id: str,
+        mode: str,
+        *,
+        schedule_hold: bool = True,
+        charge_current_a: int | None = None,
     ) -> None:
         """Write the device's configured entity_charge_mode entity.
 
@@ -485,6 +502,15 @@ class CommandDispatcherMixin:
           * `number` / `input_number` — `number.set_value` with the
             mode string parsed as a float. Used by batteries whose
             mode-entity is a number taking e.g. +5000 / 0 / -5000 W.
+
+        `charge_current_a` (2026-06-20, wallbox only): when the backend
+        sent an AI-chosen charging current (whole Amps, Power mode on a
+        box with a mapped `entity_wallbox_charge_current_a`), it's
+        written to that number entity BEFORE the mode select — so the
+        box already has the right current when it flips to Power. None
+        leaves the current entity untouched (Solar/Lock, or a binary
+        full-power box). The held value is cached so the hold-loop
+        re-writes the current alongside the mode.
 
         `schedule_hold=True` (the default for fresh SSE commands)
         replaces any existing hold-loop task for this device with one
@@ -533,6 +559,40 @@ class CommandDispatcherMixin:
         # mode_hold` below loses the cancel race.
         if schedule_hold:
             self.state.held_charge_mode[device_id] = mode
+            if charge_current_a is not None:
+                self.state.held_charge_current[device_id] = int(charge_current_a)
+            else:
+                self.state.held_charge_current.pop(device_id, None)
+
+        # Wallbox-Ladestrom (Ampere) ZUERST schreiben, damit die Box den
+        # Strom schon hat wenn der Power-Modus gleich darunter greift
+        # (analog Battery-Setpoint vor Lademodus). Eigenes try/except —
+        # ein fehlender Strom-Write darf den Modus-Write nie blockieren.
+        if charge_current_a is not None:
+            current_entity = (
+                dev.get(CONF_ENTITY_WALLBOX_CHARGE_CURRENT, "") or ""
+            )
+            if current_entity:
+                cur_domain = current_entity.split(".", 1)[0]
+                _LOGGER.log(
+                    log_level,
+                    "set_charge_mode: %s → %d A",
+                    current_entity, int(charge_current_a),
+                )
+                try:
+                    await self.hass.services.async_call(
+                        cur_domain, "set_value",
+                        {
+                            "entity_id": current_entity,
+                            "value": int(charge_current_a),
+                        },
+                        blocking=True,
+                    )
+                except Exception as err:  # noqa: BLE001
+                    _LOGGER.exception(
+                        "set_charge_mode: charge-current write FAILED "
+                        "for %s: %s", current_entity, err,
+                    )
         try:
             if domain in ("select", "input_select"):
                 await self.hass.services.async_call(
@@ -599,6 +659,7 @@ class CommandDispatcherMixin:
         inverter should follow its own logic) and on device removal.
         """
         self.state.held_charge_mode.pop(device_id, None)
+        self.state.held_charge_current.pop(device_id, None)
         task = self.state.charge_mode_hold_tasks.pop(device_id, None)
         if task is not None and not task.done():
             task.cancel()
@@ -639,9 +700,12 @@ class CommandDispatcherMixin:
                         device_id, staleness, SSE_STALE_THRESHOLD_S,
                     )
                     self.state.held_charge_mode.pop(device_id, None)
+                    self.state.held_charge_current.pop(device_id, None)
                     return
+                held_current = self.state.held_charge_current.get(device_id)
                 await self._apply_charge_mode(
-                    device_id, mode, schedule_hold=False
+                    device_id, mode, schedule_hold=False,
+                    charge_current_a=held_current,
                 )
                 await asyncio.sleep(CHARGE_MODE_HOLD_INTERVAL)
         except asyncio.CancelledError:

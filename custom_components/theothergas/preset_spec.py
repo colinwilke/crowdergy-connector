@@ -49,6 +49,7 @@ from .const import (
     CONF_ENTITY_BATTERY_MODE,
     CONF_ENTITY_BATTERY_POWER_SETPOINT,
     CONF_ENTITY_CHARGE_MODE,
+    CONF_ENTITY_WALLBOX_CHARGE_CURRENT,
     CONF_ENTITY_CONTROL,
     CONF_ENTITY_CONTROL_HOLD,
     CONF_ENTITY_COOL_CONTROL,
@@ -151,6 +152,13 @@ PRESET_SLOT_SPEC: dict[str, tuple[PresetSlot, ...]] = {
         PresetSlot(
             CONF_CHARGE_MODE_VALUE_SOLAR,
             "value", False, "Lademodus-Wert „Solaroptimiert“",
+        ),
+        # Optional: Ladestrom-Steuerung (2026-06-20). Number-Entity die
+        # den Ladestrom in Ampere (6–16) setzt — wenn gemappt, wählt der
+        # AI im „An"-Modus den optimalen Strom statt nur volle Leistung.
+        PresetSlot(
+            CONF_ENTITY_WALLBOX_CHARGE_CURRENT,
+            "entity", False, "Ladestrom-Number (A, 6–16)",
         ),
         PresetSlot(CONF_ENTITY_SOC, "entity", False, "Ladestand Fahrzeug (SoC %)"),
         PresetSlot(CONF_ENTITY_VEHICLE_STATUS, "entity", False, "Fahrzeugstatus"),

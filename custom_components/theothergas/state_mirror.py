@@ -59,6 +59,13 @@ class DeviceStateMirror:
     # für den charge_mode_hold_loop.
     held_charge_mode: dict[str, str] = field(default_factory=dict)
 
+    # Letzter Wallbox-Ladestrom (ganze Ampere) pro Device, den der
+    # Solver im „An"/Power-Modus gewählt hat. Wird vom charge_mode_hold_
+    # loop zusammen mit dem Modus re-geschrieben (manche Boxen resetten
+    # den Strom). Nur gesetzt für Boxen mit gemappter Ladestrom-Entity
+    # im Power-Modus; sonst leer (= volle Leistung / kein Strom-Write).
+    held_charge_current: dict[str, int] = field(default_factory=dict)
+
     # Wall-Clock des letzten SSE-Events (any Type). Hold-Loops gaten
     # darauf via SSE_STALE_THRESHOLD_S damit ein Backend-Outage die
     # periodische Re-Write-Logik pausiert.

@@ -45,6 +45,7 @@ from .const import (
     CONF_CITY,
     CONF_DISTRICT,
     CONF_ENTITY_COOL_CONTROL,
+    CONF_ENTITY_WALLBOX_CHARGE_CURRENT,
     CONF_REGION,
     CONF_SHARES_HARDWARE_WITH,
     CONF_SUPPORTS_COOLING,
@@ -91,6 +92,18 @@ def _compute_supports_cooling(entity_input: dict[str, Any], dtype: str) -> bool:
         return True
     cool_on = entity_input.get(CONF_VALUE_COOL_ON, "") or ""
     return bool(cool_on or entity_input.get(CONF_SUPPORTS_COOLING, False))
+
+
+def _compute_supports_charge_current(
+    entity_input: dict[str, Any], dtype: str
+) -> bool:
+    """Wallbox-Ladestrom-Capability = der User hat eine Ladestrom-
+    Number-Entity gemappt. Die Entity-ID selbst bleibt Connector-lokal
+    (HA-Scope); ans Backend geht nur das abgeleitete Bool, damit der
+    Solver den Strom variabel wählen darf. Leer → False = Binär-Box."""
+    return bool(
+        (entity_input.get(CONF_ENTITY_WALLBOX_CHARGE_CURRENT, "") or "").strip()
+    )
 
 
 def _compute_value_cool_off(entity_input: dict[str, Any], dtype: str) -> str:
@@ -173,6 +186,17 @@ SPEC: tuple[DeviceField, ...] = (
         conf_key=CONF_CHARGE_MODE_VALUE_SOLAR,
         types=_WALLBOX_ONLY,
         on_create="always", on_update="always",
+    ),
+
+    # Wallbox-Ladestrom-Capability (2026-06-20): abgeleitetes Bool ob
+    # der User eine Ladestrom-Number-Entity gemappt hat. `always` in
+    # beide Richtungen — Clearen der Entity sendet False → Backend
+    # fällt auf die Binär-Box (volle Leistung) zurück.
+    DeviceField(
+        api_name="wallbox_supports_charge_current",
+        types=_WALLBOX_ONLY,
+        on_create="always", on_update="always",
+        compute=_compute_supports_charge_current,
     ),
 
     # Cooling-Capability + cooling-side Entity/Values (Heating + Aircon).

@@ -345,7 +345,27 @@ async def test_dispatch_command_wallbox_reads_value(hass: HomeAssistant):
             "value": "solar",
         }
     )
-    coord._apply_charge_mode.assert_awaited_once_with("w1", "solar")
+    coord._apply_charge_mode.assert_awaited_once_with(
+        "w1", "solar", charge_current_a=None
+    )
+
+
+async def test_dispatch_command_wallbox_forwards_charge_current(hass: HomeAssistant):
+    """2026-06-20: ein Power-Mode-Frame mit `current_a` reicht den
+    Ladestrom (ganze Ampere) an `_apply_charge_mode` durch."""
+    coord = _routing_coordinator(hass, [{CONF_DEVICE_ID: "w1", CONF_DEVICE_TYPE: "wallbox"}])
+    await coord._handle_ws_message(
+        {
+            "type": "command",
+            "action": "set_charge_mode",
+            "device_id": "w1",
+            "value": "Power Mode",
+            "current_a": 10,
+        }
+    )
+    coord._apply_charge_mode.assert_awaited_once_with(
+        "w1", "Power Mode", charge_current_a=10
+    )
 
 
 async def test_dispatch_command_unknown_device_is_ignored(hass: HomeAssistant):
