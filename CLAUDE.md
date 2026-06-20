@@ -43,6 +43,28 @@ dort: Cluster C (#16–#22).
   Box-Pfaden unberührt.
 - **Wallbox:** Pre-AI-Lademodus wird bei AI-OFF NICHT restauriert
   (Restore-Pfad entfernt, Backend-Spalte existiert nicht mehr).
+- **Wallbox variabler Ladestrom (User 2026-06-20, Branch
+  `claude/laughing-turing-4tiimd`, analog Batterie-Power-Setpoint):**
+  Optionale Number-Entity `CONF_ENTITY_WALLBOX_CHARGE_CURRENT`
+  (`entity_wallbox_charge_current_a`, Ampere 6–16) im Wallbox-
+  Control-Step (`config_flow_schemas._entities_schema` + `_ENTITY_SELECTORS`,
+  domain number/input_number, KEIN device_class-Filter — Control-Slot).
+  Mappt der User sie, leitet `device_field_spec._compute_supports_charge_current`
+  daraus das Bool `wallbox_supports_charge_current` ab und sendet es im
+  create/update-Roundtrip (Entity-ID selbst bleibt Connector-lokal); das
+  Backend lässt den Solver dann den Strom variabel wählen. Dispatch
+  (`command_dispatcher`): das `set_charge_mode`-Command trägt im
+  **„An"/Power-Modus** zusätzlich `current_a` — `_apply_charge_mode`
+  schreibt den Strom (`number.set_value`) ZUERST, dann den Modus-Select
+  (analog Battery: Setpoint vor Modus). `state.held_charge_current` cached
+  ihn, die `_charge_mode_hold_loop` re-schreibt Strom+Modus zusammen.
+  **Solar/Lock tragen nie einen Strom; Solarmode unverändert.** Leer =
+  „An" = volle Leistung (altes Verhalten). Preset-Slot
+  `entity_wallbox_charge_current_a` (optional). Tests:
+  `test_sync_stack_characterization` (Dispatch forwards current),
+  `test_hold_loops_and_eviction` (write-current-before-mode, held-current
+  re-write, Solar clears held current). Backend-Seite: PR backend (gleiche
+  Branch).
 - **Config-Flow Edit-Felder:** `vol.Optional(..., description=
   {"suggested_value": ...})`, NIE `default=` (HA re-injected, Felder
   werden unlöschbar).

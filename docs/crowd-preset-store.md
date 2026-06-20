@@ -70,7 +70,10 @@ Contribute-Flow; das Backend prüft das bewusst NICHT, s.u.):
   `entity_battery_mode`, `value_battery_mode_active`,
   `value_battery_mode_passive`, `entity_battery_power_setpoint_w`
 - **wallbox**: `entity_current_power_kw`, `entity_energy_total`,
-  `entity_charge_mode`
+  `entity_charge_mode`. Optional: `entity_wallbox_charge_current_a`
+  (Number-Entity Ampere 6–16) — wenn gemappt, wählt der AI im
+  „An"/Power-Modus den Ladestrom variabel statt nur volle Leistung
+  (2026-06-20).
 - **heating / warmwater / aircon** (steuerbare thermische Lasten, #68):
   `entity_current_power_kw`, `entity_control`. Optional: `value_on` /
   `value_off` (Steuerwerte — bei binären Steuer-Entities wie

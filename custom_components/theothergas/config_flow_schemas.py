@@ -19,6 +19,7 @@ from .const import (
     CONFIG_MODE_CLIMATE,
     CONFIG_MODE_MANUAL,
     CONF_ENTITY_CHARGE_MODE,
+    CONF_ENTITY_WALLBOX_CHARGE_CURRENT,
     CONF_ENTITY_CLIMATE,
     CONF_ENTITY_WATER_HEATER,
     CONF_ENTITY_CONTROL,
@@ -228,6 +229,14 @@ _ENTITY_SELECTORS: dict[str, selector.EntitySelector] = {
     # integration's own charge-mode select).
     CONF_ENTITY_CHARGE_MODE: selector.EntitySelector(
         selector.EntitySelectorConfig(domain=["select", "input_select"])
+    ),
+    # Wallbox-only OPTIONAL Ladestrom-Steuerung (2026-06-20). Number-
+    # Entity die den Ladestrom in Ampere setzt (typisch 6–16 A). Kein
+    # device_class-Filter (Control-Slot — #46-Regel: nur eindeutige
+    # Read-Slots filtern; current-device_class ist nicht überall
+    # gesetzt). Wenn gemappt, lädt der Solver variabel im „An"-Modus.
+    CONF_ENTITY_WALLBOX_CHARGE_CURRENT: selector.EntitySelector(
+        selector.EntitySelectorConfig(domain=["number", "input_number"])
     ),
     # Energy meter — HA `total_increasing` kWh sensor (lifetime
     # cumulative). Restricted to plain sensor entities; the backend
@@ -462,9 +471,16 @@ def _entities_schema(
         # Lademodus already covers via the Lock option, and users
         # found being asked twice for what looked like the same
         # entity confusing.
+        # Optional Ladestrom-Entity (2026-06-20): mappt der User hier
+        # eine Number-Entity (Ampere), darf der Solver im „An"-Modus mit
+        # variablem Strom (6–16 A) laden statt nur volle Leistung; der
+        # Connector schreibt den AI-Strom dann hierher. Leer = „An" =
+        # volle Leistung (unverändert). Solar/Lock bleiben stromlos.
         control_schema = vol.Schema({
             _entity_field(CONF_ENTITY_CHARGE_MODE, d):
                 _ENTITY_SELECTORS[CONF_ENTITY_CHARGE_MODE],
+            _entity_field(CONF_ENTITY_WALLBOX_CHARGE_CURRENT, d):
+                _ENTITY_SELECTORS[CONF_ENTITY_WALLBOX_CHARGE_CURRENT],
         })
         schema_dict[vol.Required("control_section")] = section(
             control_schema, {"collapsed": False}

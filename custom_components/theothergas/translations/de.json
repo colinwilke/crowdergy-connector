@@ -138,6 +138,7 @@
               "entity_vorlauf_temp_c": "Vorlauf-Temperatur (optional)",
               "entity_vorlauf_setpoint_c": "Vorlauf-Setpoint (modulierende Heizung)",
               "entity_charge_mode": "Lademodus-Entität",
+              "entity_wallbox_charge_current_a": "Ladestrom (optional)",
               "entity_water_heater": "Warmwasser-Entität"
             },
             "data_description": {
@@ -147,6 +148,7 @@
               "entity_vorlauf_temp_c": "Optionaler Vorlauf-Temperatur-Sensor der Heizung (z. B. 'Actual Temperature HK1' bei Stiebel, 'Vorlauf-Soll' bei Vaillant). Verfeinert die COP-Schätzung gegenüber der pauschalen W35-Annahme — 5–10 % bessere Plan-Qualität bei aktiv geregelter Heizkurve. Leer lassen wenn dein WP-Modell keinen VL-Sensor freilegt.",
               "entity_vorlauf_setpoint_c": "Nur bei MANUELL-Modus relevant: schreibbare Entität für den Vorlauf-Setpoint deiner Heizung (typisch eine number.* oder input_number.* mit °C-Range 25–55). Crowdergy AI moduliert dann den Vorlauf statt nur AN/AUS — sanfter, kein hartes Aus mitten im Heizbetrieb, löst Stiebel-Min-Run-Time-Problem. Bei CLIMATE-Modus leer lassen: dort wird der Setpoint automatisch an die Climate-Entität geschickt (set_temperature).",
               "entity_charge_mode": "Wallbox: Lademodus-Select (Lock/Power/Solar). Batterie: Modi-Entität (typisch Number für +max / 0 / -max W).",
+              "entity_wallbox_charge_current_a": "Nur Wallbox, optional: eine number.* / input_number.* Entität die den Ladestrom in Ampere setzt (typisch 6–16 A). Wenn gemappt, wählt die Crowdergy AI im „An\"/Power-Modus den Strom passend zum PV-Überschuss statt nur volle Leistung. Leer = „An" bedeutet volle Leistung (unverändert). Solar/Lock schreiben nie einen Strom.",
               "entity_water_heater": "HA's water_heater-Entität für deine Brauchwasser-WP. Analog Climate-Entität — Steuerung, Modi und Ist-Temperatur kommen automatisch."
             }
           }
@@ -408,6 +410,7 @@
               "entity_vorlauf_temp_c": "Vorlauf-Temperatur (optional)",
               "entity_vorlauf_setpoint_c": "Vorlauf-Setpoint (modulierende Heizung)",
               "entity_charge_mode": "Lademodus-Entität",
+              "entity_wallbox_charge_current_a": "Ladestrom (optional)",
               "entity_water_heater": "Warmwasser-Entität"
             },
             "data_description": {
@@ -417,6 +420,7 @@
               "entity_vorlauf_temp_c": "Optionaler Vorlauf-Temperatur-Sensor der Heizung (z. B. 'Actual Temperature HK1' bei Stiebel, 'Vorlauf-Soll' bei Vaillant). Verfeinert die COP-Schätzung gegenüber der pauschalen W35-Annahme — 5–10 % bessere Plan-Qualität bei aktiv geregelter Heizkurve. Leer lassen wenn dein WP-Modell keinen VL-Sensor freilegt.",
               "entity_vorlauf_setpoint_c": "Nur bei MANUELL-Modus relevant: schreibbare Entität für den Vorlauf-Setpoint deiner Heizung (typisch eine number.* oder input_number.* mit °C-Range 25–55). Crowdergy AI moduliert dann den Vorlauf statt nur AN/AUS — sanfter, kein hartes Aus mitten im Heizbetrieb, löst Stiebel-Min-Run-Time-Problem. Bei CLIMATE-Modus leer lassen: dort wird der Setpoint automatisch an die Climate-Entität geschickt (set_temperature).",
               "entity_charge_mode": "Wallbox: Lademodus-Select (Lock/Power/Solar). Batterie: Modi-Entität (typisch Number für +max / 0 / -max W).",
+              "entity_wallbox_charge_current_a": "Nur Wallbox, optional: eine number.* / input_number.* Entität die den Ladestrom in Ampere setzt (typisch 6–16 A). Wenn gemappt, wählt die Crowdergy AI im „An\"/Power-Modus den Strom passend zum PV-Überschuss statt nur volle Leistung. Leer = „An" bedeutet volle Leistung (unverändert). Solar/Lock schreiben nie einen Strom.",
               "entity_water_heater": "HA's water_heater-Entität für deine Brauchwasser-WP. Analog Climate-Entität — Steuerung, Modi und Ist-Temperatur kommen automatisch."
             }
           }
@@ -570,6 +574,7 @@
               "entity_vorlauf_temp_c": "Vorlauf-Temperatur (optional)",
               "entity_vorlauf_setpoint_c": "Vorlauf-Setpoint (modulierende Heizung)",
               "entity_charge_mode": "Lademodus-Entität",
+              "entity_wallbox_charge_current_a": "Ladestrom (optional)",
               "entity_water_heater": "Warmwasser-Entität"
             },
             "data_description": {
@@ -579,6 +584,7 @@
               "entity_vorlauf_temp_c": "Optionaler Vorlauf-Sensor (z. B. 'Actual Temperature HK1' bei Stiebel). Verfeinert die COP-Schätzung um 5–10 % bei aktiv geregelter Heizkurve.",
               "entity_vorlauf_setpoint_c": "Manuell-Modus: schreibbare °C-Entity für den VL-Setpoint (number.*, input_number.*) — Crowdergy AI moduliert dann den Vorlauf statt binary AN/AUS. Climate-Modus: leer lassen, geht automatisch an die Climate-Entity.",
               "entity_charge_mode": "Wallbox: Lademodus-Select. Batterie: Modi-Entität.",
+              "entity_wallbox_charge_current_a": "Nur Wallbox, optional: eine number.* / input_number.* Entität die den Ladestrom in Ampere setzt (typisch 6–16 A). Wenn gemappt, wählt die Crowdergy AI im „An\"/Power-Modus den Strom passend zum PV-Überschuss statt nur volle Leistung. Leer = „An" bedeutet volle Leistung (unverändert). Solar/Lock schreiben nie einen Strom.",
               "entity_water_heater": "HA's water_heater-Entität für deine Brauchwasser-WP. Analog Climate-Entität — Steuerung, Modi und Ist-Temperatur kommen automatisch."
             }
           }

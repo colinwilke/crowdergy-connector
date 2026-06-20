@@ -39,6 +39,14 @@ Version: `manifest.json`.
 - **Battery-Dispatch** (`_apply_battery_setpoint`): schreibt
   `entity_battery_mode` (Select) + `entity_battery_power_setpoint`
   (Number), idempotent mit ±10-W-Toleranz.
+- **Wallbox-Ladestrom** (2026-06-20, analog Battery-Setpoint): optionale
+  Number-Entity `entity_wallbox_charge_current_a` (Ampere 6–16). Wenn
+  gemappt, leitet `device_field_spec` daraus `wallbox_supports_charge_current`
+  ab → Backend-Solver wählt den Strom variabel. `_apply_charge_mode`
+  bekommt `charge_current_a` (vom `set_charge_mode`-Command, NUR
+  Power/„An"-Modus) und schreibt ihn ZUERST (`number.set_value`), dann den
+  Modus-Select; `state.held_charge_current` cached ihn für die
+  Hold-Loop-Re-Writes. Solar/Lock stromlos, Solarmode unverändert.
 - **Hold-Loops:** als `hass.async_create_background_task` (sauberes
   HA-Shutdown). `entity_control` 30-s-, `entity_charge_mode`
   15-s-Cadence; beide bailen bei SSE-Stale (>60 s). Self-Heal respektiert

@@ -167,6 +167,16 @@ CONF_CHARGE_MODE_VALUE_LOCK = "charge_mode_value_lock"
 CONF_CHARGE_MODE_VALUE_POWER = "charge_mode_value_power"
 CONF_CHARGE_MODE_VALUE_SOLAR = "charge_mode_value_solar"
 
+# Wallbox-only OPTIONAL Ladestrom-Steuerung (2026-06-20). Analog zum
+# Batterie-Power-Setpoint: eine HA-Number-Entity die den Ladestrom in
+# Ampere setzt (typisch 6–16 A). Wenn der User sie mappt, nimmt das
+# Backend an, dass die Box im „An"/Power-Modus mit variablem Strom
+# laden kann — der Solver wählt dann den optimalen Strom und der
+# Connector schreibt ihn (ganze Ampere) BEVOR er den Power-Modus an
+# der entity_charge_mode setzt. Bleibt das Feld leer, ist „An" = volle
+# Leistung (Verhalten unverändert). Solar/Lock tragen nie einen Strom.
+CONF_ENTITY_WALLBOX_CHARGE_CURRENT = "entity_wallbox_charge_current_a"
+
 # Battery dispatch v3.8.0 (Phase 3 Option D, 2026-06-02). Aus den alten
 # 4 mode-string Werten wird ein 2-Entity-Setup mit kontinuierlichem
 # Power-Setpoint. Backend Solver wählt:
@@ -428,6 +438,7 @@ MAPPABLE_ENTITY_DOMAINS: dict[str, frozenset[str]] = {
     CONF_ENTITY_CONTROL: _CONTROL_DOMAINS,
     CONF_ENTITY_COOL_CONTROL: _CONTROL_DOMAINS,
     CONF_ENTITY_CHARGE_MODE: _SELECT_DOMAINS,
+    CONF_ENTITY_WALLBOX_CHARGE_CURRENT: _NUMBER_DOMAINS,
     CONF_ENTITY_BATTERY_MODE: _SELECT_DOMAINS,
     CONF_ENTITY_BATTERY_POWER_SETPOINT: _NUMBER_DOMAINS,
     CONF_ENTITY_VORLAUF_SETPOINT: _SETPOINT_DOMAINS,

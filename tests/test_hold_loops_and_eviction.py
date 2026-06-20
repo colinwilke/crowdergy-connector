@@ -45,6 +45,7 @@ from custom_components.theothergas.const import (
     CONF_DEVICE_ID,
     CONF_DEVICE_TYPE,
     CONF_ENTITY_CHARGE_MODE,
+    CONF_ENTITY_WALLBOX_CHARGE_CURRENT,
     CONF_ENTITY_CONTROL,
     CONF_ENTITY_CONTROL_HOLD,
     DOMAIN,
@@ -275,7 +276,26 @@ async def test_charge_mode_hold_loop_rewrites_while_fresh(hass: HomeAssistant):
     with patch(_SLEEP, _breaking_sleep(2)):
         await _run_until_stopped(coord._charge_mode_hold_loop("w1"))
 
-    coord._apply_charge_mode.assert_awaited_once_with("w1", "solar", schedule_hold=False)
+    coord._apply_charge_mode.assert_awaited_once_with(
+        "w1", "solar", schedule_hold=False, charge_current_a=None
+    )
+
+
+async def test_charge_mode_hold_loop_rewrites_held_current(hass: HomeAssistant):
+    """2026-06-20: hält die Loop einen Ladestrom-Wert, reicht sie ihn beim
+    Re-Write mit durch (manche Boxen resetten auch den Strom)."""
+    coord = make_coordinator(hass, [])
+    coord.state.held_charge_mode["w1"] = "Power"
+    coord.state.held_charge_current["w1"] = 9
+    coord.state.last_sse_event_at = time.time()
+    coord._apply_charge_mode = AsyncMock()
+
+    with patch(_SLEEP, _breaking_sleep(2)):
+        await _run_until_stopped(coord._charge_mode_hold_loop("w1"))
+
+    coord._apply_charge_mode.assert_awaited_once_with(
+        "w1", "Power", schedule_hold=False, charge_current_a=9
+    )
 
 
 # ════════════════════════════════════════════════════════════════════
@@ -363,3 +383,59 @@ async def test_sse_command_writes_charge_mode_and_starts_hold(hass: HomeAssistan
     assert calls[0].data["option"] == "Power"
     assert coord.state.held_charge_mode["w1"] == "Power"
     coord._start_charge_mode_hold.assert_called_once_with("w1")
+
+
+async def test_sse_command_writes_charge_current_before_mode(hass: HomeAssistant):
+    """2026-06-20: ein Power-Mode-Frame mit `current_a` auf einer Box mit
+    gemappter Ladestrom-Entity schreibt ZUERST den Strom (number.set_value)
+    und DANN den Modus (select.select_option), und cached den Strom für
+    die Hold-Loop."""
+    dev = {
+        CONF_DEVICE_ID: "w1",
+        CONF_DEVICE_TYPE: "wallbox",
+        CONF_ENTITY_CHARGE_MODE: "select.lademodus",
+        CONF_ENTITY_WALLBOX_CHARGE_CURRENT: "number.wb_amp",
+    }
+    coord = make_coordinator(hass, [dev])
+    coord._start_charge_mode_hold = MagicMock()
+    hass.states.async_set("select.lademodus", "Eco")
+    hass.states.async_set("number.wb_amp", 6)
+    num_calls = async_mock_service(hass, "number", "set_value")
+    sel_calls = async_mock_service(hass, "select", "select_option")
+
+    await coord._handle_ws_message(
+        {"type": "command", "action": "set_charge_mode", "device_id": "w1",
+         "value": "Power", "current_a": 12}
+    )
+
+    assert len(num_calls) == 1
+    assert num_calls[0].data["value"] == 12
+    assert num_calls[0].data["entity_id"] == "number.wb_amp"
+    assert len(sel_calls) == 1
+    assert sel_calls[0].data["option"] == "Power"
+    assert coord.state.held_charge_mode["w1"] == "Power"
+    assert coord.state.held_charge_current["w1"] == 12
+
+
+async def test_sse_solar_clears_held_charge_current(hass: HomeAssistant):
+    """Ein nachfolgender Solar-Frame (ohne current_a) räumt den
+    gecachten Ladestrom wieder weg — Solar/Lock tragen nie einen Strom."""
+    dev = {
+        CONF_DEVICE_ID: "w1",
+        CONF_DEVICE_TYPE: "wallbox",
+        CONF_ENTITY_CHARGE_MODE: "select.lademodus",
+        CONF_ENTITY_WALLBOX_CHARGE_CURRENT: "number.wb_amp",
+    }
+    coord = make_coordinator(hass, [dev])
+    coord._start_charge_mode_hold = MagicMock()
+    coord.state.held_charge_current["w1"] = 12
+    hass.states.async_set("select.lademodus", "Power")
+    async_mock_service(hass, "number", "set_value")
+    async_mock_service(hass, "select", "select_option")
+
+    await coord._handle_ws_message(
+        {"type": "command", "action": "set_charge_mode", "device_id": "w1",
+         "value": "Solar"}
+    )
+
+    assert "w1" not in coord.state.held_charge_current
