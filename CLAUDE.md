@@ -65,6 +65,18 @@ dort: Cluster C (#16–#22).
   `test_hold_loops_and_eviction` (write-current-before-mode, held-current
   re-write, Solar clears held current). Backend-Seite: PR backend (gleiche
   Branch).
+- **#21 Coordinator-Entflechtung — Auth-Cluster NICHT extrahieren (durable
+  Lehre, PR connector#16):** die Auth/HTTP-Methoden (`_authenticated_request`,
+  `_patch_telemetry_with_retry`, `_refresh_access_token`, `_jwt_exp`) bleiben
+  in `coordinator.py` — die Tests patchen `coordinator.asyncio`/importieren
+  `_jwt_exp` per **Modul-Attribut**; ein Verschieben in ein eigenes Modul
+  bräche die Mocks für marginalen Lesbarkeitsgewinn. Erst Full-Flow-
+  Integrationstests (`test_async_update_data_roundtrip.py` — Entity-Read→
+  Payload→Send→Energie-Bookkeeping; die Non-Regression-Harness, die VOR der
+  Entflechtung steht) sind gelandet; die Extraktion selbst bleibt offen.
+  `house-consumption-chart.md` trägt jetzt `heatpump_total` (#43, Backend-
+  Vertrag — kein Connector-Code, Slot-Schema deckt die Thermal-Typen seit
+  #68).
 - **Config-Flow Edit-Felder:** `vol.Optional(..., description=
   {"suggested_value": ...})`, NIE `default=` (HA re-injected, Felder
   werden unlöschbar).
