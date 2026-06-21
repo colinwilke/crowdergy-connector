@@ -163,7 +163,9 @@ deselektiert (siehe `CLAUDE.md`). Pure-Logic-Unit-Tests:
 `test_device_field_spec` (SSOT-Guard), `test_preset_spec`
 (Vertrags-Invarianten), `test_contribute_flow`, `test_state_mirror`,
 `test_provisioning`, `test_box_services`, `test_integration_domain`,
-`test_connector_pairing_alias` (/connector/* = /box/*-Alias).
+`test_connector_pairing_alias` (/connector/* = /box/*-Alias),
+`test_json_assets` (hard-parst jede ausgelieferte `*.json` —
+Regressions-Guard nach dem v3.33.1-`de.json`-Crash, s.u.).
 Coordinator-/Full-Flow-Integration offen (Backlog Cluster C).
 
 ## Offene Punkte

@@ -98,6 +98,13 @@ Nur mit **Python ≥ 3.12** (`requirements-test.txt`-Kopf).
 umgebungsabhängigen Error (aiodns/aiohttp-Drift in frischen venvs) — auf
 sauberem Stand gegenprüfen, bevor man eigene Änderungen verdächtigt.
 
+**JSON-Assets immer hart validieren (Lektion v3.33.1):** ein nicht
+escaptes `"` in `translations/de.json` (Wallbox-Ladestrom-Hilfetext)
+ließ HA beim Setup mit `orjson.JSONDecodeError` abbrechen — Hassfest
+fängt das NICHT. `tests/test_json_assets.py` parst jetzt jede
+ausgelieferte `*.json`. Deutsche Hilfetexte tragen typografische
+Anführungszeichen `„…"` (NICHT gerade `"` ohne Escape).
+
 ## Agent-Ownership (Interferenz-Schutz, User-Vorgabe 2026-06-10)
 
 - **Schreib-Ownership dieses Repos: die Remote-/Web-Session** (zusammen mit
