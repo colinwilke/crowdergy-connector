@@ -111,6 +111,14 @@ dort: Cluster C (#16–#22).
 
 Nur mit **Python ≥ 3.12** (`requirements-test.txt`-Kopf).
 
+**CI-Trigger-Modell (2026-06-21, connector#19):** `test.yml` läuft NICHT mehr
+auf `push→main`. Der **Mac ist Default-Test-Runner** über den
+`scripts/githooks/pre-push`-Hook (einmalig pro Klon aktivieren:
+`git config core.hooksPath scripts/githooks`; Notausgang `git push
+--no-verify`). GitHub-CI feuert nur auf **PRs** (Arbeit weg vom Mac, z.B.
+Claude Code on the web) + einem nächtlichen `schedule`-Backstop auf `main`
+(04:17 UTC).
+
 **Remote-Session (Claude Code on the web):** der SessionStart-Hook
 (`.claude/hooks/session-start.sh`) baut `.venv` (Python 3.12,
 `requirements-test.txt`). Tests dann via `.venv/bin/pytest`.
