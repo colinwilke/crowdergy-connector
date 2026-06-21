@@ -12,6 +12,15 @@ dort: Cluster C (#16–#22).
 - **SSOT-Regeln (immer einhalten):**
   - Neue Backend-Device-Felder NUR in `device_field_spec.py` (Roundtrip
     create/update), nie direkt in `_register_device`/`_update_device_backend`.
+  - **Connector-lokale Entity-Slots (gehen NICHT ans Backend, nur in
+    HA-Scope) MÜSSEN zusätzlich in `_build_device_record`
+    (`config_flow_mapping.py`) eingetragen werden** — das ist die explizite
+    Allowlist, die die Entity-Map auf den Config-Entry persistiert. Fehlt
+    der Key dort, wird er beim Submit STUMM verworfen (beim Re-Open weg,
+    Dispatcher liest leer). Zweimal passiert: v3.28.0 (HC-Triade) und
+    v3.33.0→.2 (Wallbox-Ladestrom `entity_wallbox_charge_current_a`). Regel:
+    Schema-Touch ⇒ immer auch `_build_device_record` + Round-Trip-Test
+    (`test_build_device_record_persists_*`).
   - Neue Mapping-Slots NUR in der Allowlist `MAPPABLE_ENTITY_DOMAINS`
     (Default-DENY; Read-Slots nur sensor/binary_sensor, Control-Slots nur
     schreibbare Domains).
@@ -43,8 +52,8 @@ dort: Cluster C (#16–#22).
   Box-Pfaden unberührt.
 - **Wallbox:** Pre-AI-Lademodus wird bei AI-OFF NICHT restauriert
   (Restore-Pfad entfernt, Backend-Spalte existiert nicht mehr).
-- **Wallbox variabler Ladestrom (User 2026-06-20, Branch
-  `claude/laughing-turing-4tiimd`, analog Batterie-Power-Setpoint):**
+- **Wallbox variabler Ladestrom (User 2026-06-20, released v3.33.0;
+  Persistenz-Fix v3.33.2/PR #17; analog Batterie-Power-Setpoint):**
   Optionale Number-Entity `CONF_ENTITY_WALLBOX_CHARGE_CURRENT`
   (`entity_wallbox_charge_current_a`, Ampere 6–16) im Wallbox-
   Control-Step (`config_flow_schemas._entities_schema` + `_ENTITY_SELECTORS`,
