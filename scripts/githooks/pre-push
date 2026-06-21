@@ -1,0 +1,22 @@
+#!/bin/sh
+# crowdergy-connector pre-push hook — macht den Mac zum Default-Test-Runner.
+#
+# Aktivieren (EINMALIG pro Klon, nur am Mac):
+#     git config core.hooksPath scripts/githooks
+# Notausgang (Tests bewusst überspringen):
+#     git push --no-verify
+#
+# Hintergrund: CI feuert nur noch auf PRs + nächtlich (siehe
+# .github/workflows/test.yml). Trunk-Pushes auf main werden also lokal
+# hier gegated. Die zwei sse_client-Tests sind der bekannte env-Drift (CLAUDE.md).
+set -e
+repo_root=$(git rev-parse --show-toplevel)
+cd "$repo_root"
+
+PY="$repo_root/.venv/bin/python"
+[ -x "$PY" ] || PY=python
+
+echo "[pre-push] connector pytest…"
+exec "$PY" -m pytest -q \
+  --deselect tests/test_sse_client.py::test_start_is_idempotent \
+  --deselect tests/test_sse_client.py::test_stop_cancels_running_task

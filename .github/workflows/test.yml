@@ -1,16 +1,16 @@
 name: Connector tests
 
-# Trigger 2026-06-15 wieder scharf (Actions-Billing gefixt, Backlog #15):
-# push→main + PRs + manuell (workflow_dispatch).
+# Trigger-Modell 2026-06-21 (Backlog #15): Mac = Default-Test-Runner, GitHub
+# nur wenn weg vom Mac. KEIN push:main-Trigger — der Mac fährt pytest vor
+# jedem Push lokal über den scripts/githooks/pre-push-Hook. CI hier feuert
+# nur auf PRs (= Arbeit weg vom Mac, z.B. Claude Code on the web) + einem
+# nächtlichen Backstop auf main. Manuell: workflow_dispatch.
 on:
   workflow_dispatch:
-  push:
-    branches: [main]
-    paths-ignore:
-      - "**/*.md"
-      - "docs/**"
-      - "images/**"
   pull_request:
+  schedule:
+    # 04:17 UTC nächtlicher Backstop auf main (schedule läuft immer auf main).
+    - cron: "17 4 * * *"
 
 concurrency:
   group: connector-test-${{ github.ref }}
