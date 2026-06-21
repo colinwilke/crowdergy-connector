@@ -72,6 +72,13 @@ Version: `manifest.json`.
   den Hausverbrauchs-Chart (vom Backend gelesen, NICHT solver-gelesen).
   Keys spiegeln 1:1 Backend-`SOLVER_FIELDS`. Vertrag:
   `docs/house-consumption-chart.md`.
+- **Kein Connector-Code, aber Vertrags-Heimat:** `docs/costs-today.md`
+  (#71, contract-first) beschreibt den Backend-Endpoint
+  `GET /me/costs/today` (kumulierte EUR-Netzbezugs-Kosten heute, iOS-
+  `PriceSavingsSheet`-Kurve). Die Kosten rechnet das Backend aus
+  vorhandener Grid-`energy_kwh_delta`-Telemetrie + Tarif-Config — der
+  Connector liefert dafür nichts Neues. Backend+Vertrag auf `main` +
+  prod-deployed 2026-06-21.
 
 ## Config-Flow
 
