@@ -29,6 +29,7 @@ from custom_components.theothergas.const import (
     CONF_ENTITY_HC_GRID_POWER,
     CONF_ENTITY_HC_PV_POWER,
     CONF_ENTITY_PV_TO_BATTERY_POWER,
+    CONF_ENTITY_WALLBOX_CHARGE_CURRENT,
     DOMAIN,
     MAPPABLE_ENTITY_DOMAINS,
 )
@@ -181,6 +182,27 @@ def test_build_device_record_persists_hc_slots():
     record = _build_device_record("dev-1", "solar", "Solar", entity_input)
     for key, val in entity_input.items():
         assert record[key] == val, f"{key} fehlt im persistierten Record"
+
+
+def test_build_device_record_persists_wallbox_charge_current():
+    """Round-Trip-Regression (v3.33.x-Defekt): die optionale Wallbox-
+    Ladestrom-Number-Entity, die das Schema sammelt
+    (`config_flow_schemas` Control-Section + `_ENTITY_SELECTORS`) und der
+    Dispatcher liest (`command_dispatcher` → `number.set_value`), MUSS aus
+    dem Submit in den persistierten Record gelangen. Vorher fehlte sie in
+    `_build_device_record` → die Entity ließ sich nicht speichern (beim
+    Re-Open weg), und `supports_charge_current` fiel beim Edit auf False
+    zurück (Schema angefasst, Record vergessen — selbe Naht wie HC oben)."""
+    entity_input = {CONF_ENTITY_WALLBOX_CHARGE_CURRENT: "number.wallbox_strom_a"}
+    record = _build_device_record("dev-wb", "wallbox", "Wallbox", entity_input)
+    assert record[CONF_ENTITY_WALLBOX_CHARGE_CURRENT] == "number.wallbox_strom_a"
+
+
+def test_build_device_record_charge_current_default_empty():
+    """Ohne Ladestrom-Mapping trägt der Slot einen leeren String (wie alle
+    anderen optionalen Slots) — kein KeyError, sauberer stale-Drop."""
+    record = _build_device_record("dev-wb2", "wallbox", "Wallbox", {})
+    assert record[CONF_ENTITY_WALLBOX_CHARGE_CURRENT] == ""
 
 
 def test_build_device_record_hc_slots_default_empty():

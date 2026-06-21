@@ -16,6 +16,7 @@ from .const import (
     CONF_DEVICE_TYPE,
     CONFIG_MODE_MANUAL,
     CONF_ENTITY_CHARGE_MODE,
+    CONF_ENTITY_WALLBOX_CHARGE_CURRENT,
     CONF_ENTITY_CLIMATE,
     CONF_ENTITY_WATER_HEATER,
     CONF_ENTITY_CONTROL,
@@ -219,6 +220,17 @@ def _build_device_record(
             CONF_ENTITY_CONTROL_HOLD, ENTITY_CONTROL_HOLD_AUTO
         ),
         CONF_ENTITY_CHARGE_MODE: entity_input.get(CONF_ENTITY_CHARGE_MODE, ""),
+        # Wallbox variabler Ladestrom (2026-06-20): die optionale Ampere-
+        # Number-Entity bleibt Connector-lokal (nur das abgeleitete Bool
+        # geht ans Backend) und MUSS hier in den persistierten Record —
+        # sonst droppt der Submit sie stumm (exakt der v3.28.0-Defekt oben:
+        # Schema angefasst, Record vergessen), die Entity verschwindet beim
+        # Re-Open und der Dispatcher (`command_dispatcher`) liest leer →
+        # kein variabler Strom, supports_charge_current fällt beim Edit auf
+        # False zurück.
+        CONF_ENTITY_WALLBOX_CHARGE_CURRENT: entity_input.get(
+            CONF_ENTITY_WALLBOX_CHARGE_CURRENT, ""
+        ),
         # v2.0: ternary vehicle-status mapping (wallbox-only). Empty
         # strings on non-wallbox types — they get filtered out before
         # coordinator's mapping lookup.
