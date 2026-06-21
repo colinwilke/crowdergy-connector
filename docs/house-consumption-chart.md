@@ -55,7 +55,7 @@ kWh). Response = `HouseEnergyDay`:
       "bucket_start": "2026-06-15T13:00:00+02:00",
       "pv_to_home": 3.0, "battery_to_home": 0.0, "grid_to_home": 0.0,
       "pv_to_battery": 1.0, "grid_to_battery": 0.0, "pv_to_grid": 1.0,
-      "home_total": 3.0, "wallbox_total": 0.0,
+      "home_total": 3.0, "wallbox_total": 0.0, "heatpump_total": 0.0,
       "degraded": false
     }
   ]
@@ -73,9 +73,19 @@ kWh). Response = `HouseEnergyDay`:
   (= total site consumption incl. the EV).
 - **`wallbox_total`** = the full wallbox draw; the gap between the black
   and mint lines.
-- **Lines** (iOS): black = `home_total − wallbox_total` (the base
-  household line — equals `Σ HC` when the wallbox is metered separately),
-  mint = `home_total` (the ceiling incl. the EV).
+- **`heatpump_total`** (#43) = the aggregated heatpump-family draw
+  (`heating + warmwater + aircon`). Same topology rule as the wallbox: a
+  heatpump behind the smart-meter anchor is already inside `Σ HC` (cascade,
+  no add-back); one on its own meter is folded into `home_total` (so its
+  line sits above the household stack). iOS draws it as a slice between
+  `baseHome` and `baseHome + wp` with its own ceiling line; the field is
+  optional (default 0) and the slice/line stay off below ~1 W. v1
+  aggregates the three thermal types into one line (per the 2026-06-20
+  decision); the shared-compressor dedup (heating+warmwater on one
+  physical unit) is HW-verification-blocked (#69).
+- **Lines** (iOS): black = `home_total − wallbox_total − heatpump_total`
+  (the base household line — equals `Σ HC` when wallbox/heatpump are metered
+  separately), mint = `home_total` (the ceiling incl. EV + heatpump).
 
 ### Decomposition (Phase 1, `app/house_energy.compute_house_flows`)
 
