@@ -82,7 +82,25 @@ dort: Cluster C (#16–#22).
   bräche die Mocks für marginalen Lesbarkeitsgewinn. Erst Full-Flow-
   Integrationstests (`test_async_update_data_roundtrip.py` — Entity-Read→
   Payload→Send→Energie-Bookkeeping; die Non-Regression-Harness, die VOR der
-  Entflechtung steht) sind gelandet; die Extraktion selbst bleibt offen.
+  Entflechtung steht) sind gelandet.
+  **Phase-C-Extraktion gelandet (2026-06-22):** die 13 read/compose/decide-
+  Helfer (`_get_state`, `_prefetch_device_states`, `_read_*`, `_compose_extra`,
+  `_payload_hash`, `_should_send`, `_normalised_vehicle_status`) +
+  die Send-/Extra-Field-Konstanten (`SEND_THRESHOLDS`,
+  `IDENTICAL/PER_DEVICE_HEARTBEAT_INTERVAL`, `_SOLVER_EXTRA_FIELDS`,
+  `_PREFETCH_SLOT_KEYS`) sind nach `telemetry_reader.py` als
+  **`TelemetryReaderMixin`** ausgezogen (Mixin-Pattern wie
+  `CommandDispatcherMixin`; `self` bleibt der Coordinator → kein Body-Edit).
+  coordinator.py −471 Z. **Die Konstanten werden aus `coordinator.py`
+  RE-EXPORTIERT** (`from .telemetry_reader import …`) — Tests/Vendoring
+  importieren `coordinator._SOLVER_EXTRA_FIELDS` etc. per Modul-Attribut, der
+  Zugriffspfad bleibt gültig (analog `config_flow._ENTITY_SELECTORS`). Bewusst
+  NICHT mitgezogen: die **Consent-Gates** (`_consent`/`_remote_control_allowed`,
+  cross-cutting, auch vom Dispatch genutzt), das `_async_update_data`-Tick
+  selbst (HA-Interface) und der Auth-Cluster (s.o.). **Regel: neue Reader →
+  `TelemetryReaderMixin`; neue read/compose-Konstante dort + Re-Export, falls
+  ein Test sie als `coordinator.<NAME>` importiert.** Weitere Entflechtung
+  (Lifecycle-/Loop-Wiring) bleibt optional offen.
   `house-consumption-chart.md` trägt jetzt `heatpump_total` (#43, Backend-
   Vertrag — kein Connector-Code, Slot-Schema deckt die Thermal-Typen seit
   #68).
