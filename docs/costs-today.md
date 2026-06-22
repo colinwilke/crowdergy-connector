@@ -54,7 +54,14 @@ Response = `CostsTodayDay`:
       "ts": "2026-06-21T06:15:00+02:00",
       "grid_in_kwh": 0.5, "price_eur_per_kwh": 0.55,
       "cost_eur": 0.275, "cost_cum_eur": 0.825,
-      "source": "tibber_realized"
+      "source": "tibber_realized",
+      "grids": [
+        {
+          "grid_id": "…", "label": "Netz", "kwh": 0.5,
+          "price_eur_per_kwh": 0.55, "cost_eur": 0.275,
+          "cost_cum_eur": 0.825, "source": "tibber_realized"
+        }
+      ]
     }
   ]
 }
@@ -86,6 +93,31 @@ cost_eur = Σ_grid (import_kWh × slot_tariff(grid))
 
 `cost_cum_eur` is the cumulative `cost_eur` since local midnight, in
 chronological order — the curve iOS draws.
+
+### Per-grid breakdown (`grids`, #72)
+
+Each slot also carries a `grids` array — the same numbers split per grid
+device, so iOS can stack the cumulative curve per tariff (a Tibber sub-grid
+behind a flat root grid, the #67 cascade world) and label which grid cost
+what:
+
+```
+grids: [{ grid_id, label, kwh, price_eur_per_kwh, cost_eur,
+          cost_cum_eur, source }]
+```
+
+- **Invariant:** `Σ_grids kwh == grid_in_kwh`, `Σ_grids cost_eur ==
+  cost_eur`, `Σ_grids cost_cum_eur == cost_cum_eur` — exactly, every slot.
+  A **single-grid user gets a one-element `grids`** whose fields equal the
+  top-level totals (the top-level fields are byte-identical to before #72;
+  `grids` is purely additive).
+- **Membership + continuity:** one entry per grid that reported telemetry
+  today, present in *every* slot (its `cost_cum_eur` carries forward in
+  slots where it imported nothing) so each per-grid cumulative series is
+  continuous and stacks cleanly.
+- `label` is the grid device's user-facing name; `source` is *that grid's*
+  tariff source (so a flat root + a Tibber/cascade sub keep distinct labels
+  while the slot-level `source` stays `mixed`).
 
 ### `source` (per-slot + day summary)
 

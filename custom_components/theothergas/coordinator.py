@@ -195,6 +195,24 @@ _SOLVER_EXTRA_FIELDS: dict[str, list[tuple[str, str, str]]] = {
 }
 
 
+# Entity slots a single device's per-tick readers may touch (#56). Used by
+# `_prefetch_device_states` to snapshot each mapped entity exactly once; the
+# device's `_SOLVER_EXTRA_FIELDS` sensors are added on top per device type.
+_PREFETCH_SLOT_KEYS: tuple[str, ...] = (
+    CONF_ENTITY_POWER,
+    CONF_ENTITY_POWER_2,
+    CONF_ENTITY_SOC,
+    CONF_ENTITY_VEHICLE_STATUS,
+    CONF_ENTITY_CHARGE_MODE,
+    CONF_ENTITY_CURRENT_TEMP,
+    CONF_ENTITY_CLIMATE,  # aircon current-temp fallback
+    CONF_ENTITY_ENERGY_TOTAL,
+    CONF_ENTITY_ENERGY_DISCHARGED_TOTAL,
+    CONF_ENTITY_CONTROL,
+    CONF_ENTITY_COOL_CONTROL,
+)
+
+
 def _load_manifest_version() -> str:
     """Read the integration's version from manifest.json. Used to
     populate the X-Crowdergy-Connector-Version header so the backend
@@ -833,10 +851,43 @@ class CrowdergyCoordinator(CommandDispatcherMixin, DataUpdateCoordinator[dict[st
     # Damit reduziert sich coordinator.py um ~80 Zeilen und das
     # State-Mirror-Modul ist alleinige Source-of-Truth.
 
+    def _get_state(self, entity_id: str) -> Any:
+        """Read an HA state, preferring the per-tick prefetch snapshot (#56).
+
+        `_async_update_data` snapshots each device's mapped entity states
+        once (`_prefetch_device_states`) into `self._state_cache` for the
+        duration of that device's synchronous read phase, so the several
+        readers that reference the SAME entity (is_on + cool_on share
+        entity_control; current_temp + an extra sensor may coincide) hit
+        `hass.states` once instead of 2-3×. Outside that window the cache is
+        None, so every other caller (hold loops, dispatch) reads live.
+        """
+        cache = getattr(self, "_state_cache", None)
+        if cache is not None and entity_id in cache:
+            return cache[entity_id]
+        return self.hass.states.get(entity_id)
+
+    def _prefetch_device_states(self, dev: dict[str, Any]) -> dict[str, Any]:
+        """Snapshot every entity this device's readers may touch this tick
+        (#56) — the mapped slots plus its `_SOLVER_EXTRA_FIELDS` sensors —
+        each fetched from `hass.states` exactly once."""
+        ids: set[str] = set()
+        for key in _PREFETCH_SLOT_KEYS:
+            eid = dev.get(key, "")
+            if eid:
+                ids.add(eid)
+        for _payload_key, conf_key, _reader in _SOLVER_EXTRA_FIELDS.get(
+            dev.get(CONF_DEVICE_TYPE, ""), []
+        ):
+            eid = dev.get(conf_key, "")
+            if eid:
+                ids.add(eid)
+        return {eid: self.hass.states.get(eid) for eid in ids}
+
     def _read_entity_state(self, entity_id: str) -> Any:
         if not entity_id:
             return None
-        state = self.hass.states.get(entity_id)
+        state = self._get_state(entity_id)
         if state is None or state.state in ("unknown", "unavailable"):
             return None
         try:
@@ -854,7 +905,7 @@ class CrowdergyCoordinator(CommandDispatcherMixin, DataUpdateCoordinator[dict[st
             return None
         domain = entity_id.split(".", 1)[0]
         if domain in ("climate", "water_heater"):
-            state = self.hass.states.get(entity_id)
+            state = self._get_state(entity_id)
             if state is None:
                 return None
             attr = state.attributes.get("current_temperature")
@@ -940,7 +991,7 @@ class CrowdergyCoordinator(CommandDispatcherMixin, DataUpdateCoordinator[dict[st
         """
         if not entity_id:
             return None
-        state = self.hass.states.get(entity_id)
+        state = self._get_state(entity_id)
         if state is None or state.state in ("unknown", "unavailable"):
             return None
         try:
@@ -959,7 +1010,7 @@ class CrowdergyCoordinator(CommandDispatcherMixin, DataUpdateCoordinator[dict[st
     def _read_power_kw(self, entity_id: str) -> float | None:
         if not entity_id:
             return None
-        state = self.hass.states.get(entity_id)
+        state = self._get_state(entity_id)
         if state is None or state.state in ("unknown", "unavailable"):
             return None
         try:
@@ -1011,7 +1062,7 @@ class CrowdergyCoordinator(CommandDispatcherMixin, DataUpdateCoordinator[dict[st
         """
         if not entity_id:
             return None
-        state = self.hass.states.get(entity_id)
+        state = self._get_state(entity_id)
         if state is None or state.state in ("unknown", "unavailable"):
             return None
         text = str(state.state)
@@ -1084,7 +1135,7 @@ class CrowdergyCoordinator(CommandDispatcherMixin, DataUpdateCoordinator[dict[st
         entity_id = dev.get(CONF_ENTITY_CONTROL, "") or ""
         if not entity_id:
             return None
-        state = self.hass.states.get(entity_id)
+        state = self._get_state(entity_id)
         if state is None or state.state in ("unknown", "unavailable"):
             return None
 
@@ -1151,7 +1202,7 @@ class CrowdergyCoordinator(CommandDispatcherMixin, DataUpdateCoordinator[dict[st
             value_cool_off = dev.get(CONF_VALUE_OFF, "")
         if not entity_id:
             return None
-        state = self.hass.states.get(entity_id)
+        state = self._get_state(entity_id)
         if state is None or state.state in ("unknown", "unavailable"):
             return None
         domain = entity_id.split(".", 1)[0]
@@ -1223,6 +1274,9 @@ class CrowdergyCoordinator(CommandDispatcherMixin, DataUpdateCoordinator[dict[st
         return False
 
     async def _async_update_data(self) -> dict[str, dict[str, Any]]:
+        # #56: start each tick with no prefetch snapshot (clears any leftover
+        # from a mid-tick exception in the prior tick).
+        self._state_cache = None
         if not self._consent(OPT_CONSENT_TELEMETRY):
             # Consent entzogen: KEIN Outdoor-Temp-Push, KEINE Telemetrie-
             # PATCHes. Lokale Entity-Werte bleiben auf letztem Stand,
@@ -1263,6 +1317,14 @@ class CrowdergyCoordinator(CommandDispatcherMixin, DataUpdateCoordinator[dict[st
             entity_energy_discharged_total = dev.get(
                 CONF_ENTITY_ENERGY_DISCHARGED_TOTAL, ""
             )
+
+            # #56: snapshot this device's mapped entity states once. The
+            # readers below consult it via `_get_state` instead of re-hitting
+            # `hass.states` for each shared entity (e.g. entity_control read
+            # by both is_on and cool_on). Scoped to the synchronous read
+            # phase and cleared before the first await → no cross-coroutine
+            # staleness.
+            self._state_cache = self._prefetch_device_states(dev)
 
             current_power = self._read_power_kw(entity_power)
             # v3.0 bidirektional: zweites Power-Feld vorhanden → signed
@@ -1439,6 +1501,10 @@ class CrowdergyCoordinator(CommandDispatcherMixin, DataUpdateCoordinator[dict[st
             # nichts mit. Nur senden wenn mindestens ein Feld einen Wert
             # liefert, sonst Payload nicht aufblähen.
             extra_payload = self._compose_extra(dev)
+            # End of the synchronous read phase (#56) — drop the snapshot so
+            # the awaited send below and any concurrent hold-loop reader see
+            # live state again.
+            self._state_cache = None
 
             # v3.5.2: v3.4.6's Auto-Routing von `climate.current_temperature`
             # → `vorlauf_temp_c` ist hier raus. War zu aggressiv:

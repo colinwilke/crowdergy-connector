@@ -86,6 +86,20 @@ dort: Cluster C (#16–#22).
   `house-consumption-chart.md` trägt jetzt `heatpump_total` (#43, Backend-
   Vertrag — kein Connector-Code, Slot-Schema deckt die Thermal-Typen seit
   #68).
+- **Coordinator Per-Tick State-Prefetch (#56, 2026-06-22):** alle
+  `_read_*`-Reader lesen HA-States jetzt über `_get_state(entity_id)` statt
+  direkt `self.hass.states.get`. `_async_update_data` snapshottet je Gerät
+  einmal `_prefetch_device_states(dev)` → `self._state_cache` (Slots aus
+  `_PREFETCH_SLOT_KEYS` + die `_SOLVER_EXTRA_FIELDS`-Sensoren des Typs), sodass
+  mehrfach referenzierte Entities (z.B. `entity_control` von is_on UND cool_on)
+  nur 1× gelesen werden. **Strikt auf die SYNCHRONE Lese-Phase begrenzt:**
+  Cache wird NACH der Entity-Extraktion gesetzt und direkt nach
+  `_compose_extra` (vor dem ersten `await`/Send) wieder `None`-gesetzt — kein
+  cross-coroutine-Bleed (Hold-Loops/Dispatch lesen immer live; `_get_state`
+  default via `getattr(...,None)`). **Regel: neue `_read_*`-Reader IMMER
+  `_get_state` nutzen (nie `hass.states.get` direkt), neue gelesene
+  Entity-Slots in `_PREFETCH_SLOT_KEYS` eintragen.** Test:
+  `test_async_update_data_roundtrip.test_prefetch_reads_shared_entity_once`.
 - **Config-Flow Edit-Felder:** `vol.Optional(..., description=
   {"suggested_value": ...})`, NIE `default=` (HA re-injected, Felder
   werden unlöschbar).
