@@ -26,8 +26,13 @@ from pytest_homeassistant_custom_component.common import MockConfigEntry
 from custom_components.theothergas.const import (
     CONF_DEVICE_ID,
     CONF_DEVICE_TYPE,
+    CONF_ENTITY_CONTROL,
     CONF_ENTITY_ENERGY_TOTAL,
     CONF_ENTITY_POWER,
+    CONF_SUPPORTS_COOLING,
+    CONF_VALUE_COOL_ON,
+    CONF_VALUE_OFF,
+    CONF_VALUE_ON,
     DOMAIN,
     OPT_CONSENT_TELEMETRY,
 )
@@ -162,6 +167,43 @@ async def test_failed_send_does_not_advance_energy_baseline(hass: HomeAssistant)
     coord._patch_telemetry_with_retry.assert_awaited_once()
     # 500 → raise_for_status → except branch → baseline NOT seeded.
     assert "dev-1" not in coord._prev_energy_kwh
+
+
+async def test_prefetch_reads_shared_entity_once(hass: HomeAssistant, monkeypatch):
+    """#56: a cooling-capable device whose `is_on` AND `cool_on` both read the
+    shared `entity_control` fetches that entity from `hass.states` exactly
+    once per tick (the per-device prefetch snapshot), not once per reader."""
+    from homeassistant.core import StateMachine
+
+    dev = {
+        CONF_DEVICE_ID: "dev-1",
+        CONF_DEVICE_TYPE: "heating",
+        CONF_ENTITY_POWER: "sensor.wp_power",
+        CONF_ENTITY_CONTROL: "climate.wp",
+        CONF_SUPPORTS_COOLING: True,
+        CONF_VALUE_ON: "heat",
+        CONF_VALUE_OFF: "off",
+        CONF_VALUE_COOL_ON: "cool",
+    }
+    coord = _make_coord(hass, [dev])
+    hass.states.async_set("sensor.wp_power", "1.0", {"unit_of_measurement": "kW"})
+    hass.states.async_set("climate.wp", "heat", {})
+
+    counts: dict[str, int] = {}
+    original_get = StateMachine.get
+
+    def _counting_get(self, entity_id):
+        counts[entity_id] = counts.get(entity_id, 0) + 1
+        return original_get(self, entity_id)
+
+    monkeypatch.setattr(StateMachine, "get", _counting_get)
+    await coord._async_update_data()
+
+    # is_on + cool_on both reference climate.wp, but the prefetch fetched it
+    # once (would be 2 without #56).
+    assert counts.get("climate.wp", 0) == 1
+    # …and the snapshot was actually used: "heat" → is_on True.
+    assert _sent_payload(coord)["is_on"] is True
 
 
 async def test_telemetry_consent_off_sends_nothing(hass: HomeAssistant):
