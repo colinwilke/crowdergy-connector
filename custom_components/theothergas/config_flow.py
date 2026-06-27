@@ -475,9 +475,7 @@ class CrowdergyConfigFlow(ConfigFlow, domain=DOMAIN):
         errors: dict[str, str] = {}
 
         if user_input is not None:
-            api_url = (
-                user_input.get(CONF_API_URL) or DEFAULT_API_URL
-            ).strip().rstrip("/")
+            api_url = DEFAULT_API_URL
             code = user_input[CONF_PAIRING_CODE].strip()
             tokens: dict[str, Any] | None = None
 
@@ -537,9 +535,6 @@ class CrowdergyConfigFlow(ConfigFlow, domain=DOMAIN):
             data_schema=vol.Schema(
                 {
                     vol.Required(CONF_PAIRING_CODE): str,
-                    # Backlog #17 (Teil): konfigurierbare API-URL für
-                    # Self-Hosted-/Dev-Backends.
-                    vol.Optional(CONF_API_URL, default=DEFAULT_API_URL): str,
                 }
             ),
             errors=errors,

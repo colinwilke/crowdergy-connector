@@ -3,14 +3,12 @@
     "step": {
       "user": {
         "title": "Connect to Crowdergy",
-        "description": "Generate a pairing code in the Crowdergy app (Settings → Connection) and enter it here. Home Assistant never sees your password — works with Sign in with Apple too.",
+        "description": "Crowdergy controls your flexible loads and storage so your electricity gets cheaper. Enter the pairing code from the Crowdergy app here.",
         "data": {
-          "pairing_code": "Pairing code",
-          "api_url": "API URL"
+          "pairing_code": "Pairing code"
         },
         "data_description": {
-          "pairing_code": "Code from the Crowdergy app (valid 15 minutes, single use). Dashes don't matter.",
-          "api_url": "Only change this if you run your own (self-hosted) Crowdergy backend."
+          "pairing_code": "Code from the Crowdergy app (valid 15 minutes, single use). Dashes don't matter."
         },
         "submit": "Connect"
       },
