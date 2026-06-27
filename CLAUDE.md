@@ -121,6 +121,15 @@ dort: Cluster C (#16–#22).
 - **Config-Flow Edit-Felder:** `vol.Optional(..., description=
   {"suggested_value": ...})`, NIE `default=` (HA re-injected, Felder
   werden unlöschbar).
+- **API-URL NICHT mehr im interaktiven Setup-Flow (released v3.33.5, #22):**
+  der `user`-Step (`async_step_user`) zeigt KEIN API-URL-Feld mehr — der
+  HACS-Connector pairt immer gegen `DEFAULT_API_URL`. `CONF_API_URL` bleibt
+  intern (Entry-`data` = `DEFAULT_API_URL`), damit Coordinator/Reauth/Refresh
+  unverändert laufen → nicht entfernen. **Self-Hosted/Dev-Backends gehen NUR
+  noch über den headless `provision_box`-Pfad** (`async_step_import` +
+  `provisioning.validate_provision_data` akzeptieren weiter optional `api_url`);
+  bewusst KEINE UI-Escape-Hatch (User 2026-06-27). `api_url`-Labels/-Hilfetexte
+  sind aus `strings.json`/`de.json` raus; Step-Beschreibung gekürzt.
 - **Entry-Schema-Regel — [Alpha: gelockert, 2026-06-15]:** In der Alpha
   dürfen Entry-data/-options breaking ändern (Test-User
   re-provisionieren); KEINE „Feld fehlt = Altverhalten"-Load-Time-
