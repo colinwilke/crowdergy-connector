@@ -3,15 +3,13 @@
     "step": {
       "user": {
         "title": "Mit Crowdergy verbinden",
-        "description": "Crowdergy steuert deine flexiblen Verbraucher und Speicher so, dass dein Strom günstiger wird — und stellt freie Kapazität dem Verbund deiner Nachbarschaft bereit. Du verdienst dafür Crowdergy Coins (CCs). Erzeuge in der Crowdergy-App (Einstellungen → Verbindung) einen Kopplungscode und gib ihn hier ein. Home Assistant sieht NIE dein Passwort — funktioniert auch mit der Apple-Anmeldung.",
+        "description": "Crowdergy steuert deine flexiblen Verbraucher und Speicher so, dass dein Strom günstiger wird. Trage hier den Kopplungscode aus der Crowdergy App ein.",
         "submit": "Verbinden",
         "data": {
-          "pairing_code": "Kopplungscode",
-          "api_url": "API-URL"
+          "pairing_code": "Kopplungscode"
         },
         "data_description": {
-          "pairing_code": "Code aus der Crowdergy-App (15 Minuten gültig, einmal verwendbar). Bindestriche egal.",
-          "api_url": "Nur ändern, wenn du ein eigenes (self-hosted) Crowdergy-Backend betreibst."
+          "pairing_code": "Code aus der Crowdergy-App (15 Minuten gültig, einmal verwendbar). Bindestriche egal."
         }
       },
       "location": {
