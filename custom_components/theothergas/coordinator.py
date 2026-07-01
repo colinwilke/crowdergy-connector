@@ -1051,15 +1051,12 @@ class CrowdergyCoordinator(
             # live state again.
             self._state_cache = None
 
-            # v3.5.2: v3.4.6's Auto-Routing von `climate.current_temperature`
-            # → `vorlauf_temp_c` ist hier raus. War zu aggressiv:
-            # echte Klimaanlagen melden `current_temperature` als
-            # ECHTE RAUMTEMP, nur Stiebel-/FBH-WPs reporten dort Vorlauf.
-            # Default-Behaviour ist jetzt wieder „climate.current_temperature
-            # → current_temp_c (Raumtemp)". User mit Stiebel-Vorlauf-via-
-            # climate können einen separaten Vorlauf-Sensor unter
-            # `entity_vorlauf_temp_c` konfigurieren (typisch
-            # `sensor.warmepumpe_actual_temperature_hk1` etc.).
+            # `climate.current_temperature` maps to `current_temp_c` (room
+            # temperature) — most climate devices report the real room temp
+            # there; only Stiebel/FBH heat pumps report the flow (Vorlauf).
+            # Users with Vorlauf-via-climate configure a separate flow sensor
+            # under `entity_vorlauf_temp_c` (e.g.
+            # `sensor.warmepumpe_actual_temperature_hk1`).
 
             if extra_payload:
                 payload["extra"] = extra_payload
