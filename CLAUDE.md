@@ -139,6 +139,24 @@ dort: Cluster C (#16–#22).
   über den Event-Refresh (≤5 s) statt erst am 30-s-Heartbeat. **Regel:
   jeder Slot, den der Per-Tick-Read zurück ans Backend spiegelt, gehört
   in die `_build_entity_map`-Key-Liste.** Test `test_entity_watch.py`.
+- **UI-Text-Stil (User-Vorgabe 2026-07-02, kompletter Rewrite strings.json +
+  de.json):** Config-Flow-Texte **fachlich statt technisch** und kurz; JEDE
+  Seite beginnt mit 1–2 Sätzen, WOFÜR die Zuordnung gebraucht wird („Damit
+  Crowdergy … kann"). Schaltwerte-Seiten (`*_values`) tragen den
+  Ziel-Temperatur-Tipp (An = höchste, Aus = niedrigste gewünschte Temperatur,
+  z. B. WW An=55/Aus=40). Einstiegsseiten (Pairing-Step + Options-Menü)
+  verlinken [crowdergy.de](https://crowdergy.de) — HA rendert Markdown in
+  Step-Descriptions. Vendor-Presets heißen user-facing **„Geräteprofil"**,
+  `entity_control_hold` heißt **„Befehl wiederholen"**. Regel: `strings.json`
+  (EN) und `translations/de.json` IMMER synchron (gleiche Keys +
+  Placeholders); neue Texte im selben Stil.
+- **Brand-Icon licht/dunkel-tauglich (2026-07-02):** `brand/icon.png` (256)
+  + `icon@2x.png` (512) sind eine **abgerundete Kachel** (22 %-Eckradius,
+  transparente Ecken) mit dezentem hellem Rand — lesbar auf hellem UND
+  dunklem HA-Hintergrund. Nie wieder ein voll-deckendes randloses Quadrat.
+  ACHTUNG: das in HA sichtbare Icon serviert brands.home-assistant.io aus
+  dem `brands`-Fork (`custom_integrations/theothergas/`) — neue PNGs dorthin
+  kopieren + Upstream-PR (User-/Mac-Hand, Repo nicht im Remote-Scope).
 - **Config-Flow Edit-Felder:** `vol.Optional(..., description=
   {"suggested_value": ...})`, NIE `default=` (HA re-injected, Felder
   werden unlöschbar).
