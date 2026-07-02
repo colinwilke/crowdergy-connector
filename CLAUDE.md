@@ -119,7 +119,9 @@ dort: Cluster C (#16–#22).
   Entity-Slots in `_PREFETCH_SLOT_KEYS` eintragen.** Test:
   `test_async_update_data_roundtrip.test_prefetch_reads_shared_entity_once`.
 - **#97 Loop-Konstanten + integration_domain dedupliziert (Code-Review 2,
-  2026-07-02, Branch `claude/code-review-91-100-1pxwxg`, PR offen):**
+  2026-07-02, PR connector#24 → `main` gemerged; kein Release nötig —
+  reines Tech-Debt-/Latenz-Update, nächstes reguläres Release nimmt es
+  mit):**
   (a) `HEARTBEAT_PING_INTERVAL`/`PER_DEVICE_MIRROR_INTERVAL`/
   `STATE_RESYNC_INTERVAL` sind jetzt EINZIG in `telemetry_composer.py`
   definiert (dort leben + lesen die Loops; die Rationale-Docstrings sind
@@ -131,7 +133,7 @@ dort: Cluster C (#16–#22).
   noch EINMAL über `entity_mapper.dominant_integration_domain` (häufigste
   Domain); das frühere `_resolve_integration_domain`
   (first-resolvable, wurde sofort überschrieben) ist entfernt.
-- **#98 charge_mode/cool_control state-gewatcht (gleiche PR):**
+- **#98 charge_mode/cool_control state-gewatcht (gleiche PR, gemerged):**
   `_build_entity_map` registriert jetzt auch `CONF_ENTITY_CHARGE_MODE` +
   `CONF_ENTITY_COOL_CONTROL` — ein manueller Flip am HA-Select propagiert
   über den Event-Refresh (≤5 s) statt erst am 30-s-Heartbeat. **Regel:
