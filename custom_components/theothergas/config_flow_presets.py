@@ -14,35 +14,13 @@ from .const import (
 )
 
 
-def _resolve_integration_domain(
-    hass: Any, entity_map: dict[str, str]
-) -> str | None:
-    """Aus den gemappten Entities die HA-Integration ableiten.
-
-    Geht über die Entity-Registry → ConfigEntry-Lookup; entity_id-
-    Präfixe sind unzuverlässig (user-renamable). Liefert den
-    ConfigEntry.domain des ersten auflösbaren Eintrags (alle Entities
-    eines Geräte-Setups gehören normalerweise demselben ConfigEntry).
-    Returns None bei Template-Sensoren, nicht-registrierten Entities
-    oder fehlendem ConfigEntry — Backend akzeptiert NULL, der box-
-    manager filtert dann allerdings das Preset raus.
-    """
-    try:
-        from homeassistant.helpers import entity_registry as er
-    except Exception:  # pragma: no cover - HA-only path
-        return None
-    registry = er.async_get(hass)
-    for entity_id in entity_map.values():
-        entry = registry.async_get(entity_id)
-        if entry is None or entry.config_entry_id is None:
-            continue
-        config_entry = hass.config_entries.async_get_entry(
-            entry.config_entry_id
-        )
-        if config_entry is None:
-            continue
-        return config_entry.domain
-    return None
+# NB (#97, 2026-07-02): das frühere `_resolve_integration_domain`
+# (first-resolvable-Entity) ist entfernt — der Contribute-Flow nutzt
+# ausschließlich `entity_mapper.dominant_integration_domain` (häufigste
+# Domain; identisches None-Verhalten, da beide dieselbe Registry
+# traversieren). Zwei Berechnungen desselben Werts, von denen die
+# zweite die erste sofort überschrieb, waren ein Drift-/
+# Fehlklassifikations-Risiko.
 
 
 def _picked_preset_maps(

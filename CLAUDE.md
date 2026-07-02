@@ -118,6 +118,25 @@ dort: Cluster C (#16–#22).
   `_get_state` nutzen (nie `hass.states.get` direkt), neue gelesene
   Entity-Slots in `_PREFETCH_SLOT_KEYS` eintragen.** Test:
   `test_async_update_data_roundtrip.test_prefetch_reads_shared_entity_once`.
+- **#97 Loop-Konstanten + integration_domain dedupliziert (Code-Review 2,
+  2026-07-02, Branch `claude/code-review-91-100-1pxwxg`, PR offen):**
+  (a) `HEARTBEAT_PING_INTERVAL`/`PER_DEVICE_MIRROR_INTERVAL`/
+  `STATE_RESYNC_INTERVAL` sind jetzt EINZIG in `telemetry_composer.py`
+  definiert (dort leben + lesen die Loops; die Rationale-Docstrings sind
+  mitgezogen) und werden aus `coordinator.py` RE-EXPORTIERT — die
+  Coordinator-Kopien waren seit dem #21-Split tot (Drift-Trap). **Regel
+  (Erweiterung der telemetry_reader-Regel): Konstanten gehören ins Modul,
+  dessen Code sie liest; `coordinator.<NAME>` bleibt via Re-Export
+  gültig.** (b) der Contribute-Flow berechnet `integration_domain` nur
+  noch EINMAL über `entity_mapper.dominant_integration_domain` (häufigste
+  Domain); das frühere `_resolve_integration_domain`
+  (first-resolvable, wurde sofort überschrieben) ist entfernt.
+- **#98 charge_mode/cool_control state-gewatcht (gleiche PR):**
+  `_build_entity_map` registriert jetzt auch `CONF_ENTITY_CHARGE_MODE` +
+  `CONF_ENTITY_COOL_CONTROL` — ein manueller Flip am HA-Select propagiert
+  über den Event-Refresh (≤5 s) statt erst am 30-s-Heartbeat. **Regel:
+  jeder Slot, den der Per-Tick-Read zurück ans Backend spiegelt, gehört
+  in die `_build_entity_map`-Key-Liste.** Test `test_entity_watch.py`.
 - **Config-Flow Edit-Felder:** `vol.Optional(..., description=
   {"suggested_value": ...})`, NIE `default=` (HA re-injected, Felder
   werden unlöschbar).
