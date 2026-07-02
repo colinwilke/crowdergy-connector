@@ -106,7 +106,6 @@ from .config_flow_presets import (
     _picked_preset_maps,
     _preset_step_defaults,
     _preset_suggests_battery_control,
-    _resolve_integration_domain,
 )
 from .config_flow_mapping import (
     _apply_climate_first,
@@ -1567,35 +1566,29 @@ class CrowdergyOptionsFlow(OptionsFlow):
             if not entity_map:
                 return self.async_abort(reason="contribute_no_entities")
 
+            # integration_domain mitschicken, sonst filtert der
+            # box-manager das Preset raus (SUPPORTED_INTEGRATIONS
+            # check). Quelle: HA-Entity-Registry → ConfigEntry.domain
+            # (Entity-IDs sind frei vom User umbenennbar, die Domain
+            # nicht); bei gemischten Setups gewinnt die HÄUFIGSTE
+            # Domain (`dominant_integration_domain` — #97: vorher wurde
+            # hier zusätzlich ein zweiter first-resolvable-Wert
+            # berechnet und sofort überschrieben). None = Template-/
+            # Helper-only-Mapping; das Backend akzeptiert NULL.
+            from .entity_mapper import dominant_integration_domain
+
             payload = {
                 "device_type": dev[CONF_DEVICE_TYPE],
                 "vendor": vendor,
                 "model": model,
                 "entity_map": entity_map,
                 "notes": notes,
-                # 2026-06-11: integration_domain mitschicken, sonst
-                # filtert der box-manager das Preset raus (SUPPORTED_
-                # INTEGRATIONS check). Wir leiten es aus der zuerst-
-                # gemappten Entity über die HA-Entity-Registry und das
-                # zugehörige ConfigEntry ab — das ist die einzige
-                # zuverlässige Quelle (Entity-IDs sind frei vom User
-                # umbenennbar, der ConfigEntry.domain ist's nicht).
-                "integration_domain": _resolve_integration_domain(
-                    self.hass, entity_map
+                "integration_domain": dominant_integration_domain(
+                    self.hass, list(entity_map.values())
                 ),
             }
             if value_map:
                 payload["value_map"] = value_map
-            # Box-Mapping-Umbau (2026-06-10): Integration der gemappten
-            # Entities mitschicken — Pflichtbaustein für Box-taugliche
-            # Presets (siehe entity_mapper.dominant_integration_domain).
-            from .entity_mapper import dominant_integration_domain
-
-            domain = dominant_integration_domain(
-                self.hass, list(entity_map.values())
-            )
-            if domain:
-                payload["integration_domain"] = domain
             # CN-12 (2026-06-11): über `_authenticated_config_request`
             # (401-Refresh + Client-Bau im Executor). CN-14: auch das
             # JSON-Parsing defensiv — ValueError landet im selben

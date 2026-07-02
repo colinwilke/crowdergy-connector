@@ -31,12 +31,47 @@ if TYPE_CHECKING:
 
 _LOGGER = logging.getLogger(__name__)
 
-# Intervalle (Sekunden). Symmetrisch zu den Werten die vor der
-# Extraktion direkt in coordinator.py standen — keine Verhaltens-
-# änderung in dieser Phase.
+# Loop-Intervalle (Sekunden). Seit #97 (2026-07-02) ist DIES die einzige
+# Definition — coordinator.py RE-EXPORTIERT die Namen (analog der
+# telemetry_reader-Konstanten), statt eine zweite, von den Loops nie
+# gelesene Kopie zu tragen (Drift-Trap aus dem #21-Split).
+
 HEARTBEAT_PING_INTERVAL = 25.0
+"""Cadence of the lightweight liveness ping the connector POSTs to
+`/api/v1/users/me/heartbeat`. Independent of any device's PATCH
+schedule — exists so the backend can stamp `users.connector_last_seen`
+(and thus iOS's connection dot) without relying on the high-frequency
+telemetry stream. Slightly under 30 s so iOS's 35 s 'live' threshold
+has one full ping of grace even if the request lands at the back of a
+network queue."""
+
 PER_DEVICE_MIRROR_INTERVAL = 60.0
+"""Per-device heartbeat-mirror cadence (v3.4.3+). Pushed das zuletzt
+gesendete Payload erneut (ohne Δ-Felder, s. `_DELTA_FIELDS` — sonst
+landet die Δ-kWh doppelt, #62), wenn seit dem letzten echten PATCH
+≥60 s vergangen sind. Refresht das telemetry-row-Timestamp im Backend
+sodass iOS `Telemetry.isFresh(staleAfter: 120)` für Idle-Geräte
+weiterhin `true` zurückgibt — ohne den Mirror flippten Kaffeemaschine,
+unbenutzte Wallbox-Stellplätze, WW im Bereitschaftsmodus alle 2 min
+auf offline, weil der Hard-Ceiling-PATCH nur alle 10 min feuert."""
+
 STATE_RESYNC_INTERVAL = 90.0
+"""Periodischer Backstop für SSE-Drops (v3.5.0+). Pollt alle 90 s
+GET /api/v1/devices, vergleicht Backend-State (is_active, is_on,
+cool_on) mit dem lokalen Cache und re-applyt bei Drift via
+`_apply_device_state` / `_apply_cool_state`.
+
+Hintergrund 2026-06-02 (zillmann-Case): SSE ist fire-and-forget +
+Backend publisht nur bei state-Transitions, nicht idempotent. Wenn
+der Connector zum Publish-Zeitpunkt nicht subscribed ist (Netzwerk-
+Flap, HA-Restart, NAT-Idle-Timeout), geht der Solver-Befehl verloren
+und wird nie repliziert. Ergebnis: WP heizte 16 min weiter über die
+Komfortzone hinaus weil das OFF nie ankam.
+
+90 s = Worst-Case-Drift-Fenster nach Solver-Decision. Kürzer wäre
+besser für UX, kostet aber Backend-Last. 90 s passt zu den anderen
+periodischen Loops (Telemetry 30 s, Mirror 60 s)."""
+
 _HEARTBEAT_BACKOFF_MAX_S = 120.0
 
 # #62: the device-mirror replays the last real payload verbatim to keep
