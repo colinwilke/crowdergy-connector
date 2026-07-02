@@ -58,6 +58,8 @@ from .const import (
     ENTITY_CONTROL_HOLD_NEVER,
     CONTROLLABLE_TYPES,
     DEVICE_TYPES,
+    TEMPERATURE_CONTROL_DOMAINS,
+    TEMPERATURE_CONTROL_TYPES,
 )
 
 
@@ -674,12 +676,42 @@ def _value_selector(hass, entity_id: str):
     return None
 
 
+def _temperature_value_selector(hass, entity_id: str):
+    """NumberSelector für den WP-Temperatur-Modus (AN = Maximal-, AUS =
+    Minimaltemperatur). Range/Step kommen aus den min_temp/max_temp/
+    target_temp_step-Attributen der climate-/water_heater-Entity;
+    konservativer °C-Fallback, wenn die Entity (noch) keinen State hat.
+    """
+    min_t, max_t, step = 5.0, 80.0, 0.5
+    state = hass.states.get(entity_id) if entity_id else None
+    if state is not None:
+        try:
+            if state.attributes.get("min_temp") is not None:
+                min_t = float(state.attributes["min_temp"])
+            if state.attributes.get("max_temp") is not None:
+                max_t = float(state.attributes["max_temp"])
+            if state.attributes.get("target_temp_step") is not None:
+                step = float(state.attributes["target_temp_step"])
+        except (TypeError, ValueError):
+            min_t, max_t, step = 5.0, 80.0, 0.5
+    return selector.NumberSelector(
+        selector.NumberSelectorConfig(
+            min=min_t,
+            max=max_t,
+            step=step,
+            unit_of_measurement="°C",
+            mode=selector.NumberSelectorMode.BOX,
+        )
+    )
+
+
 def _values_schema(
     hass,
     entity_control: str,
     defaults: dict[str, Any],
     include_cooling: bool = False,
     cooling_first: bool = False,
+    device_type: str | None = None,
 ) -> vol.Schema:
     """Step C schema: value_on + value_off, typed if entity_control supports it.
 
@@ -691,18 +723,31 @@ def _values_schema(
     v3.6.1 cooling_first=True (aircon) → Reihenfolge Kühlen → Heizen
     (optional) → Aus → Hold, weil bei einer Klimaanlage Kühlen der
     primäre Use-Case ist und Heizen sekundär/optional bleibt.
+
+    Temperatur-Modus (2026-07-02): für heating/warmwater mit climate-/
+    water_heater-Steuer-Entity sind value_on / value_off ZIEL-
+    TEMPERATUREN (°C-NumberSelector aus den Entity-Attributen) statt
+    HVAC-Modus-Dropdowns — WPs werden nie hart an/aus geschaltet,
+    sondern zwischen Maximal- (AN) und Minimaltemperatur (AUS) bewegt.
+    value_cool_on (heating+cooling) bleibt ein Modus-Mapping.
     """
     value_sel = _value_selector(hass, entity_control)
+    temperature_mode = bool(
+        device_type in TEMPERATURE_CONTROL_TYPES
+        and entity_control
+        and entity_control.split(".", 1)[0] in TEMPERATURE_CONTROL_DOMAINS
+    )
 
     def _field(key: str):
         default = defaults.get(key, "")
         # NumberSelector chokes on empty-string defaults; use None there.
-        is_number = (
+        # Temperatur-Modus: value_on/value_off sind numerische Felder —
+        # Legacy-Modus-Strings ("heat"/"off") in Bestands-Configs fallen
+        # beim float()-Cast durch und rendern leer (User trägt °C ein).
+        is_number = bool(
             entity_control
             and entity_control.split(".", 1)[0] in ("number", "input_number")
-        )
-        if default == "" and is_number:
-            return vol.Optional(key)
+        ) or (temperature_mode and key in (CONF_VALUE_ON, CONF_VALUE_OFF))
         if default == "":
             return vol.Optional(key)
         # Cast for NumberSelector consistency. `suggested_value` statt
@@ -715,15 +760,20 @@ def _values_schema(
         return vol.Optional(key, description={"suggested_value": str(default)})
 
     field_type: Any = value_sel if value_sel is not None else str
+    onoff_type: Any = (
+        _temperature_value_selector(hass, entity_control)
+        if temperature_mode
+        else field_type
+    )
 
     schema: dict[Any, Any] = {}
     if cooling_first and include_cooling:
         schema[_field(CONF_VALUE_COOL_ON)] = field_type
-        schema[_field(CONF_VALUE_ON)] = field_type
-        schema[_field(CONF_VALUE_OFF)] = field_type
+        schema[_field(CONF_VALUE_ON)] = onoff_type
+        schema[_field(CONF_VALUE_OFF)] = onoff_type
     else:
-        schema[_field(CONF_VALUE_ON)] = field_type
-        schema[_field(CONF_VALUE_OFF)] = field_type
+        schema[_field(CONF_VALUE_ON)] = onoff_type
+        schema[_field(CONF_VALUE_OFF)] = onoff_type
         if include_cooling:
             schema[_field(CONF_VALUE_COOL_ON)] = field_type
     schema[_hold_mode_field(defaults)] = _hold_mode_selector()

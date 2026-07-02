@@ -17,6 +17,29 @@ State changes of the configured entities are pushed to the Crowdergy
 backend in near-real-time. From there they are visualised in the
 Crowdergy iOS app and aggregated for community flexibility.
 
+## ⚠️ Haftungsausschluss / Disclaimer
+
+**Deutsch:** Dieser Connector schaltet und regelt **reale Geräte** in
+deinem Zuhause (Wärmepumpen, Wallboxen, Batteriespeicher, …) über die
+von dir gemappten Home-Assistant-Entitäten. Du bist selbst dafür
+verantwortlich, dass die gewählten Entitäten und Werte — insbesondere
+Minimal-/Maximaltemperaturen — für deine Anlage sicher und zulässig
+sind (z. B. Legionellenschutz beim Warmwasser, Frostschutz,
+Herstellervorgaben). Die Nutzung erfolgt **auf eigene Gefahr**; jede
+Haftung für Schäden an Geräten, Anlagen oder daraus folgende Schäden
+ist im gesetzlich zulässigen Rahmen ausgeschlossen. Die Software wird
+ohne Gewährleistung bereitgestellt (siehe [LICENSE](LICENSE), MIT).
+
+**English:** This connector switches and controls **real devices** in
+your home (heat pumps, wallboxes, battery storage, …) through the Home
+Assistant entities you map. You are responsible for ensuring the chosen
+entities and values — especially minimum/maximum temperatures — are
+safe and permissible for your installation (e.g. legionella protection
+for hot water, frost protection, manufacturer limits). Use is **at your
+own risk**; any liability for damage to devices, installations or
+consequential damage is excluded to the extent permitted by law. The
+software is provided without warranty (see [LICENSE](LICENSE), MIT).
+
 ## Installation
 
 ### HACS (recommended)
@@ -56,6 +79,13 @@ Devices can be added or removed later via the integration's
 
 ## How it works
 
+- **Heat pumps (heating / warm water) are never hard-switched.** When
+  the control entity is a `climate.*` / `water_heater.*` entity and the
+  mapped on/off values are temperatures, Crowdergy only moves the target
+  temperature between the mapped **maximum (on)** and **minimum (off)**
+  via `set_temperature` — the heat pump itself decides how long its
+  compressor runs (no `set_hvac_mode("off")`). `number` /
+  `input_number` setpoint entities behave the same way via `set_value`.
 - The coordinator subscribes to state-change events of the configured
   entities and pushes telemetry to the backend on every change.
 - A 60 s heartbeat ensures presence even when values are stable.

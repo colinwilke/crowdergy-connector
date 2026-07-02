@@ -3,7 +3,7 @@
     "step": {
       "user": {
         "title": "Connect to Crowdergy",
-        "description": "Crowdergy shifts your devices' consumption into cheap and solar-rich hours. To do that, link Home Assistant to your Crowdergy account.\n\nEnter the pairing code from the Crowdergy app (Settings → Connection).\n\nLearn more: [crowdergy.de](https://crowdergy.de)",
+        "description": "Crowdergy shifts your devices' consumption into cheap and solar-rich hours. To do that, link Home Assistant to your Crowdergy account.\n\nEnter the pairing code from the Crowdergy app (Settings → Connection).\n\n⚠️ Disclaimer: Crowdergy switches and controls real devices (heat pumps, wallboxes, batteries) through your Home Assistant entities. Use at your own risk — verify your mappings carefully; any liability for damage to devices or installations is excluded to the extent permitted by law.\n\nLearn more: [crowdergy.de](https://crowdergy.de)",
         "data": {
           "pairing_code": "Pairing code"
         },
@@ -154,7 +154,7 @@
       },
       "device_values": {
         "title": "{device_name} — Switching values",
-        "description": "Crowdergy writes these values to switch the device on and off — so it runs in cheap and solar-rich hours instead of expensive ones.\n\nTip: if the device is controlled via a target temperature, use the highest desired temperature as On and the lowest as Off (e.g. hot water: On = 55, Off = 40). For custom select helpers, enter the raw state value, not the display label.",
+        "description": "Crowdergy writes these values to switch the device on and off — so it runs in cheap and solar-rich hours instead of expensive ones.\n\nHeat pumps (heating/hot water) on a climate/water_heater entity are controlled exclusively via target temperatures: On = maximum temperature, Off = minimum temperature (e.g. hot water: On = 55, Off = 40). The heat pump is never hard-switched off and decides itself how long it runs.\n\nFor custom select helpers, enter the raw state value, not the display label.\n\n⚠️ Disclaimer: Crowdergy writes to real devices. You are responsible for ensuring the mapped values (especially temperatures) are safe for your installation; use at your own risk.",
         "data": {
           "value_on": "Value for on",
           "value_off": "Value for off",
@@ -422,7 +422,7 @@
       },
       "add_device_values": {
         "title": "{device_name} — Switching values",
-        "description": "Crowdergy writes these values to switch the device on and off — so it runs in cheap and solar-rich hours instead of expensive ones.\n\nTip: if the device is controlled via a target temperature, use the highest desired temperature as On and the lowest as Off (e.g. hot water: On = 55, Off = 40).",
+        "description": "Crowdergy writes these values to switch the device on and off — so it runs in cheap and solar-rich hours instead of expensive ones.\n\nHeat pumps (heating/hot water) on a climate/water_heater entity are controlled exclusively via target temperatures: On = maximum temperature, Off = minimum temperature (e.g. hot water: On = 55, Off = 40). The heat pump is never hard-switched off and decides itself how long it runs.\n\n⚠️ Disclaimer: Crowdergy writes to real devices. You are responsible for ensuring the mapped values (especially temperatures) are safe for your installation; use at your own risk.",
         "submit": "Next",
         "data": {
           "value_on": "Value for on",
@@ -586,7 +586,7 @@
       },
       "edit_device_values": {
         "title": "{device_name} — Switching values",
-        "description": "Crowdergy writes these values to switch the device on and off.\n\nTip: if the device is controlled via a target temperature, use the highest desired temperature as On and the lowest as Off (e.g. hot water: On = 55, Off = 40).",
+        "description": "Crowdergy writes these values to switch the device on and off.\n\nHeat pumps (heating/hot water) on a climate/water_heater entity are controlled exclusively via target temperatures: On = maximum temperature, Off = minimum temperature (e.g. hot water: On = 55, Off = 40). The heat pump is never hard-switched off and decides itself how long it runs.\n\n⚠️ Disclaimer: Crowdergy writes to real devices. You are responsible for ensuring the mapped values (especially temperatures) are safe for your installation; use at your own risk.",
         "submit": "Save",
         "data": {
           "value_on": "Value for on",

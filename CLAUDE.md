@@ -50,6 +50,35 @@ dort: Cluster C (#16–#22).
 - **Box-Services nur mit `theothergas:`-YAML-Key** (bewusst Breaking für
   Self-Hosted ohne Key). Normale HACS-Installationen sind von allen
   Box-Pfaden unberührt.
+- **WP-Temperatur-Modus (User-Vorgabe 2026-07-02, Branch
+  `claude/heatpump-minmax-temp-mapping-mrz89x`): Wärmepumpen NIE hart
+  an/aus schalten — nur gemappte Min-/Max-Zieltemperaturen.**
+  Für heating/warmwater mit climate-/water_heater-`entity_control` und
+  NUMERISCHEN value_on/value_off schreibt der Dispatch
+  `set_temperature(value_on)` bei AN (Maximaltemperatur) und
+  `set_temperature(value_off)` bei AUS (Minimaltemperatur) — es gibt in
+  diesem Modus KEIN `set_hvac_mode("off")`/`set_operation_mode("off")`;
+  die WP entscheidet selbst, wie lange der Verdichter läuft
+  (Verallgemeinerung des etablierten number-`set_value`-WW-Musters).
+  **Regeln:** (1) Erkennung = `is_temperature_control(domain, raw_value)`
+  (`const.py`, numerisch + Thermal-Domain) — HVAC-Modi sind nie
+  numerisch, daher kollisionsfrei; Legacy-Modus-Strings laufen
+  unverändert. (2) Idempotenz-Guard + Hold-Drift-Repair vergleichen im
+  Temperatur-Modus das `temperature`-ATTRIBUT, nie `state.state`
+  (`_control_actual_state`; `state.state` trägt nur „heat" —
+  String-Vergleich würde jeden Hold-Tick blind nachschreiben →
+  Piep-/Write-Storm). `_states_match` vergleicht domain-übergreifend
+  float-first. (3) `_read_is_on_state` mappt Max-Temp→True,
+  Min-Temp→False, fremden Setpoint→None (Backend behält letzten Wert).
+  (4) Config-Flow (`_values_schema(device_type=…)`): heating/warmwater
+  + climate/water_heater bekommen AUSSCHLIESSLICH °C-NumberSelector-
+  Felder (Range aus min_temp/max_temp/target_temp_step); `value_cool_on`
+  bleibt Modus-Dropdown; aircon bewusst Modus-basiert (Kühlen =
+  invertierte Temperatur-Semantik). Keine neuen Entity-Slots → kein
+  `_build_device_record`-/`preset_spec`-/Backend-Change. Tests
+  `test_temperature_control.py` (14). **Haftungsausschluss** prominent:
+  README-Top-Sektion + `user`-/`device_values`-Step-Descriptions
+  (strings.json + de.json, typografische „…“-Quotes beachten!).
 - **Wallbox:** Pre-AI-Lademodus wird bei AI-OFF NICHT restauriert
   (Restore-Pfad entfernt, Backend-Spalte existiert nicht mehr).
 - **Wallbox variabler Ladestrom (User 2026-06-20, released v3.33.0;

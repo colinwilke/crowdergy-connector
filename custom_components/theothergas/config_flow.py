@@ -1337,6 +1337,7 @@ class CrowdergyConfigFlow(ConfigFlow, domain=DOMAIN):
                 self.hass, entity_control, {},
                 include_cooling=include_cooling,
                 cooling_first=device_type == "aircon",
+                device_type=device_type,
             ),
             description_placeholders={
                 "device_type": DEVICE_TYPE_LABELS_DE.get(device_type, device_type),
@@ -2032,6 +2033,7 @@ class CrowdergyOptionsFlow(OptionsFlow):
                 self.hass, entity_control, {},
                 include_cooling=include_cooling,
                 cooling_first=device_type == "aircon",
+                device_type=device_type,
             ),
             description_placeholders={
                 "device_type": DEVICE_TYPE_LABELS_DE.get(device_type, device_type),
@@ -2528,6 +2530,7 @@ class CrowdergyOptionsFlow(OptionsFlow):
                 self.hass, entity_control, target,
                 include_cooling=include_cooling,
                 cooling_first=device_type == "aircon",
+                device_type=device_type,
             ),
             description_placeholders={
                 "device_type": DEVICE_TYPE_LABELS_DE.get(device_type, device_type),

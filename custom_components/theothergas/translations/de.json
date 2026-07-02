@@ -3,7 +3,7 @@
     "step": {
       "user": {
         "title": "Mit Crowdergy verbinden",
-        "description": "Crowdergy verschiebt den Verbrauch deiner Geräte in günstige und solarreiche Stunden. Dafür verbindest du Home Assistant mit deinem Crowdergy-Konto.\n\nTrage den Kopplungscode aus der Crowdergy-App ein (Einstellungen → Verbindung).\n\nMehr Infos: [crowdergy.de](https://crowdergy.de)",
+        "description": "Crowdergy verschiebt den Verbrauch deiner Geräte in günstige und solarreiche Stunden. Dafür verbindest du Home Assistant mit deinem Crowdergy-Konto.\n\nTrage den Kopplungscode aus der Crowdergy-App ein (Einstellungen → Verbindung).\n\n⚠️ Haftungsausschluss: Crowdergy schaltet und regelt reale Geräte (Wärmepumpen, Wallboxen, Speicher) über deine Home-Assistant-Entitäten. Die Nutzung erfolgt auf eigene Gefahr — prüfe deine Mappings sorgfältig; jede Haftung für Schäden an Geräten oder Anlagen ist im gesetzlich zulässigen Rahmen ausgeschlossen.\n\nMehr Infos: [crowdergy.de](https://crowdergy.de)",
         "submit": "Verbinden",
         "data": {
           "pairing_code": "Kopplungscode"
@@ -154,7 +154,7 @@
       },
       "device_values": {
         "title": "{device_name} — Schaltwerte",
-        "description": "Mit diesen Werten schaltet Crowdergy das Gerät ein und aus — so läuft es in günstigen und solarreichen Stunden statt in teuren.\n\nTipp: Wird über eine Ziel-Temperatur gesteuert, trage als An die höchste und als Aus die niedrigste gewünschte Temperatur ein (z. B. Warmwasser: An = 55, Aus = 40). Bei eigenen Auswahl-Helfern zählt der rohe Zustandswert, nicht das Anzeige-Label.",
+        "description": "Mit diesen Werten schaltet Crowdergy das Gerät ein und aus — so läuft es in günstigen und solarreichen Stunden statt in teuren.\n\nWärmepumpen (Heizung/Warmwasser) mit climate-/water_heater-Entität steuert Crowdergy ausschließlich über Zieltemperaturen: An = Maximaltemperatur, Aus = Minimaltemperatur (z. B. Warmwasser: An = 55, Aus = 40). Die Wärmepumpe wird nie hart abgeschaltet und entscheidet selbst, wie lange sie läuft.\n\nBei eigenen Auswahl-Helfern zählt der rohe Zustandswert, nicht das Anzeige-Label.\n\n⚠️ Haftungsausschluss: Crowdergy schreibt auf echte Geräte. Du bist dafür verantwortlich, dass die gemappten Werte (insbesondere Temperaturen) für deine Anlage sicher sind; Nutzung auf eigene Gefahr.",
         "submit": "Weiter",
         "data": {
           "value_on": "Wert für An",
@@ -422,7 +422,7 @@
       },
       "add_device_values": {
         "title": "{device_name} — Schaltwerte",
-        "description": "Mit diesen Werten schaltet Crowdergy das Gerät ein und aus — so läuft es in günstigen und solarreichen Stunden statt in teuren.\n\nTipp: Wird über eine Ziel-Temperatur gesteuert, trage als An die höchste und als Aus die niedrigste gewünschte Temperatur ein (z. B. Warmwasser: An = 55, Aus = 40).",
+        "description": "Mit diesen Werten schaltet Crowdergy das Gerät ein und aus — so läuft es in günstigen und solarreichen Stunden statt in teuren.\n\nWärmepumpen (Heizung/Warmwasser) mit climate-/water_heater-Entität steuert Crowdergy ausschließlich über Zieltemperaturen: An = Maximaltemperatur, Aus = Minimaltemperatur (z. B. Warmwasser: An = 55, Aus = 40). Die Wärmepumpe wird nie hart abgeschaltet und entscheidet selbst, wie lange sie läuft.\n\n⚠️ Haftungsausschluss: Crowdergy schreibt auf echte Geräte. Du bist dafür verantwortlich, dass die gemappten Werte (insbesondere Temperaturen) für deine Anlage sicher sind; Nutzung auf eigene Gefahr.",
         "submit": "Weiter",
         "data": {
           "value_on": "Wert für An",
@@ -586,7 +586,7 @@
       },
       "edit_device_values": {
         "title": "{device_name} — Schaltwerte",
-        "description": "Mit diesen Werten schaltet Crowdergy das Gerät ein und aus.\n\nTipp: Wird über eine Ziel-Temperatur gesteuert, trage als An die höchste und als Aus die niedrigste gewünschte Temperatur ein (z. B. Warmwasser: An = 55, Aus = 40).",
+        "description": "Mit diesen Werten schaltet Crowdergy das Gerät ein und aus.\n\nWärmepumpen (Heizung/Warmwasser) mit climate-/water_heater-Entität steuert Crowdergy ausschließlich über Zieltemperaturen: An = Maximaltemperatur, Aus = Minimaltemperatur (z. B. Warmwasser: An = 55, Aus = 40). Die Wärmepumpe wird nie hart abgeschaltet und entscheidet selbst, wie lange sie läuft.\n\n⚠️ Haftungsausschluss: Crowdergy schreibt auf echte Geräte. Du bist dafür verantwortlich, dass die gemappten Werte (insbesondere Temperaturen) für deine Anlage sicher sind; Nutzung auf eigene Gefahr.",
         "submit": "Speichern",
         "data": {
           "value_on": "Wert für An",

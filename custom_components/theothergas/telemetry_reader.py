@@ -47,6 +47,8 @@ from .const import (
     CONF_VEHICLE_STATUS_VALUE_ERROR,
     CONF_VEHICLE_STATUS_VALUE_PLUGGED,
     CONF_VEHICLE_STATUS_VALUE_UNPLUGGED,
+    is_temperature_control,
+    temperature_control_value,
 )
 
 
@@ -454,6 +456,27 @@ class TelemetryReaderMixin:
 
         value_on = dev.get(CONF_VALUE_ON, "")
         value_off = dev.get(CONF_VALUE_OFF, "")
+
+        # Temperatur-Modus (WP min/max): `state.state` trägt nur den hvac/
+        # operation-Modus („heat") — der kommandierte Zustand lebt im
+        # Ziel-Temperatur-Attribut. Max-Temp gesetzt = AN (WP darf/soll
+        # hochheizen), Min-Temp gesetzt = AUS (Eco-Floor); alles andere
+        # (User hat manuell eine dritte Temperatur gewählt) = None.
+        if is_temperature_control(domain, value_on) or is_temperature_control(
+            domain, value_off
+        ):
+            target = temperature_control_value(
+                state.attributes.get("temperature")
+            )
+            if target is None:
+                return None
+            t_on = temperature_control_value(value_on)
+            t_off = temperature_control_value(value_off)
+            if t_on is not None and target == t_on:
+                return True
+            if t_off is not None and target == t_off:
+                return False
+            return None
 
         def _matches(target: Any) -> bool:
             if target in ("", None):
