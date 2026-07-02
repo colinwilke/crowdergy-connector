@@ -1399,11 +1399,9 @@ class CommandDispatcherMixin:
         self, raw_value: Any, on: bool, domain: str
     ) -> str | None:
         """Normalise the value we'd compare an entity's current state
-        against. Returns a string (HA states are strings) or None
-        wenn wir's nicht entscheiden können — dann re-write die
-        Hold-Loop blind im 'always' Modus (es gab früher einen
-        'auto' Modus der bei None passiv blieb; collapse zu 'always'
-        seit v1.20.0, also kein Branching mehr nötig).
+        against. Returns a string (HA states are strings), or None when we
+        can't decide — in which case the hold-loop re-writes blind (there is
+        no passive mode; every hold re-asserts the command).
         """
         if domain in ("switch", "input_boolean", "light", "fan"):
             return "on" if on else "off"
