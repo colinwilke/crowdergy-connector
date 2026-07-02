@@ -740,8 +740,8 @@ class CrowdergyConfigFlow(ConfigFlow, domain=DOMAIN):
                     vol.Required(CONF_SETUP_MODE, default=SETUP_MODE_AUTO): selector.SelectSelector(
                         selector.SelectSelectorConfig(
                             options=[
-                                {"value": SETUP_MODE_AUTO, "label": "Auto-Setup (Crowdergy erkennt deine Geräte)"},
-                                {"value": SETUP_MODE_MANUAL, "label": "Manuelles Setup (alles selbst auswählen)"},
+                                {"value": SETUP_MODE_AUTO, "label": "Auto-Setup — Geräte automatisch erkennen"},
+                                {"value": SETUP_MODE_MANUAL, "label": "Manuell — Geräte selbst anlegen"},
                             ],
                             mode=selector.SelectSelectorMode.LIST,
                             translation_key=CONF_SETUP_MODE,
