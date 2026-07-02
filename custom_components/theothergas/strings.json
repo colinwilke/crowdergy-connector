@@ -3,7 +3,7 @@
     "step": {
       "user": {
         "title": "Connect to Crowdergy",
-        "description": "Crowdergy controls your flexible loads and storage so your electricity gets cheaper. Enter the pairing code from the Crowdergy app here.",
+        "description": "Crowdergy controls your flexible loads and storage so your electricity gets cheaper. Enter the pairing code from the Crowdergy app here. ⚠️ Disclaimer: Crowdergy switches and controls real devices (heat pumps, wallboxes, batteries) through your Home Assistant entities. Use at your own risk — verify your mappings carefully; any liability for damage to devices or installations is excluded to the extent permitted by law.",
         "data": {
           "pairing_code": "Pairing code"
         },
@@ -154,7 +154,7 @@
       },
       "device_values": {
         "title": "{device_name} — Write values",
-        "description": "Which values should Crowdergy write to the control entity? Switch/Input-Boolean auto-fills; for Select/Climate/Number you pick from your options. Note: for user-created input_select helpers the option must carry the RAW state value, not a localized display label — otherwise Crowdergy won't match on read-back.",
+        "description": "Which values should Crowdergy write to the control entity? Heat pumps (heating/warm water) mapped to a climate/water_heater entity are controlled exclusively via target temperatures: “Value for on” = maximum temperature, “Value for off” = minimum temperature — the heat pump is never hard-switched on or off and decides itself how long it runs. Switch/Input-Boolean auto-fills; for Select/Number you pick from your options (note: for user-created input_select helpers the option must carry the RAW state value, not a localized display label — otherwise Crowdergy will not match on read-back). ⚠️ Disclaimer: Crowdergy writes to real devices in your home. You are responsible for ensuring the mapped entities and values (especially temperatures) are safe for your installation. Use at your own risk; any liability for damage to devices or installations is excluded to the extent permitted by law.",
         "data": {
           "value_on": "Value for on",
           "value_off": "Value for off",
@@ -422,7 +422,7 @@
       },
       "add_device_values": {
         "title": "{device_name} — Write values",
-        "description": "Which values should Crowdergy write to the control entity?",
+        "description": "Which values should Crowdergy write to the control entity? Heat pumps (heating/warm water) mapped to a climate/water_heater entity are controlled exclusively via target temperatures: “Value for on” = maximum temperature, “Value for off” = minimum temperature — the heat pump is never hard-switched on or off and decides itself how long it runs. Switch/Input-Boolean auto-fills; for Select/Number you pick from your options (note: for user-created input_select helpers the option must carry the RAW state value, not a localized display label — otherwise Crowdergy will not match on read-back). ⚠️ Disclaimer: Crowdergy writes to real devices in your home. You are responsible for ensuring the mapped entities and values (especially temperatures) are safe for your installation. Use at your own risk; any liability for damage to devices or installations is excluded to the extent permitted by law.",
         "submit": "Next",
         "data": {
           "value_on": "Value for on",
@@ -586,7 +586,7 @@
       },
       "edit_device_values": {
         "title": "{device_name} — Write values",
-        "description": "Which values should Crowdergy write to the control entity?",
+        "description": "Which values should Crowdergy write to the control entity? Heat pumps (heating/warm water) mapped to a climate/water_heater entity are controlled exclusively via target temperatures: “Value for on” = maximum temperature, “Value for off” = minimum temperature — the heat pump is never hard-switched on or off and decides itself how long it runs. Switch/Input-Boolean auto-fills; for Select/Number you pick from your options (note: for user-created input_select helpers the option must carry the RAW state value, not a localized display label — otherwise Crowdergy will not match on read-back). ⚠️ Disclaimer: Crowdergy writes to real devices in your home. You are responsible for ensuring the mapped entities and values (especially temperatures) are safe for your installation. Use at your own risk; any liability for damage to devices or installations is excluded to the extent permitted by law.",
         "submit": "Save",
         "data": {
           "value_on": "Value for on",

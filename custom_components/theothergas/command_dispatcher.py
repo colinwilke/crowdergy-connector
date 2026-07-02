@@ -45,6 +45,7 @@ from .const import (
     CHARGE_MODE_HOLD_INITIAL_DELAY,
     CHARGE_MODE_HOLD_INTERVAL,
     SSE_STALE_THRESHOLD_S,
+    is_temperature_control,
 )
 from .preset_spec import PRESET_VALUE_SLOTS
 
@@ -791,7 +792,7 @@ class CommandDispatcherMixin:
         # set_hvac_mode-Call. Drift-Repair übernimmt der Hold-Loop nach
         # HOLD_INITIAL_DELAY falls actual doch noch != expected ist.
         expected = self._expected_state_value(raw_value, on, domain)
-        actual = self._read_current_state(entity_id)
+        actual = self._control_actual_state(entity_id, domain, raw_value)
         if expected is not None and self._states_match(actual, expected, domain):
             self._start_hold(device_id, entity_id, raw_value, domain, on)
             return
@@ -1171,24 +1172,38 @@ class CommandDispatcherMixin:
                     {"entity_id": entity_id, "option": str(raw_value)},
                     blocking=True,
                 )
-            elif domain == "climate":
-                await self.hass.services.async_call(
-                    domain, "set_hvac_mode",
-                    {"entity_id": entity_id, "hvac_mode": str(raw_value)},
-                    blocking=True,
-                )
-            elif domain == "water_heater":
-                # HA's water_heater integration uses set_operation_mode
-                # with operation_mode parameter (vs climate's hvac_mode).
-                # Typical operation_modes are "eco" / "performance" /
-                # "electric" / "off" — the user maps these via
-                # value_on / value_off in the device_values step just
-                # like with climate.
-                await self.hass.services.async_call(
-                    domain, "set_operation_mode",
-                    {"entity_id": entity_id, "operation_mode": str(raw_value)},
-                    blocking=True,
-                )
+            elif domain in ("climate", "water_heater"):
+                if is_temperature_control(domain, raw_value):
+                    # Temperatur-Modus (WP min/max, 2026-07-02): numerische
+                    # value_on / value_off sind ZIEL-Temperaturen — AN
+                    # schreibt die Maximal-, AUS die Minimaltemperatur via
+                    # set_temperature. Die WP entscheidet Laufzeit/Takten
+                    # selbst; es gibt in diesem Modus KEIN hartes
+                    # set_hvac_mode("off") / set_operation_mode("off").
+                    await self.hass.services.async_call(
+                        domain, "set_temperature",
+                        {"entity_id": entity_id,
+                         "temperature": float(raw_value)},
+                        blocking=True,
+                    )
+                elif domain == "climate":
+                    await self.hass.services.async_call(
+                        domain, "set_hvac_mode",
+                        {"entity_id": entity_id, "hvac_mode": str(raw_value)},
+                        blocking=True,
+                    )
+                else:
+                    # HA's water_heater integration uses set_operation_mode
+                    # with operation_mode parameter (vs climate's hvac_mode).
+                    # Typical operation_modes are "eco" / "performance" /
+                    # "electric" / "off" — the user maps these via
+                    # value_on / value_off in the device_values step just
+                    # like with climate.
+                    await self.hass.services.async_call(
+                        domain, "set_operation_mode",
+                        {"entity_id": entity_id, "operation_mode": str(raw_value)},
+                        blocking=True,
+                    )
             elif verbose:
                 _LOGGER.warning(
                     "Unsupported entity_control domain %s for %s",
@@ -1346,7 +1361,7 @@ class CommandDispatcherMixin:
                     )
                     return
                 expected = self._expected_state_value(raw_value, on, domain)
-                actual = self._read_current_state(entity_id)
+                actual = self._control_actual_state(entity_id, domain, raw_value)
                 if (
                     hold_mode == ENTITY_CONTROL_HOLD_AUTO
                     and expected is not None
@@ -1388,11 +1403,14 @@ class CommandDispatcherMixin:
         """
         if actual is None or expected is None:
             return False
-        if domain in ("number", "input_number"):
-            try:
-                return float(actual) == float(expected)
-            except (TypeError, ValueError):
-                pass
+        # Numerischer Vergleich zuerst — deckt number/input_number UND den
+        # WP-Temperatur-Modus auf climate/water_heater ab (Attribut liefert
+        # 45.0, konfiguriert ist "45"). Nicht-numerische Werte (HVAC-Modi,
+        # Select-Optionen) fallen in den String-Vergleich durch.
+        try:
+            return float(actual) == float(expected)
+        except (TypeError, ValueError):
+            pass
         return str(actual) == str(expected)
 
     def _expected_state_value(
@@ -1419,3 +1437,23 @@ class CommandDispatcherMixin:
         if state.state in ("unknown", "unavailable"):
             return None
         return state.state
+
+    def _control_actual_state(
+        self, entity_id: str, domain: str, raw_value: Any
+    ) -> str | None:
+        """Ist-Wert, gegen den der kommandierte `raw_value` verglichen wird
+        (Idempotenz-Guard + Hold-Drift-Repair).
+
+        Temperatur-Modus (WP min/max): `state.state` trägt nur den hvac/
+        operation-Modus („heat") — der kommandierte Zustand lebt im
+        Ziel-Temperatur-Attribut `temperature` (gleiche Quelle wie der
+        Vorlauf-Setpoint-Guard in `_apply_vorlauf_setpoint`). Sonst der
+        rohe Entity-State wie bisher.
+        """
+        if is_temperature_control(domain, raw_value):
+            state = self.hass.states.get(entity_id)
+            if state is None or state.state in ("unknown", "unavailable"):
+                return None
+            temp = state.attributes.get("temperature")
+            return None if temp is None else str(temp)
+        return self._read_current_state(entity_id)

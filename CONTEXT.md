@@ -36,6 +36,18 @@ Version: `manifest.json`.
   `value_map` in die Device-Config mergen, entkoppelter Reload);
   `ping` → noop. Ohne Remote-Control-Consent werden Steuer-Frames
   ignoriert; das Gate sitzt zentral in allen `_apply_*`.
+- **WP-Temperatur-Modus** (heating/warmwater, 2026-07-02): sind
+  value_on/value_off NUMERISCH und `entity_control` climate/
+  water_heater, schreibt `_apply_device_state` via `set_temperature`
+  Ziel-Temperaturen (AN = Max, AUS = Min) statt harter Modus-Writes —
+  KEIN `set_hvac_mode("off")`/`set_operation_mode("off")` mehr; die WP
+  regelt Laufzeit/Takten selbst (number/input_number war schon immer
+  so via `set_value`). Idempotenz/Hold/Resync vergleichen dann das
+  `temperature`-Attribut (`_control_actual_state`), `_read_is_on_state`
+  mappt Max-Temp→AN / Min-Temp→AUS / fremder Wert→None. Helper
+  `is_temperature_control`/`temperature_control_value` in `const.py`;
+  Config-Flow bietet für diese Typen °C-NumberSelector-Felder.
+  Nicht-numerische Werte = Legacy-Modus-Pfad (unverändert).
 - **Battery-Dispatch** (`_apply_battery_setpoint`): schreibt
   `entity_battery_mode` (Select) + `entity_battery_power_setpoint`
   (Number), idempotent mit ±10-W-Toleranz.

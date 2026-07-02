@@ -3,7 +3,7 @@
     "step": {
       "user": {
         "title": "Mit Crowdergy verbinden",
-        "description": "Crowdergy steuert deine flexiblen Verbraucher und Speicher so, dass dein Strom günstiger wird. Trage hier den Kopplungscode aus der Crowdergy App ein.",
+        "description": "Crowdergy steuert deine flexiblen Verbraucher und Speicher so, dass dein Strom günstiger wird. Trage hier den Kopplungscode aus der Crowdergy App ein. ⚠️ Haftungsausschluss: Crowdergy schaltet und regelt reale Geräte (Wärmepumpen, Wallboxen, Speicher) über deine Home-Assistant-Entitäten. Die Nutzung erfolgt auf eigene Gefahr — prüfe deine Mappings sorgfältig; jede Haftung für Schäden an Geräten oder Anlagen ist im gesetzlich zulässigen Rahmen ausgeschlossen.",
         "submit": "Verbinden",
         "data": {
           "pairing_code": "Kopplungscode"
@@ -154,7 +154,7 @@
       },
       "device_values": {
         "title": "{device_name} — Werte schreiben",
-        "description": "Was soll Crowdergy auf die Steuer-Entität schreiben? Bei Switch füllt sich das automatisch, bei Select/Climate/Number wählst du aus deinen Optionen. Hinweis: bei selbst-erstellten input_select-Helpern muss die Option den ROHEN State-Wert tragen (nicht ein lokalisiertes Anzeige-Label) — sonst matched Crowdergy nicht beim Zurücklesen.",
+        "description": "Was soll Crowdergy auf die Steuer-Entität schreiben? Wärmepumpen (Heizung/Warmwasser) mit climate-/water_heater-Entität steuert Crowdergy ausschließlich über Zieltemperaturen: „Wert für An“ = Maximaltemperatur, „Wert für Aus“ = Minimaltemperatur — die Wärmepumpe wird nie hart aus- oder eingeschaltet und entscheidet selbst, wie lange sie läuft. Bei Switch füllt sich das automatisch, bei Select/Number wählst du aus deinen Optionen (Hinweis: bei selbst-erstellten input_select-Helpern muss die Option den ROHEN State-Wert tragen, nicht ein lokalisiertes Anzeige-Label — sonst matched Crowdergy nicht beim Zurücklesen). ⚠️ Haftungsausschluss: Crowdergy schreibt auf echte Geräte in deinem Zuhause. Du bist selbst dafür verantwortlich, dass die gemappten Entitäten und Werte (insbesondere Temperaturen) für deine Anlage sicher sind. Die Nutzung erfolgt auf eigene Gefahr; jede Haftung für Schäden an Geräten oder Anlagen ist im gesetzlich zulässigen Rahmen ausgeschlossen.",
         "submit": "Weiter",
         "data": {
           "value_on": "Wert für An",
@@ -426,7 +426,7 @@
       },
       "add_device_values": {
         "title": "{device_name} — Werte schreiben",
-        "description": "Was soll Crowdergy auf die Steuer-Entität schreiben? Bei Switch füllt sich das automatisch, bei Select/Climate/Number wählst du aus deinen Optionen. Hinweis: bei selbst-erstellten input_select-Helpern muss die Option den ROHEN State-Wert tragen (nicht ein lokalisiertes Anzeige-Label) — sonst matched Crowdergy nicht beim Zurücklesen.",
+        "description": "Was soll Crowdergy auf die Steuer-Entität schreiben? Wärmepumpen (Heizung/Warmwasser) mit climate-/water_heater-Entität steuert Crowdergy ausschließlich über Zieltemperaturen: „Wert für An“ = Maximaltemperatur, „Wert für Aus“ = Minimaltemperatur — die Wärmepumpe wird nie hart aus- oder eingeschaltet und entscheidet selbst, wie lange sie läuft. Bei Switch füllt sich das automatisch, bei Select/Number wählst du aus deinen Optionen (Hinweis: bei selbst-erstellten input_select-Helpern muss die Option den ROHEN State-Wert tragen, nicht ein lokalisiertes Anzeige-Label — sonst matched Crowdergy nicht beim Zurücklesen). ⚠️ Haftungsausschluss: Crowdergy schreibt auf echte Geräte in deinem Zuhause. Du bist selbst dafür verantwortlich, dass die gemappten Entitäten und Werte (insbesondere Temperaturen) für deine Anlage sicher sind. Die Nutzung erfolgt auf eigene Gefahr; jede Haftung für Schäden an Geräten oder Anlagen ist im gesetzlich zulässigen Rahmen ausgeschlossen.",
         "submit": "Weiter",
         "data": {
           "value_on": "Wert für An",
@@ -590,7 +590,7 @@
       },
       "edit_device_values": {
         "title": "{device_name} — Werte schreiben",
-        "description": "Was soll Crowdergy auf die Steuer-Entität schreiben?",
+        "description": "Was soll Crowdergy auf die Steuer-Entität schreiben? Wärmepumpen (Heizung/Warmwasser) mit climate-/water_heater-Entität steuert Crowdergy ausschließlich über Zieltemperaturen: „Wert für An“ = Maximaltemperatur, „Wert für Aus“ = Minimaltemperatur — die Wärmepumpe wird nie hart aus- oder eingeschaltet und entscheidet selbst, wie lange sie läuft. Bei Switch füllt sich das automatisch, bei Select/Number wählst du aus deinen Optionen (Hinweis: bei selbst-erstellten input_select-Helpern muss die Option den ROHEN State-Wert tragen, nicht ein lokalisiertes Anzeige-Label — sonst matched Crowdergy nicht beim Zurücklesen). ⚠️ Haftungsausschluss: Crowdergy schreibt auf echte Geräte in deinem Zuhause. Du bist selbst dafür verantwortlich, dass die gemappten Entitäten und Werte (insbesondere Temperaturen) für deine Anlage sicher sind. Die Nutzung erfolgt auf eigene Gefahr; jede Haftung für Schäden an Geräten oder Anlagen ist im gesetzlich zulässigen Rahmen ausgeschlossen.",
         "submit": "Speichern",
         "data": {
           "value_on": "Wert für An",

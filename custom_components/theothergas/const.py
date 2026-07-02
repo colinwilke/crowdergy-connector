@@ -124,6 +124,49 @@ CONF_ENTITY_CONTROL = "entity_control"
 CONF_VALUE_ON = "value_on"
 CONF_VALUE_OFF = "value_off"
 
+# ── Temperatur-Modus für Wärmepumpen (heating / warmwater, 2026-07-02) ──
+# User-Vorgabe: WPs werden NIE hart an/aus geschaltet — stattdessen
+# interpretiert der Connector die gemappten value_on / value_off als
+# ZIEL-TEMPERATUREN (AN = Maximal-/Komforttemperatur, AUS = Minimal-/
+# Eco-Temperatur) und schreibt sie via `set_temperature`. Die WP regelt
+# Laufzeit/Takten dann selbst; ein hartes `set_hvac_mode("off")` /
+# `set_operation_mode("off")` gibt es in diesem Modus nicht mehr.
+#
+# Aktiv, wenn die Steuer-Entity climate.* / water_heater.* ist UND der
+# gemappte Wert numerisch parst. number/input_number-Steuer-Entities
+# schreiben ohnehin schon Temperatur-Setpoints (`set_value`) — das ist
+# das etablierte Warmwasser-Muster, das hier auf climate/water_heater
+# verallgemeinert wird. Nicht-numerische Werte (Legacy-HVAC-Modi wie
+# "heat"/"off") laufen weiter über den alten Modus-Schreibpfad.
+TEMPERATURE_CONTROL_DOMAINS = ("climate", "water_heater")
+# Typen, für die der Config-Flow im Values-Step Temperatur-Felder statt
+# HVAC-Modus-Dropdowns anbietet (aircon bleibt bewusst Modus-basiert:
+# Kühlen hat invertierte Temperatur-Semantik).
+TEMPERATURE_CONTROL_TYPES = ("heating", "warmwater")
+
+
+def temperature_control_value(raw) -> float | None:
+    """Parse a mapped value_on / value_off as a °C target temperature.
+
+    Returns None for empty / non-numeric values (= legacy mode-string
+    mapping such as "heat"/"off").
+    """
+    if raw in ("", None) or isinstance(raw, bool):
+        return None
+    try:
+        return float(raw)
+    except (TypeError, ValueError):
+        return None
+
+
+def is_temperature_control(domain: str, raw_value) -> bool:
+    """True when a write against this control entity is a temperature
+    setpoint (WP min/max mode) rather than a mode switch."""
+    return (
+        domain in TEMPERATURE_CONTROL_DOMAINS
+        and temperature_control_value(raw_value) is not None
+    )
+
 # Climate-first Onboarding für heating + warmwater (v2.6.0+). Wenn der
 # User eine climate.* Entity wählt, leitet der Connector daraus
 # automatisch ab: Steuerung (set_hvac_mode), Ist-Temperatur (Attribut
