@@ -132,6 +132,11 @@ dort: Cluster C (#16–#22).
   ein Gerät.** `CONF_DEVICE_ID`/`CONF_DEVICES`-Import raus (nur noch im
   alten Hook genutzt). Tests `test_device_cards.py` (3: Hub refuse /
   Leiche-allow-ohne-Backend / Prune behält Hub). Full-Suite 230 grün.
+  **RELEASED v3.40.0 (2026-07-03, PR #37 → `main` `af4ad99`, `tag-release.yml`;
+  Release-Notes `docs/releases/v3.40.0.md`; v3.39.0 war parallel schon
+  vergeben).** HACS zieht das Release automatisch; nach dem Update räumt der
+  Prune die Alt-Karten selbst. ⚠️ Wer vor dem Fix Alt-Karten von Hand löschte,
+  hat die Geräte backend-seitig verloren → im Wizard neu anlegen.
 - **HA-Geräteliste: EIN „Crowdergy"-Hub-Gerät statt per-Gerät-Dubletten
   (User 2026-07-03, Folge zu v3.37.0, Branch
   `claude/ha-connector-device-gen-d6w0de`):** der Connector legte pro Gerät
