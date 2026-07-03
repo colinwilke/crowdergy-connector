@@ -199,6 +199,17 @@ dort: Cluster C (#16–#22).
   `entity_control_hold` heißt **„Befehl wiederholen"**. Regel: `strings.json`
   (EN) und `translations/de.json` IMMER synchron (gleiche Keys +
   Placeholders); neue Texte im selben Stil.
+  **Steuerungs-Schritt Text-Fix (2026-07-03, PR #31 → `main`, released
+  v3.36.1 via `tag-release.yml`):** die drei `control_section`-Blöcke
+  (`config.step.device_entities`, `options.step.add_device_entities`,
+  `options.step.edit_device_entities`) MÜSSEN denselben Key-Satz tragen —
+  `add_device_entities` fehlten `entity_vorlauf_temp_c`/
+  `entity_vorlauf_setpoint_c` (Label+Desc) → HA zeigte den rohen Key im
+  „Gerät hinzufügen"-Flow. **Regel: ein neuer Steuerungs-/Mess-Slot muss in
+  ALLE drei Flow-Blöcke (Erst-Setup, Hinzufügen, Bearbeiten) in beiden
+  JSON-Dateien.** Zusätzlich: `entity_water_heater` als „(optional)"
+  ausgezeichnet + Section-/Feld-Beschreibungen erklären, was `climate`-/
+  `water_heater`-Entitäten sind (Präfix, was sie bündeln, wann nutzen).
 - **Brand-Icon licht/dunkel-tauglich (2026-07-02):** `brand/icon.png` (256)
   + `icon@2x.png` (512) sind eine **abgerundete Kachel** (22 %-Eckradius,
   transparente Ecken) mit dezentem hellem Rand — lesbar auf hellem UND
