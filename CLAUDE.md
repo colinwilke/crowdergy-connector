@@ -128,6 +128,10 @@ dort: Cluster C (#16–#22).
   Telemetrie-/Dispatch-/Schema-/Backend-/Preset-Change.** Alte
   `Crowdergy_<Name>`-Devices verwaisen beim nächsten Setup (HA räumt
   entity-lose Devices; Alpha ok). Tests grün (227; +2 sse-Flakes wie gehabt).
+  **RELEASED v3.38.0 (2026-07-03, PR #36 → `main` `8ad4a59`, `tag-release.yml`;
+  Release-Notes `docs/releases/v3.38.0.md`).** HACS zieht das Release
+  automatisch; OFFEN nur User-Hand: nach Update einmal re-provisionieren
+  (oder HA neu starten), damit die Alt-`Crowdergy_<Name>`-Devices verschwinden.
 - **Wallbox:** Pre-AI-Lademodus wird bei AI-OFF NICHT restauriert
   (Restore-Pfad entfernt, Backend-Spalte existiert nicht mehr).
 - **Wallbox variabler Ladestrom (User 2026-06-20, released v3.33.0;
