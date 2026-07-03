@@ -101,6 +101,10 @@ dort: Cluster C (#16–#22).
   Preset-Change; keine Entity-Slots berührt. Bestands-Sensor-Entities
   werden beim nächsten Setup verwaist (Alpha: ok). Tests grün (229; die 2
   `test_sse_client`-Flakes sind der bekannte aiodns/venv-Drift).
+  **RELEASED v3.37.0 (2026-07-03, PR #33 → `main` `5fb0592`, `tag-release.yml`
+  Run #27; Release-Notes `docs/releases/v3.37.0.md`).** HACS zieht das Release
+  automatisch; OFFEN nur User-Hand: nach Update einmal re-provisionieren (oder
+  HA neu starten), damit die Alt-`sensor.crowdergy_*`-Entities verschwinden.
 - **Wallbox:** Pre-AI-Lademodus wird bei AI-OFF NICHT restauriert
   (Restore-Pfad entfernt, Backend-Spalte existiert nicht mehr).
 - **Wallbox variabler Ladestrom (User 2026-06-20, released v3.33.0;
