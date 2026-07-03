@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from custom_components.theothergas import config_flow, switch
 from custom_components.theothergas.const import CONTROLLABLE_TYPES, DEVICE_TYPES
-from custom_components.theothergas.device_registry import DEVICE_TYPE_MODELS
 from custom_components.theothergas.entity_mapper import NAME_HINTS
 
 
@@ -18,8 +17,6 @@ def test_aircon_present_everywhere():
     assert "aircon" in CONTROLLABLE_TYPES
     # Crowdergize-Switch für Klimaanlagen (fehlte in switch.py).
     assert "aircon" in switch._CROWDERGIZE_TYPES
-    # HA-Geräteliste: kein "Generic Energy Device" mehr für ACs.
-    assert "aircon" in DEVICE_TYPE_MODELS
     # Auto-Mapping-Heuristik kennt den Typ.
     assert "aircon" in NAME_HINTS
 

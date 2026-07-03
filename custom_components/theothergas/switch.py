@@ -7,6 +7,7 @@ from typing import Any
 from homeassistant.components.switch import SwitchEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from homeassistant.util import slugify
@@ -20,7 +21,7 @@ from .const import (
     DOMAIN,
 )
 from .coordinator import CrowdergyCoordinator
-from .device_registry import get_device_info
+from .device_registry import get_hub_device_info
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -38,8 +39,9 @@ async def async_setup_entry(
     coordinator: CrowdergyCoordinator = hass.data[DOMAIN][entry.entry_id]
     devices = entry.data.get(CONF_DEVICES, [])
 
+    hub_device_info = get_hub_device_info(entry)
     async_add_entities(
-        CrowdergyActiveSwitch(coordinator, dev)
+        CrowdergyActiveSwitch(coordinator, dev, hub_device_info)
         for dev in devices
         if dev.get(CONF_DEVICE_TYPE, "") in _CROWDERGIZE_TYPES
     )
@@ -57,23 +59,30 @@ class CrowdergyActiveSwitch(
     surfaces (HA switch ↔ iOS toggle) are kept in sync via the backend.
     """
 
-    _attr_has_entity_name = True
-    # User-facing UI uses "Crowdergy AI" as the brand for the per-device
-    # consent toggle. Code/API/DB stay on the internal Crowdergize naming
+    # has_entity_name is False: all switches share the one "Crowdergy" hub
+    # device, so the device name can't distinguish them — each switch
+    # carries the user's device name explicitly in its own friendly name
+    # (e.g. "Crowdergy AI: Wallbox Garage"). User-facing UI uses "Crowdergy
+    # AI" as the brand; code/API/DB stay on the internal Crowdergize naming
     # — see project_crowdergy_ai_branding memory.
-    _attr_name = "Crowdergy AI"
+    _attr_has_entity_name = False
     _attr_icon = "mdi:transmission-tower"
 
     def __init__(
         self,
         coordinator: CrowdergyCoordinator,
         device: dict[str, Any],
+        device_info: DeviceInfo,
     ) -> None:
         super().__init__(coordinator)
         self._device_id = device[CONF_DEVICE_ID]
         self._attr_unique_id = f"{self._device_id}_is_active"
-        self._attr_device_info = get_device_info(device)
-        device_slug = slugify(device.get(CONF_DEVICE_NAME, "device"))
+        # All switches attach to the single integration-wide "Crowdergy"
+        # hub device — no per-device duplicate cards in HA's device list.
+        self._attr_device_info = device_info
+        device_name = device.get(CONF_DEVICE_NAME, "device")
+        self._attr_name = f"Crowdergy AI: {device_name}"
+        device_slug = slugify(device_name)
         # `suggested_object_id` only seeds NEW entities — existing
         # `switch.crowdergy_xxx_crowdergize` IDs stay as they are (HA
         # entity registry keeps them). Only the displayed name flips.

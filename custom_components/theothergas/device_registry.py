@@ -1,42 +1,27 @@
 """Device registry helpers for Crowdergy."""
 from __future__ import annotations
 
-from typing import Any
-
+from homeassistant.config_entries import ConfigEntry
 from homeassistant.helpers.device_registry import DeviceInfo
 
-from .const import CONF_DEVICE_ID, CONF_DEVICE_NAME, CONF_DEVICE_TYPE, DOMAIN, VERSION
-
-DEVICE_TYPE_MODELS = {
-    "solar": "Solar Inverter",
-    "battery": "Battery Storage",
-    "wallbox": "EV Wallbox",
-    "grid": "Grid Connection",
-    "heating": "Heat Pump (Heating)",
-    "warmwater": "Heat Pump (DHW)",
-    # CN-13 (2026-06-11): aircon fehlte — Klimaanlagen erschienen als
-    # "Generic Energy Device" in der HA-Geräteliste.
-    "aircon": "Air Conditioner",
-    "generic": "Generic Energy Device",
-    "haushalt": "Household Consumption",
-}
+from .const import DOMAIN, VERSION
 
 
-def get_device_info(device: dict[str, Any]) -> DeviceInfo:
-    """Build HA DeviceInfo for a Crowdergy device."""
-    device_type = device.get(CONF_DEVICE_TYPE, "generic")
-    device_name = device.get(CONF_DEVICE_NAME, "Crowdergy Device")
-    device_id = device.get(CONF_DEVICE_ID, "unknown")
+def get_hub_device_info(entry: ConfigEntry) -> DeviceInfo:
+    """Single integration-wide "Crowdergy" hub device.
 
+    All per-device "Crowdergy AI" switches and the connectivity
+    binary_sensor attach to this one device. Previously the connector
+    created a `Crowdergy_<Name>` device per mapped device, which sat as a
+    duplicate card next to the user's real integration device (and, since
+    the sensor mirror was removed, left empty cards for read-only types
+    like solar/grid). Grouping everything under one hub keeps the HA
+    device list clean while preserving the per-device switch entities.
+    """
     return DeviceInfo(
-        identifiers={(DOMAIN, device_id)},
-        # "Crowdergy_" prefix on the HA device name so the platform-
-        # injected device is visually distinct from the user's
-        # original integration device (they'd otherwise both appear
-        # as e.g. "Wallbox Garage" in HA's device list, with no easy
-        # way to tell which one a given automation/entity belongs to).
-        name=f"Crowdergy_{device_name}",
+        identifiers={(DOMAIN, entry.entry_id)},
+        name="Crowdergy",
         manufacturer="Crowdergy",
-        model=DEVICE_TYPE_MODELS.get(device_type, "Generic Energy Device"),
+        model="Energy Manager",
         sw_version=VERSION,
     )

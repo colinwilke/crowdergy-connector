@@ -25,6 +25,7 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import DOMAIN, SSE_STALE_THRESHOLD_S
 from .coordinator import CrowdergyCoordinator
+from .device_registry import get_hub_device_info
 
 
 async def async_setup_entry(
@@ -63,6 +64,9 @@ class CrowdergyConnectedBinarySensor(
         # One per config entry; the entry_id keeps the unique_id stable
         # across HA restarts even if the user re-creates the entry.
         self._attr_unique_id = f"{entry.entry_id}_crowdergy_connected"
+        # Attach to the single integration-wide "Crowdergy" hub device,
+        # same as the per-device AI switches.
+        self._attr_device_info = get_hub_device_info(entry)
 
     @property
     def is_on(self) -> bool:

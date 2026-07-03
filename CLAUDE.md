@@ -105,6 +105,29 @@ dort: Cluster C (#16–#22).
   Run #27; Release-Notes `docs/releases/v3.37.0.md`).** HACS zieht das Release
   automatisch; OFFEN nur User-Hand: nach Update einmal re-provisionieren (oder
   HA neu starten), damit die Alt-`sensor.crowdergy_*`-Entities verschwinden.
+- **HA-Geräteliste: EIN „Crowdergy"-Hub-Gerät statt per-Gerät-Dubletten
+  (User 2026-07-03, Folge zu v3.37.0, Branch
+  `claude/ha-connector-device-gen-d6w0de`):** der Connector legte pro Gerät
+  ein eigenes HA-Device `Crowdergy_<Name>` an (`device_registry.get_device_info`)
+  → Doppelkarte neben dem echten Integrations-Gerät des Users, und nach dem
+  Sensor-Entfernen leere Karten für read-only-Typen (solar/grid, die nie
+  einen Switch bekommen). **Fix:** `get_device_info(device)` →
+  `get_hub_device_info(entry)` — EIN integration-weites Device
+  (`identifiers={(DOMAIN, entry.entry_id)}`, name „Crowdergy", model „Energy
+  Manager"). ALLE per-Gerät-„Crowdergy AI"-Switches (`switch.py`, bekommt
+  jetzt `device_info` + `entry` durchgereicht) UND das
+  `binary_sensor.crowdergy_connected` hängen daran. **Naming-Falle: mit
+  einem geteilten Hub-Device verlieren die Switches die Geräte-Kontext-
+  Disambiguierung** — daher `_attr_has_entity_name=False` +
+  `_attr_name = f"Crowdergy AI: {device_name}"` (vorher fixes „Crowdergy AI"
+  auf per-Gerät-Device); `suggested_object_id` (`crowdergy_<slug>_ai`)
+  unverändert → entity_ids stabil. `DEVICE_TYPE_MODELS` + der per-Typ-Modell-
+  String entfielen (Hub braucht keinen Typ) → `test_type_registry.py` dropt
+  die eine `DEVICE_TYPE_MODELS`-Assertion (aircon-Coverage bleibt über
+  DEVICE_TYPES/CONTROLLABLE_TYPES/switch/NAME_HINTS gesichert). **Kein
+  Telemetrie-/Dispatch-/Schema-/Backend-/Preset-Change.** Alte
+  `Crowdergy_<Name>`-Devices verwaisen beim nächsten Setup (HA räumt
+  entity-lose Devices; Alpha ok). Tests grün (227; +2 sse-Flakes wie gehabt).
 - **Wallbox:** Pre-AI-Lademodus wird bei AI-OFF NICHT restauriert
   (Restore-Pfad entfernt, Backend-Spalte existiert nicht mehr).
 - **Wallbox variabler Ladestrom (User 2026-06-20, released v3.33.0;
