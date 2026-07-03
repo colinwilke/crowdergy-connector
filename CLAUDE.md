@@ -241,6 +241,34 @@ dort: Cluster C (#16–#22).
   Deploy-Reihenfolge ist damit erledigt (Backend-Spalte war schon deployed);
   OFFEN nur noch — User re-provisioniert (oder editiert) je Gerät einmal,
   dann populiert das Flag.
+- **Auto-Discovery deaktiviert + benötigte Integrationen am Profil-Pick
+  (User 2026-07-03, PR connector#35 → `main` `557251b`, RELEASED v3.39.0
+  via `tag-release.yml`):** Zwei Config-Flow-Änderungen. **(1) Auto-Setup
+  aus (nicht gelöscht):** `async_step_location` routet jetzt direkt in
+  `async_step_device_type` (manueller Per-Gerät-Pfad) + pinnt
+  `setup_mode=manual` — die Heuristik erkennt Geräte im Feld nicht
+  zuverlässig. Die Steps `setup_mode`/`auto_discover`/`auto_confirm` +
+  `entity_mapper`-Discovery bleiben als **toter, aber erhaltener Code**
+  (nur nicht mehr verdrahtet) → ohne Neubau reaktivierbar. Kein Test
+  referenziert den Auto-Pfad, daher risikofrei. **(2) `required_integrations`:**
+  der Contribute-Payload trägt jetzt zusätzlich zur häufigsten Domain
+  (`dominant_integration_domain`) ALLE distinkten Integrationen der
+  entity_map — neuer Helfer `entity_mapper.required_integration_domains`
+  (sortierte distinkte Config-Entry-Domains). Der Profil-Picker
+  (`config_flow_schemas._vendor_preset_pick_schema`) hängt an jedes
+  Profil-Label „· benötigt: <Klarname[, …]>" — Quelle ist
+  `preset["required_integrations"]` aus dem Lookup, Fallback auf den
+  Einzelwert `integration_domain` (Alt-Backend). Klarnamen aus neuer
+  `entity_mapper.INTEGRATION_DISPLAY_NAMES`-Map + `integration_display_name`
+  (Slug→Title-Case-Fallback). **Regel: neue Klarnamen für Integrationen
+  in `INTEGRATION_DISPLAY_NAMES` ergänzen (Slug-Fallback ist sicher, aber
+  hässlich).** Backend-Hälfte (Feld speichern/ausliefern): PR backend#74,
+  prod-deployed Run #67 — Reihenfolge Backend→Connector eingehalten. Kein
+  Box-Change (ignoriert das additive Feld). Vertrag
+  `docs/crowd-preset-store.md`. Tests `test_contribute_flow.py` (+3:
+  Payload trägt Feld / Picker labelt Integrationen inkl.
+  `integration_domain`-Fallback + unbekannter Slug / Display-Name
+  bekannt+Fallback).
 - **UI-Text-Stil (User-Vorgabe 2026-07-02, kompletter Rewrite strings.json +
   de.json):** Config-Flow-Texte **fachlich statt technisch** und kurz; JEDE
   Seite beginnt mit 1–2 Sätzen, WOFÜR die Zuordnung gebraucht wird („Damit

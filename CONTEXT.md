@@ -16,11 +16,11 @@ Version: `manifest.json`.
 | `telemetry_composer.py` | Background-Loops (Heartbeat, Device-Mirror mit eigenem `_last_mirror_at`, State-Resync), `bootstrap_active_state()`, `push_outdoor_temp()`; Mirror ist auf Telemetrie-Consent gegated. **Der Mirror strippt JEDES Energie-Δ-Feld (`_DELTA_FIELDS` = signed `energy_kwh_delta` + unsigned `energy_kwh_in/out_delta`-Paar) — der Re-Send refresht nur die Freshness-Clock, doppelte Δ-kWh würden vom Backend ein zweites Mal gezählt (#62).** |
 | `device_field_spec.py` | SSOT für Device-Felder im create/update-Roundtrip (`build_payload(mode, …)`) |
 | `preset_spec.py` | Slot-Schema für Crowd-Presets (public Teil des Store-Vertrags, SSOT): `PRESET_SLOT_SPEC` je Typ (solar/grid/battery/wallbox + heating/warmwater/aircon seit #68; Slot-Arten entity/value/flag + `required`), `PRESET_VALUE_SLOTS` (box_add_device-Allowlist), `extract_preset_maps()` + `missing_required_labels()` für den Contribute-Pfad |
-| `config_flow.py` | Pairing-Code-Onboarding (User erzeugt Code in der App → Flow claimt `POST /api/v1/connector/claim`, kein Email/Passwort im UI; Reauth ebenso per Code) + 3-Step-Geräte-Anlage + Nominatim-Reverse-Geocoding + Import-Flow für Box-Provisioning; Options-Flow persistiert sofort |
+| `config_flow.py` | Pairing-Code-Onboarding (User erzeugt Code in der App → Flow claimt `POST /api/v1/connector/claim`, kein Email/Passwort im UI; Reauth ebenso per Code) + manueller Per-Gerät-Anlage (Auto-Setup seit v3.39.0 deaktiviert, `location`→`device_type` direkt) + Nominatim-Reverse-Geocoding + Import-Flow für Box-Provisioning; Options-Flow persistiert sofort. Contribute schickt `required_integrations`, der Profil-Picker labelt die benötigten Integrationen |
 | `provisioning.py` / `box_services.py` | Box-Pfade (nur mit `theothergas:`-YAML-Key) |
 | `const.py` | Domain, `DEVICE_TYPES`, `CONTROLLABLE_TYPES` (SSOT), `CONF_ENTITY_*`, `MAPPABLE_ENTITY_DOMAINS` (Allowlist), Intervalle |
 | `sensor.py` / `switch.py` / `binary_sensor.py` | Plattformen |
-| `device_registry.py` / `entity_mapper.py` | Registry-Glue + Entity-Mapping (`dominant_integration_domain`) |
+| `device_registry.py` / `entity_mapper.py` | Registry-Glue + Entity-Mapping (`dominant_integration_domain`, `required_integration_domains` = alle distinkten Integrationen des Mappings, `INTEGRATION_DISPLAY_NAMES`/`integration_display_name` = Klarnamen). **Auto-Discovery (`discover_devices`) ist im Config-Flow NICHT mehr verdrahtet (v3.39.0) — Code bleibt für spätere Reaktivierung.** |
 
 ## Coordinator / Sync-Stack
 
