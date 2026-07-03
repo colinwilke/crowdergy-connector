@@ -168,6 +168,22 @@ dort: Cluster C (#16–#22).
   über den Event-Refresh (≤5 s) statt erst am 30-s-Heartbeat. **Regel:
   jeder Slot, den der Per-Tick-Read zurück ans Backend spiegelt, gehört
   in die `_build_entity_map`-Key-Liste.** Test `test_entity_watch.py`.
+- **Uniform control-capability `control_entities_mapped` (User 2026-07-03,
+  Branch `claude/battery-readonly-expandable-q86ra1`):** EIN Bool für ALLE
+  steuerbaren Typen, aus dem iOS „Steuerbar"/„Nur lesend" rendert (statt der
+  alten per-Typ-Signale). `device_field_spec._compute_is_controllable`
+  (always/always, `types=CONTROLLABLE_TYPES`) leitet es aus der Präsenz der
+  Steuer-Entity ab, die der `_apply_*`-Guard WIRKLICH braucht: wallbox
+  `entity_charge_mode`; **battery `entity_battery_mode` + Aktiv/Passiv-Werte
+  — der Power-Setpoint (`Zielleistung`) ALLEIN reicht NICHT, `_apply_battery_
+  setpoint` skippt ohne Modus-Select**; heating/warmwater/generic
+  `entity_control`; aircon `entity_control` ODER `entity_cool_control`. Nur das
+  abgeleitete Bool geht ans Backend (Entity-IDs bleiben Connector-lokal, kein
+  `_build_device_record`-Eintrag nötig — die gelesenen Keys sind schon
+  persistiert). Backend-Spalte + iOS-Feld gehören dazu (`extra=\"forbid\"` ⇒
+  Backend-Deploy VOR Connector-Release). Test `test_device_field_spec.py`
+  (setpoint-only battery = False, mode+values = True, per-Typ, readonly-Typen
+  tragen das Feld nicht).
 - **UI-Text-Stil (User-Vorgabe 2026-07-02, kompletter Rewrite strings.json +
   de.json):** Config-Flow-Texte **fachlich statt technisch** und kurz; JEDE
   Seite beginnt mit 1–2 Sätzen, WOFÜR die Zuordnung gebraucht wird („Damit

@@ -44,14 +44,20 @@ from .const import (
     CONF_CHARGE_MODE_VALUE_SOLAR,
     CONF_CITY,
     CONF_DISTRICT,
+    CONF_ENTITY_BATTERY_MODE,
+    CONF_ENTITY_CHARGE_MODE,
+    CONF_ENTITY_CONTROL,
     CONF_ENTITY_COOL_CONTROL,
     CONF_ENTITY_WALLBOX_CHARGE_CURRENT,
     CONF_REGION,
     CONF_SHARES_HARDWARE_WITH,
     CONF_SUPPORTS_COOLING,
+    CONF_VALUE_BATTERY_MODE_ACTIVE,
+    CONF_VALUE_BATTERY_MODE_PASSIVE,
     CONF_VALUE_COOL_OFF,
     CONF_VALUE_COOL_ON,
     CONF_VALUE_OFF,
+    CONTROLLABLE_TYPES,
 )
 
 
@@ -104,6 +110,44 @@ def _compute_supports_charge_current(
     return bool(
         (entity_input.get(CONF_ENTITY_WALLBOX_CHARGE_CURRENT, "") or "").strip()
     )
+
+
+def _compute_is_controllable(entity_input: dict[str, Any], dtype: str) -> bool:
+    """Uniform control-capability flag für ALLE steuerbaren Typen: hat der
+    User die Steuer-Entity(en) gemappt, die der `_apply_*`-Dispatch dieses
+    Typs WIRKLICH braucht? Spiegelt die Guards in `command_dispatcher`,
+    damit das Bool die echte Steuerbarkeit trägt (nicht bloße Entity-
+    Präsenz) — das EINE Signal, aus dem iOS „Steuerbar" vs „Nur lesend"
+    für jeden Typ rendert.
+
+      * wallbox  → `entity_charge_mode` (Select) gemappt.
+      * battery  → `entity_battery_mode` + Aktiv/Passiv-Werte gemappt.
+        Der Power-Setpoint (`Zielleistung`) ALLEIN reicht NICHT — ohne den
+        Modus-Select skippt `_apply_battery_setpoint` komplett.
+      * heating/warmwater/generic → `entity_control` gemappt.
+      * aircon   → `entity_control` ODER `entity_cool_control`.
+
+    Read-only-Typen (solar/grid/haushalt) erreichen nie einen Dispatch-
+    Handler → immer False. Value-Slots als Bool über bereits im Record
+    persistierte Keys — kein `_build_device_record`/`MAPPABLE_ENTITY_
+    DOMAINS`-Eintrag nötig.
+    """
+    def _has(key: str) -> bool:
+        return bool((entity_input.get(key, "") or "").strip())
+
+    if dtype == "wallbox":
+        return _has(CONF_ENTITY_CHARGE_MODE)
+    if dtype == "battery":
+        return (
+            _has(CONF_ENTITY_BATTERY_MODE)
+            and _has(CONF_VALUE_BATTERY_MODE_ACTIVE)
+            and _has(CONF_VALUE_BATTERY_MODE_PASSIVE)
+        )
+    if dtype == "aircon":
+        return _has(CONF_ENTITY_CONTROL) or _has(CONF_ENTITY_COOL_CONTROL)
+    if dtype in ("heating", "warmwater", "generic"):
+        return _has(CONF_ENTITY_CONTROL)
+    return False
 
 
 def _compute_value_cool_off(entity_input: dict[str, Any], dtype: str) -> str:
@@ -197,6 +241,16 @@ SPEC: tuple[DeviceField, ...] = (
         types=_WALLBOX_ONLY,
         on_create="always", on_update="always",
         compute=_compute_supports_charge_current,
+    ),
+    # Uniform control-capability für ALLE steuerbaren Typen. always/always
+    # in beide Richtungen — ein Entmappen der Steuer-Entity sendet False →
+    # iOS „Nur lesend". Scope = CONTROLLABLE_TYPES (solar/grid/haushalt
+    # tragen es nicht; die bleiben iOS-seitig ohnehin read-only).
+    DeviceField(
+        api_name="control_entities_mapped",
+        types=CONTROLLABLE_TYPES,
+        on_create="always", on_update="always",
+        compute=_compute_is_controllable,
     ),
 
     # Cooling-Capability + cooling-side Entity/Values (Heating + Aircon).

@@ -88,3 +88,62 @@ def test_included_in_haushalt_removed_from_payloads():
     )
     assert "included_in_haushalt" not in create_out
     assert "included_in_haushalt" not in update_out
+
+
+# ── Uniform control-capability flag (control_entities_mapped) ─────────────────
+
+from custom_components.theothergas.const import (  # noqa: E402
+    CONF_ENTITY_BATTERY_MODE,
+    CONF_ENTITY_BATTERY_POWER_SETPOINT,
+    CONF_ENTITY_CHARGE_MODE,
+    CONF_ENTITY_CONTROL,
+    CONF_VALUE_BATTERY_MODE_ACTIVE,
+    CONF_VALUE_BATTERY_MODE_PASSIVE,
+)
+
+
+def _mapped(dtype, entity_input):
+    out = build_payload(
+        mode="create", dtype=dtype, name="x", entity_input=entity_input
+    )
+    return out.get("control_entities_mapped")
+
+
+def test_control_entities_mapped_battery_needs_mode_not_just_setpoint():
+    """The user's case: only the power setpoint (Zielleistung) mapped, no
+    mode select → NOT dispatchable (`_apply_battery_setpoint` skips) →
+    False. Adding the Aktiv/Passiv mode select flips it True."""
+    setpoint_only = {CONF_ENTITY_BATTERY_POWER_SETPOINT: "number.hausbatterie_zielleistung"}
+    assert _mapped("battery", setpoint_only) is False
+    full = {
+        CONF_ENTITY_BATTERY_MODE: "select.batt_mode",
+        CONF_VALUE_BATTERY_MODE_ACTIVE: "Aktiv",
+        CONF_VALUE_BATTERY_MODE_PASSIVE: "Passiv",
+        CONF_ENTITY_BATTERY_POWER_SETPOINT: "number.hausbatterie_zielleistung",
+    }
+    assert _mapped("battery", full) is True
+
+
+def test_control_entities_mapped_per_type():
+    assert _mapped("wallbox", {CONF_ENTITY_CHARGE_MODE: "select.wb_mode"}) is True
+    assert _mapped("wallbox", {}) is False
+    assert _mapped("heating", {CONF_ENTITY_CONTROL: "climate.wp"}) is True
+    assert _mapped("warmwater", {CONF_ENTITY_CONTROL: "water_heater.ww"}) is True
+    assert _mapped("aircon", {CONF_ENTITY_CONTROL: "climate.ac"}) is True
+    assert _mapped("generic", {}) is False
+
+
+def test_control_entities_mapped_absent_for_readonly_types():
+    """solar/grid/haushalt are not CONTROLLABLE_TYPES → the field isn't
+    even in their payload (iOS renders them read-only by type anyway)."""
+    out = build_payload(mode="create", dtype="solar", name="PV", entity_input={})
+    assert "control_entities_mapped" not in out
+
+
+def test_control_entities_mapped_clears_on_update_when_unmapped():
+    """always/always → an unmapped control entity sends False on update
+    (device flips to „Nur lesend")."""
+    out = build_payload(
+        mode="update", dtype="battery", name="Akku", entity_input={}
+    )
+    assert out.get("control_entities_mapped") is False
