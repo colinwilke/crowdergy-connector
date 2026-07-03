@@ -105,6 +105,33 @@ dort: Cluster C (#16–#22).
   Run #27; Release-Notes `docs/releases/v3.37.0.md`).** HACS zieht das Release
   automatisch; OFFEN nur User-Hand: nach Update einmal re-provisionieren (oder
   HA neu starten), damit die Alt-`sensor.crowdergy_*`-Entities verschwinden.
+- **Card-Delete-Hook destruktiv unter dem Hub-Modell (Bugfix, User-Report
+  2026-07-03, Folge zu v3.38.0, Branch `claude/ha-connector-device-gen-d6w0de`):**
+  User: „Wenn ich die alten `Crowdergy_<Name>`-Karten in HA lösche, geht auch
+  das Crowdergy-Gerät weg." Root-Cause: `async_remove_config_entry_device`
+  (`__init__.py`) war aus der per-Gerät-Device-Ära — es zog aus JEDER
+  gelöschten Karte die `(DOMAIN, identifier)`-ID und rief
+  `coordinator.delete_device_backend(id)` + drop aus `CONF_DEVICES` + reload.
+  Unter dem Hub-Modell sind die alten Karten aber entity-lose LEICHEN (Switch
+  ist auf den Hub `(DOMAIN, entry_id)` re-homed, Sensoren seit v3.37.0 weg) →
+  eine „leere" Karte zu löschen löschte still das REALE Gerät am Backend +
+  nahm seinen AI-Switch vom Hub. **Zwei-Teil-Fix:** (1) **proaktiver Prune**
+  `_prune_legacy_device_cards` in `async_setup_entry` NACH
+  `async_forward_entry_setups` — detacht alle Nicht-Hub-`(DOMAIN, …)`-Devices
+  des Entries (`async_update_device(remove_config_entry_id=…)`) → HA räumt die
+  leeren Karten selbst, User muss nichts von Hand löschen (sicher, weil die
+  Switches schon re-homed sind). (2) **`async_remove_config_entry_device`
+  nicht-destruktiv:** Hub-Karte (`identifier == entry_id`) → `return False`
+  (Live-Device, nicht per Karte löschbar); jede andere `(DOMAIN, …)`-Leiche →
+  `return True` OHNE Backend-Delete/Config-Change/Reload. **Echtes Löschen
+  eines Geräts läuft weiter über den Options-Flow `remove_device`
+  (Configure → Gerät entfernen: Backend-DELETE + `_remove_ha_device` +
+  reload)** — der ist die einzige korrekte Delete-Route. **Regel: unter einem
+  geteilten Hub-Device darf `async_remove_config_entry_device` NIE aus einer
+  Karten-Löschung ein Backend-Device ableiten — die Karte ist nicht mehr 1:1
+  ein Gerät.** `CONF_DEVICE_ID`/`CONF_DEVICES`-Import raus (nur noch im
+  alten Hook genutzt). Tests `test_device_cards.py` (3: Hub refuse /
+  Leiche-allow-ohne-Backend / Prune behält Hub). Full-Suite 230 grün.
 - **HA-Geräteliste: EIN „Crowdergy"-Hub-Gerät statt per-Gerät-Dubletten
   (User 2026-07-03, Folge zu v3.37.0, Branch
   `claude/ha-connector-device-gen-d6w0de`):** der Connector legte pro Gerät
