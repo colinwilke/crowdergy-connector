@@ -183,7 +183,11 @@ dort: Cluster C (#16–#22).
   persistiert). Backend-Spalte + iOS-Feld gehören dazu (`extra=\"forbid\"` ⇒
   Backend-Deploy VOR Connector-Release). Test `test_device_field_spec.py`
   (setpoint-only battery = False, mode+values = True, per-Typ, readonly-Typen
-  tragen das Feld nicht).
+  tragen das Feld nicht). **RELEASED v3.36.0 (2026-07-03, PR #29 → `main`,
+  `tag-release.yml` Run #25 grün):** der Connector-Release-Schritt der
+  Deploy-Reihenfolge ist damit erledigt (Backend-Spalte war schon deployed);
+  OFFEN nur noch — User re-provisioniert (oder editiert) je Gerät einmal,
+  dann populiert das Flag.
 - **UI-Text-Stil (User-Vorgabe 2026-07-02, kompletter Rewrite strings.json +
   de.json):** Config-Flow-Texte **fachlich statt technisch** und kurz; JEDE
   Seite beginnt mit 1–2 Sätzen, WOFÜR die Zuordnung gebraucht wird („Damit
