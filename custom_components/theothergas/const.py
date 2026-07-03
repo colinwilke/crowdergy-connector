@@ -373,7 +373,13 @@ CHARGE_MODE_HOLD_INTERVAL = 15
 # packet loss.
 SSE_STALE_THRESHOLD_S = 60
 
-PLATFORMS = ["sensor", "switch", "binary_sensor"]
+# CN (2026-07-03): der eigene `sensor`-Platform-Mirror
+# (Crowdergy_Current Power / State of Charge) wurde entfernt — er
+# doppelte nur die schon vorhandenen Integrations-Entities des Users
+# (siehe project-memory „HA-Entity-Generierung"). Der Steuer-Switch
+# (Crowdergy AI) und das Liveness-`binary_sensor` (crowdergy_connected)
+# bleiben, weil sie in HA echte, sonst nicht vorhandene Funktion tragen.
+PLATFORMS = ["switch", "binary_sensor"]
 
 # ── Auto-Mapping (Phase 1) ────────────────────────────────────────────
 # v3.1: erster Schritt im Config-Flow ist eine Wahl zwischen
