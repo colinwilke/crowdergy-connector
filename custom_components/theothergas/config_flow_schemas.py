@@ -335,6 +335,30 @@ def _config_mode_schema(
     })
 
 
+def _preset_required_integrations_label(preset: dict[str, Any]) -> str:
+    """Klarnamen-Liste der Integrationen, die dieses Preset braucht.
+
+    Quelle: `required_integrations` (alle distinkten Integrationen der
+    entity_map, Backend seit 2026-07-03); Fallback auf den Einzelwert
+    `integration_domain` (Alt-Backend). Jede Domain über
+    `entity_mapper.integration_display_name` zum Klarnamen (Slug-Fallback).
+    Leerer String, wenn das Preset keine Integration ausweist."""
+    from .entity_mapper import integration_display_name
+
+    raw = preset.get("required_integrations")
+    if not isinstance(raw, list) or not raw:
+        single = preset.get("integration_domain")
+        raw = [single] if single else []
+    names: list[str] = []
+    for domain in raw:
+        if not isinstance(domain, str):
+            continue
+        name = integration_display_name(domain)
+        if name and name not in names:
+            names.append(name)
+    return ", ".join(names)
+
+
 def _vendor_preset_pick_schema(presets: list[dict[str, Any]]) -> vol.Schema:
     """Picker für Vendor-Presets. Option `__manual__` skipt das Preset
     und führt zum klassischen manuellen Entity-Mapping. Pro Preset
@@ -351,6 +375,9 @@ def _vendor_preset_pick_schema(presets: list[dict[str, Any]]) -> vol.Schema:
         )
         if p.get("status") not in (None, "approved"):
             label += " — Community, noch unbestätigt"
+        needed = _preset_required_integrations_label(p)
+        if needed:
+            label += f" · benötigt: {needed}"
         options.append({"value": f"{p['vendor']}::{p['model']}", "label": label})
     options.append({"value": "__manual__", "label": "Manuell konfigurieren"})
     return vol.Schema(
