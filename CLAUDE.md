@@ -79,6 +79,28 @@ dort: Cluster C (#16–#22).
   `test_temperature_control.py` (14). **Haftungsausschluss** prominent:
   README-Top-Sektion + `user`-/`device_values`-Step-Descriptions
   (strings.json + de.json, typografische „…“-Quotes beachten!).
+- **HA-Entity-Generierung entschlackt (User 2026-07-03, Branch
+  `claude/ha-connector-device-gen-d6w0de`): eigener `sensor`-Platform-Mirror
+  ENTFERNT.** Der Connector legte pro Gerät ein eigenes HA-„Device"
+  (`Crowdergy_<Name>`, `device_registry.py`) mit `switch` + `sensor` +
+  (integration-weit) `binary_sensor` an. Die zwei **Spiegel-Sensoren**
+  (`sensor.py`: `Crowdergy_Current Power` + `Crowdergy_State of Charge`)
+  doppelten nur die schon vorhandenen echten Integrations-Entities des
+  Users (Wert kam aus `coordinator.data`, das aus genau diesen Entities
+  gelesen wird) → verwirrend („Solar Power" zweimal, nur per
+  `Crowdergy_`-Präfix unterscheidbar). **`sensor.py` gelöscht, `sensor`
+  aus `PLATFORMS` (`const.py`) raus.** BEHALTEN, weil echte, sonst nicht
+  vorhandene Funktion: **(1)** der per-Gerät **`switch` „Crowdergy AI"**
+  (`switch.py`) = HA-seitiger Steuerpunkt für den Crowdergize-Consent-Flag
+  (POSTet `toggle_active`, spiegelt den iOS-Toggle), **(2)** das
+  integration-weite **`binary_sensor.crowdergy_connected`**
+  (`binary_sensor.py`) = SSE-Liveness für Übernahme-Automationen bei
+  Crowdergy-Ausfall. **Kein Telemetrie-/Dispatch-Bezug** — die generierten
+  Platform-Entities sind reine Sicht-/Bedien-Schicht; gelesen/geschaltet
+  wird immer über die gemappten echten Entities. Kein Schema-/Backend-/
+  Preset-Change; keine Entity-Slots berührt. Bestands-Sensor-Entities
+  werden beim nächsten Setup verwaist (Alpha: ok). Tests grün (229; die 2
+  `test_sse_client`-Flakes sind der bekannte aiodns/venv-Drift).
 - **Wallbox:** Pre-AI-Lademodus wird bei AI-OFF NICHT restauriert
   (Restore-Pfad entfernt, Backend-Spalte existiert nicht mehr).
 - **Wallbox variabler Ladestrom (User 2026-06-20, released v3.33.0;
