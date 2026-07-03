@@ -779,7 +779,108 @@ __all__ = [
     "collect_entity_metadata",
     "discover_devices",
     "group_candidates_by_device",
+    "INTEGRATION_DISPLAY_NAMES",
+    "integration_display_name",
+    "required_integration_domains",
 ]
+
+
+# Klarnamen für die verbreitetsten HA-Integrationen, damit die
+# Connector-Anzeige „dafür brauchst du folgende Integration(en)" beim
+# Profil-Pick nicht den rohen Domain-Slug zeigt. Unbekannte Domains
+# fallen über `integration_display_name` auf einen aufgehübschten Slug
+# zurück (Underscores → Leerzeichen, Title-Case). Bewusst additiv —
+# neue Integrationen hier ergänzen, ohne dass etwas bricht.
+INTEGRATION_DISPLAY_NAMES: dict[str, str] = {
+    # Solar / Wechselrichter
+    "fronius": "Fronius",
+    "sma": "SMA",
+    "solaredge": "SolarEdge",
+    "huawei_solar": "Huawei Solar",
+    "enphase_envoy": "Enphase Envoy",
+    "goodwe": "GoodWe",
+    "kostal": "Kostal",
+    "kostal_plenticore": "Kostal Plenticore",
+    "growatt_server": "Growatt",
+    # Batterie / Heimspeicher
+    "sonnen": "sonnen",
+    "sonnenbatterie": "sonnenBatterie",
+    "victron": "Victron",
+    "byd": "BYD",
+    "powerwall": "Tesla Powerwall",
+    # Wallbox
+    "keba": "KEBA",
+    "easee": "Easee",
+    "go_e": "go-e",
+    "goecharger": "go-e Charger",
+    "wallbox": "Wallbox",
+    "openevse": "OpenEVSE",
+    "tesla_wall_connector": "Tesla Wall Connector",
+    "evcc": "evcc",
+    # Wärmepumpe / Klima
+    "daikin": "Daikin",
+    "nibe": "NIBE",
+    "viessmann": "Viessmann",
+    "stiebel_eltron": "Stiebel Eltron",
+    "mitsubishi_heavy_aircon": "Mitsubishi Heavy",
+    "lg_thinq": "LG ThinQ",
+    "vaillant": "Vaillant",
+    "buderus": "Buderus",
+    "aquarea_smart_cloud": "Panasonic Aquarea",
+    "aquarea_smart_cloud2": "Panasonic Aquarea",
+    "aquarea": "Panasonic Aquarea",
+    "panasonic_smart_app": "Panasonic Comfort Cloud",
+    # Netz / Smart Meter
+    "dsmr": "DSMR Smart Meter",
+    "p1_monitor": "P1 Monitor",
+    "tibber": "Tibber",
+    "shelly": "Shelly",
+    "shelly_em": "Shelly EM",
+    "shellyem": "Shelly EM",
+    # Multipurpose
+    "modbus": "Modbus",
+    "mqtt": "MQTT",
+}
+
+
+def integration_display_name(domain: str) -> str:
+    """Klarname für eine HA-Integration-Domain, Slug-Fallback.
+
+    Bekannte Domains kommen aus `INTEGRATION_DISPLAY_NAMES`; unbekannte
+    werden aufgehübscht (Underscores → Leerzeichen, Title-Case), sodass
+    z.B. eine noch nicht kuratierte `my_inverter`-Domain als „My Inverter"
+    erscheint statt roh."""
+    slug = (domain or "").strip()
+    if not slug:
+        return ""
+    if slug in INTEGRATION_DISPLAY_NAMES:
+        return INTEGRATION_DISPLAY_NAMES[slug]
+    return slug.replace("_", " ").title()
+
+
+def required_integration_domains(
+    hass: HomeAssistant, entity_ids: list[str]
+) -> list[str]:
+    """Alle DISTINKTEN HA-Integration-Domains der Entities (Registry →
+    Config-Entry), sortiert.
+
+    Superset zu `dominant_integration_domain` (das nur die häufigste
+    Domain zurückgibt): ein Preset, dessen entity_map Entities aus
+    mehreren Integrationen zieht, braucht sie ALLE, um vollständig
+    auflösbar zu sein. Template-/Helper-Entities ohne Config-Entry zählen
+    nicht. Leere Liste, wenn keine Entity eine Integration auflöst."""
+    ent_reg = er.async_get(hass)
+    domains: set[str] = set()
+    for entity_id in entity_ids:
+        reg_entry = ent_reg.async_get(entity_id)
+        if reg_entry is None or not reg_entry.config_entry_id:
+            continue
+        config_entry = hass.config_entries.async_get_entry(
+            reg_entry.config_entry_id
+        )
+        if config_entry is not None:
+            domains.add(config_entry.domain)
+    return sorted(domains)
 
 
 def dominant_integration_domain(

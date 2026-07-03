@@ -693,7 +693,14 @@ class CrowdergyConfigFlow(ConfigFlow, domain=DOMAIN):
             self._data[CONF_ENTITY_OUTDOOR_TEMP] = user_input.get(
                 CONF_ENTITY_OUTDOOR_TEMP, ""
             )
-            return await self.async_step_setup_mode()
+            # Auto-Setup ist deaktiviert (die Heuristik erkennt Geräte
+            # aktuell nicht zuverlässig genug) — der Flow geht direkt in
+            # den manuellen Per-Gerät-Pfad. Der `setup_mode`-Step + die
+            # `auto_discover`/`auto_confirm`-Steps + `entity_mapper` bleiben
+            # als Code erhalten (nur nicht mehr verdrahtet), damit Auto-
+            # Setup später ohne Neubau reaktiviert werden kann.
+            self._data[CONF_SETUP_MODE] = SETUP_MODE_MANUAL
+            return await self.async_step_device_type()
 
         # Pre-fill from HA's configured coordinates so the user usually
         # just hits Submit. Resolved once per fresh location step; if the
@@ -1576,8 +1583,12 @@ class CrowdergyOptionsFlow(OptionsFlow):
             # hier zusätzlich ein zweiter first-resolvable-Wert
             # berechnet und sofort überschrieben). None = Template-/
             # Helper-only-Mapping; das Backend akzeptiert NULL.
-            from .entity_mapper import dominant_integration_domain
+            from .entity_mapper import (
+                dominant_integration_domain,
+                required_integration_domains,
+            )
 
+            entity_values = list(entity_map.values())
             payload = {
                 "device_type": dev[CONF_DEVICE_TYPE],
                 "vendor": vendor,
@@ -1585,7 +1596,13 @@ class CrowdergyOptionsFlow(OptionsFlow):
                 "entity_map": entity_map,
                 "notes": notes,
                 "integration_domain": dominant_integration_domain(
-                    self.hass, list(entity_map.values())
+                    self.hass, entity_values
+                ),
+                # ALLE distinkten Integrationen, die das Mapping braucht —
+                # das Backend speichert sie + zeigt sie neuen Usern beim
+                # Profil-Pick („dafür brauchst du folgende Integration(en)").
+                "required_integrations": required_integration_domains(
+                    self.hass, entity_values
                 ),
             }
             if value_map:

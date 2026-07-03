@@ -257,3 +257,72 @@ async def test_pick_schema_marks_staged_presets(hass: HomeAssistant):
     assert "unbestätigt" in labels["B::M2"]
     # fehlender status (Alt-Backend) = approved-Verhalten
     assert "unbestätigt" not in labels["C::M3"]
+
+
+async def test_contribute_payload_carries_required_integrations(
+    hass: HomeAssistant,
+):
+    """Der Contribute-Payload trägt die distinkten Integrationen des
+    Mappings, damit das Backend sie speichert + neuen Usern anzeigt."""
+    flow = _make_flow(hass, [BATTERY_DEV])
+    await flow.async_step_contribute_preset({CONF_DEVICE_ID: "dev-bat"})
+    captured: dict = {}
+
+    async def fake_request(hass_, entry_, method, path, **kwargs):
+        captured.update(kwargs["json"])
+        return _response(200, {"status": "staged", "contribution_count": 1})
+
+    with patch(
+        "custom_components.theothergas.entity_mapper.required_integration_domains",
+        return_value=["kostal_plenticore"],
+    ), patch(
+        "custom_components.theothergas.config_flow._authenticated_config_request",
+        new=AsyncMock(side_effect=fake_request),
+    ):
+        result = await flow.async_step_contribute_preset_form(
+            {"vendor": "KOSTAL", "model": "Plenticore plus 8.5"}
+        )
+
+    assert result["reason"] == "contribute_success"
+    assert captured["required_integrations"] == ["kostal_plenticore"]
+
+
+def test_pick_schema_labels_required_integrations(hass: HomeAssistant):
+    """Der Profil-Picker zeigt pro Preset die benötigte(n) Integration(en)
+    als Klarname (Slug-Fallback)."""
+    schema = config_flow._vendor_preset_pick_schema(
+        [
+            # required_integrations (neu) → Klarnamen, dedupliziert
+            {"vendor": "A", "model": "M1", "status": "approved",
+             "contribution_count": 5,
+             "required_integrations": ["kostal_plenticore", "go_e"]},
+            # nur integration_domain (Alt-Backend) → Fallback auf Einzelwert
+            {"vendor": "B", "model": "M2", "status": "approved",
+             "contribution_count": 2, "integration_domain": "tibber"},
+            # unbekannte Domain → aufgehübschter Slug
+            {"vendor": "C", "model": "M3", "status": "approved",
+             "contribution_count": 1,
+             "required_integrations": ["my_inverter"]},
+            # keine Integration → kein „benötigt"-Suffix
+            {"vendor": "D", "model": "M4", "status": "approved",
+             "contribution_count": 1},
+        ]
+    )
+    selector_cfg = next(iter(schema.schema.values())).config
+    labels = {o["value"]: o["label"] for o in selector_cfg["options"]}
+    assert "benötigt: Kostal Plenticore, go-e" in labels["A::M1"]
+    assert "benötigt: Tibber" in labels["B::M2"]
+    assert "benötigt: My Inverter" in labels["C::M3"]
+    assert "benötigt" not in labels["D::M4"]
+
+
+def test_integration_display_name_known_and_fallback():
+    from custom_components.theothergas.entity_mapper import (
+        integration_display_name,
+    )
+
+    assert integration_display_name("kostal_plenticore") == "Kostal Plenticore"
+    assert integration_display_name("go_e") == "go-e"
+    # unbekannte Domain → Slug aufgehübscht
+    assert integration_display_name("acme_meter_x") == "Acme Meter X"
+    assert integration_display_name("") == ""
