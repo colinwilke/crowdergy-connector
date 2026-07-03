@@ -128,7 +128,7 @@
           },
           "control_section": {
             "name": "Steuerung",
-            "description": "Darüber steuert Crowdergy das Gerät — nur mit deiner Freigabe. Heizung/Klima: Climate- oder Steuer-Entität. Warmwasser: water_heater- oder Steuer-Entität. Wallbox/Batterie: Lademodus.",
+            "description": "Darüber steuert Crowdergy das Gerät — nur mit deiner Freigabe. „Climate\" und „water_heater\" sind die Standard-Thermostat-Entitäten von Home Assistant (Präfix climate. bzw. water_heater.): Sie bündeln Zieltemperatur, Betriebsmodi und Ist-Temperatur in einer Entität. Hat dein Gerät so eine Entität, ordne sie hier zu; fehlt sie, nutze stattdessen eine einfache Steuer-Entität (Schalter, Auswahl oder Zahlenwert). Heizung/Klima: Climate- oder Steuer-Entität. Warmwasser: water_heater- oder Steuer-Entität. Wallbox/Batterie: Lademodus.",
             "data": {
               "entity_climate": "Climate-Entität",
               "entity_control": "Steuer-Entität",
@@ -137,17 +137,17 @@
               "entity_vorlauf_setpoint_c": "Vorlauf-Sollwert (optional)",
               "entity_charge_mode": "Lademodus",
               "entity_wallbox_charge_current_a": "Ladestrom (optional)",
-              "entity_water_heater": "Warmwasser-Entität"
+              "entity_water_heater": "Warmwasser-Entität (optional)"
             },
             "data_description": {
-              "entity_climate": "Thermostat-Entität der Wärmepumpe — Steuerung und Modi werden daraus abgeleitet. Bei Heizung gilt deren Temperatur als Vorlauf; die Raumtemperatur bitte separat als Ist-Temperatur zuordnen.",
+              "entity_climate": "Die „climate\"-Entität (Thermostat, Präfix climate.) deiner Wärmepumpe — Steuerung und Modi werden daraus abgeleitet. Bei Heizung gilt deren Temperatur als Vorlauf; die Raumtemperatur bitte separat als Ist-Temperatur zuordnen.",
               "entity_control": "Schaltet das Gerät ein und aus — Schalter, Auswahl oder Zahlenwert (z. B. SG-Ready).",
               "entity_current_temp_c": "Heizung: Raumtemperatur (Pflicht — daran misst Crowdergy deinen Komfort). Warmwasser: Speichertemperatur, falls die Warmwasser-Entität sie nicht korrekt meldet. Manuell: dein Temperaturfühler (Pflicht).",
               "entity_vorlauf_temp_c": "Vorlauffühler der Heizung. Verbessert die Effizienz-Schätzung der Wärmepumpe — leer lassen, wenn nicht vorhanden.",
               "entity_vorlauf_setpoint_c": "Nur bei manueller Steuerung: schreibbarer Vorlauf-Sollwert in °C. Crowdergy regelt die Heizung dann stufenlos statt nur an/aus. Bei Climate-Entität leer lassen.",
               "entity_charge_mode": "Wallbox: Auswahl der Lademodi (Sperren/Laden/Solar). Batterie: Entität für den Betriebsmodus.",
               "entity_wallbox_charge_current_a": "Stellt den Ladestrom in Ampere (typisch 6–16 A). Damit passt Crowdergy die Ladeleistung an den Solarüberschuss an, statt nur mit voller Leistung zu laden.",
-              "entity_water_heater": "water_heater-Entität der Brauchwasser-Wärmepumpe — Steuerung, Modi und Temperatur werden daraus abgeleitet."
+              "entity_water_heater": "Optional: die „water_heater\"-Entität deiner Brauchwasser-Wärmepumpe (Präfix water_heater.). Steuerung, Modi und Speichertemperatur werden daraus abgeleitet. Hast du keine solche Entität, lass das Feld leer und ordne stattdessen eine Steuer-Entität zu."
             }
           }
         }
@@ -400,22 +400,26 @@
           },
           "control_section": {
             "name": "Steuerung",
-            "description": "Darüber steuert Crowdergy das Gerät — nur mit deiner Freigabe. Heizung/Klima: Climate- oder Steuer-Entität. Warmwasser: water_heater- oder Steuer-Entität. Wallbox/Batterie: Lademodus.",
+            "description": "Darüber steuert Crowdergy das Gerät — nur mit deiner Freigabe. „Climate\" und „water_heater\" sind die Standard-Thermostat-Entitäten von Home Assistant (Präfix climate. bzw. water_heater.): Sie bündeln Zieltemperatur, Betriebsmodi und Ist-Temperatur in einer Entität. Hat dein Gerät so eine Entität, ordne sie hier zu; fehlt sie, nutze stattdessen eine einfache Steuer-Entität (Schalter, Auswahl oder Zahlenwert). Heizung/Klima: Climate- oder Steuer-Entität. Warmwasser: water_heater- oder Steuer-Entität. Wallbox/Batterie: Lademodus.",
             "data": {
               "entity_climate": "Climate-Entität",
               "entity_control": "Steuer-Entität",
               "entity_current_temp_c": "Ist-Temperatur",
+              "entity_vorlauf_temp_c": "Vorlauftemperatur (optional)",
+              "entity_vorlauf_setpoint_c": "Vorlauf-Sollwert (optional)",
               "entity_charge_mode": "Lademodus",
               "entity_wallbox_charge_current_a": "Ladestrom (optional)",
-              "entity_water_heater": "Warmwasser-Entität"
+              "entity_water_heater": "Warmwasser-Entität (optional)"
             },
             "data_description": {
-              "entity_climate": "Thermostat-Entität der Wärmepumpe — Steuerung und Modi werden daraus abgeleitet. Bei Heizung gilt deren Temperatur als Vorlauf; die Raumtemperatur bitte separat als Ist-Temperatur zuordnen.",
+              "entity_climate": "Die „climate\"-Entität (Thermostat, Präfix climate.) deiner Wärmepumpe — Steuerung und Modi werden daraus abgeleitet. Bei Heizung gilt deren Temperatur als Vorlauf; die Raumtemperatur bitte separat als Ist-Temperatur zuordnen.",
               "entity_control": "Schaltet das Gerät ein und aus — Schalter, Auswahl oder Zahlenwert (z. B. SG-Ready).",
               "entity_current_temp_c": "Heizung: Raumtemperatur (Pflicht — daran misst Crowdergy deinen Komfort). Warmwasser: Speichertemperatur. Manuell: dein Temperaturfühler (Pflicht).",
+              "entity_vorlauf_temp_c": "Vorlauffühler der Heizung. Verbessert die Effizienz-Schätzung der Wärmepumpe — leer lassen, wenn nicht vorhanden.",
+              "entity_vorlauf_setpoint_c": "Nur bei manueller Steuerung: schreibbarer Vorlauf-Sollwert in °C. Crowdergy regelt die Heizung dann stufenlos statt nur an/aus. Bei Climate-Entität leer lassen.",
               "entity_charge_mode": "Wallbox: Auswahl der Lademodi (Sperren/Laden/Solar). Batterie: Entität für den Betriebsmodus.",
               "entity_wallbox_charge_current_a": "Stellt den Ladestrom in Ampere (typisch 6–16 A). Damit passt Crowdergy die Ladeleistung an den Solarüberschuss an, statt nur mit voller Leistung zu laden.",
-              "entity_water_heater": "water_heater-Entität der Brauchwasser-Wärmepumpe — Steuerung, Modi und Temperatur werden daraus abgeleitet."
+              "entity_water_heater": "Optional: die „water_heater\"-Entität deiner Brauchwasser-Wärmepumpe (Präfix water_heater.). Steuerung, Modi und Speichertemperatur werden daraus abgeleitet. Hast du keine solche Entität, lass das Feld leer und ordne stattdessen eine Steuer-Entität zu."
             }
           }
         }
@@ -560,7 +564,7 @@
           },
           "control_section": {
             "name": "Steuerung",
-            "description": "Darüber steuert Crowdergy das Gerät — nur mit deiner Freigabe. Heizung/Klima: Climate- oder Steuer-Entität. Warmwasser: water_heater- oder Steuer-Entität. Wallbox/Batterie: Lademodus.",
+            "description": "Darüber steuert Crowdergy das Gerät — nur mit deiner Freigabe. „Climate\" und „water_heater\" sind die Standard-Thermostat-Entitäten von Home Assistant (Präfix climate. bzw. water_heater.): Sie bündeln Zieltemperatur, Betriebsmodi und Ist-Temperatur in einer Entität. Hat dein Gerät so eine Entität, ordne sie hier zu; fehlt sie, nutze stattdessen eine einfache Steuer-Entität (Schalter, Auswahl oder Zahlenwert). Heizung/Klima: Climate- oder Steuer-Entität. Warmwasser: water_heater- oder Steuer-Entität. Wallbox/Batterie: Lademodus.",
             "data": {
               "entity_climate": "Climate-Entität",
               "entity_control": "Steuer-Entität",
@@ -569,17 +573,17 @@
               "entity_vorlauf_setpoint_c": "Vorlauf-Sollwert (optional)",
               "entity_charge_mode": "Lademodus",
               "entity_wallbox_charge_current_a": "Ladestrom (optional)",
-              "entity_water_heater": "Warmwasser-Entität"
+              "entity_water_heater": "Warmwasser-Entität (optional)"
             },
             "data_description": {
-              "entity_climate": "Thermostat-Entität der Wärmepumpe — Steuerung und Modi werden daraus abgeleitet. Bei Heizung gilt deren Temperatur als Vorlauf; die Raumtemperatur bitte separat als Ist-Temperatur zuordnen.",
+              "entity_climate": "Die „climate\"-Entität (Thermostat, Präfix climate.) deiner Wärmepumpe — Steuerung und Modi werden daraus abgeleitet. Bei Heizung gilt deren Temperatur als Vorlauf; die Raumtemperatur bitte separat als Ist-Temperatur zuordnen.",
               "entity_control": "Schaltet das Gerät ein und aus — Schalter, Auswahl oder Zahlenwert (z. B. SG-Ready).",
               "entity_current_temp_c": "Heizung: Raumtemperatur (Pflicht — daran misst Crowdergy deinen Komfort). Warmwasser: Speichertemperatur. Manuell: dein Temperaturfühler (Pflicht).",
               "entity_vorlauf_temp_c": "Vorlauffühler der Heizung. Verbessert die Effizienz-Schätzung der Wärmepumpe — leer lassen, wenn nicht vorhanden.",
               "entity_vorlauf_setpoint_c": "Nur bei manueller Steuerung: schreibbarer Vorlauf-Sollwert in °C. Crowdergy regelt die Heizung dann stufenlos statt nur an/aus. Bei Climate-Entität leer lassen.",
               "entity_charge_mode": "Wallbox: Auswahl der Lademodi. Batterie: Entität für den Betriebsmodus.",
               "entity_wallbox_charge_current_a": "Stellt den Ladestrom in Ampere (typisch 6–16 A). Damit passt Crowdergy die Ladeleistung an den Solarüberschuss an, statt nur mit voller Leistung zu laden.",
-              "entity_water_heater": "water_heater-Entität der Brauchwasser-Wärmepumpe — Steuerung, Modi und Temperatur werden daraus abgeleitet."
+              "entity_water_heater": "Optional: die „water_heater\"-Entität deiner Brauchwasser-Wärmepumpe (Präfix water_heater.). Steuerung, Modi und Speichertemperatur werden daraus abgeleitet. Hast du keine solche Entität, lass das Feld leer und ordne stattdessen eine Steuer-Entität zu."
             }
           }
         }

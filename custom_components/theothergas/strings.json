@@ -127,7 +127,7 @@
           },
           "control_section": {
             "name": "Control",
-            "description": "This is how Crowdergy controls the device — only with your consent. Heating/AC: climate or control entity. Hot water: water-heater or control entity. Wallbox/battery: charge mode.",
+            "description": "This is how Crowdergy controls the device — only with your consent. 'climate' and 'water_heater' are Home Assistant's standard thermostat entities (prefixed climate. and water_heater.): they bundle target temperature, operating modes and current temperature into one entity. If your device exposes one, map it here; if not, use a plain control entity instead (a switch, select or number). Heating/AC: climate or control entity. Hot water: water-heater or control entity. Wallbox/battery: charge mode.",
             "data": {
               "entity_climate": "Climate entity",
               "entity_control": "Control entity",
@@ -136,17 +136,17 @@
               "entity_vorlauf_setpoint_c": "Flow setpoint (optional)",
               "entity_charge_mode": "Charge mode",
               "entity_wallbox_charge_current_a": "Charging current (optional)",
-              "entity_water_heater": "Water-heater entity"
+              "entity_water_heater": "Water-heater entity (optional)"
             },
             "data_description": {
-              "entity_climate": "Your heat pump's thermostat entity — control and modes are derived from it. For heating, its temperature is treated as the flow temperature; map the room temperature separately as current temperature.",
+              "entity_climate": "The climate (thermostat) entity of your heat pump (prefixed climate.) — control and modes are derived from it. For heating, its temperature is treated as the flow temperature; map the room temperature separately as current temperature.",
               "entity_control": "Switches the device on and off — a switch, select or number (e.g. SG-Ready).",
               "entity_current_temp_c": "Heating: room temperature (required — this is how Crowdergy tracks your comfort). Hot water: tank temperature if the water-heater entity doesn't report it correctly. Manual: your temperature sensor (required).",
               "entity_vorlauf_temp_c": "Flow-temperature sensor of the heating. Improves the heat pump's efficiency estimate — leave empty if not available.",
               "entity_vorlauf_setpoint_c": "Manual control only: writable flow setpoint in °C. Crowdergy then modulates the heating smoothly instead of just on/off. Leave empty with a climate entity.",
               "entity_charge_mode": "Wallbox: charge-mode select (lock/charge/solar). Battery: operating-mode entity.",
               "entity_wallbox_charge_current_a": "Sets the charging current in amps (typically 6–16 A). Lets Crowdergy match the charging power to the solar surplus instead of always charging at full power.",
-              "entity_water_heater": "Water-heater entity of your DHW heat pump — control, modes and temperature are derived from it."
+              "entity_water_heater": "Optional: the water_heater entity of your DHW heat pump (prefixed water_heater.). Control, modes and tank temperature are derived from it. If you don't have one, leave this empty and map a control entity instead."
             }
           }
         },
@@ -399,22 +399,26 @@
           },
           "control_section": {
             "name": "Control",
-            "description": "This is how Crowdergy controls the device — only with your consent. Heating/AC: climate or control entity. Hot water: water-heater or control entity. Wallbox/battery: charge mode.",
+            "description": "This is how Crowdergy controls the device — only with your consent. 'climate' and 'water_heater' are Home Assistant's standard thermostat entities (prefixed climate. and water_heater.): they bundle target temperature, operating modes and current temperature into one entity. If your device exposes one, map it here; if not, use a plain control entity instead (a switch, select or number). Heating/AC: climate or control entity. Hot water: water-heater or control entity. Wallbox/battery: charge mode.",
             "data": {
               "entity_climate": "Climate entity",
               "entity_control": "Control entity",
               "entity_current_temp_c": "Current temperature",
+              "entity_vorlauf_temp_c": "Flow temperature (optional)",
+              "entity_vorlauf_setpoint_c": "Flow setpoint (optional)",
               "entity_charge_mode": "Charge mode",
               "entity_wallbox_charge_current_a": "Charging current (optional)",
-              "entity_water_heater": "Water-heater entity"
+              "entity_water_heater": "Water-heater entity (optional)"
             },
             "data_description": {
-              "entity_climate": "Your heat pump's thermostat entity — control and modes are derived from it. For heating, its temperature is treated as the flow temperature; map the room temperature separately as current temperature.",
+              "entity_climate": "The climate (thermostat) entity of your heat pump (prefixed climate.) — control and modes are derived from it. For heating, its temperature is treated as the flow temperature; map the room temperature separately as current temperature.",
               "entity_control": "Switches the device on and off — a switch, select or number (e.g. SG-Ready).",
               "entity_current_temp_c": "Heating: room temperature (required — this is how Crowdergy tracks your comfort). Hot water: tank temperature. Manual: your temperature sensor (required).",
+              "entity_vorlauf_temp_c": "Flow-temperature sensor of the heating. Improves the heat pump's efficiency estimate — leave empty if not available.",
+              "entity_vorlauf_setpoint_c": "Manual control only: writable flow setpoint in °C. Crowdergy then modulates the heating smoothly instead of just on/off. Leave empty with a climate entity.",
               "entity_charge_mode": "Wallbox: charge-mode select (lock/charge/solar). Battery: operating-mode entity.",
               "entity_wallbox_charge_current_a": "Sets the charging current in amps (typically 6–16 A). Lets Crowdergy match the charging power to the solar surplus instead of always charging at full power.",
-              "entity_water_heater": "Water-heater entity of your DHW heat pump — control, modes and temperature are derived from it."
+              "entity_water_heater": "Optional: the water_heater entity of your DHW heat pump (prefixed water_heater.). Control, modes and tank temperature are derived from it. If you don't have one, leave this empty and map a control entity instead."
             }
           }
         },
@@ -560,7 +564,7 @@
           },
           "control_section": {
             "name": "Control",
-            "description": "This is how Crowdergy controls the device — only with your consent. Heating/AC: climate or control entity. Hot water: water-heater or control entity. Wallbox/battery: charge mode.",
+            "description": "This is how Crowdergy controls the device — only with your consent. 'climate' and 'water_heater' are Home Assistant's standard thermostat entities (prefixed climate. and water_heater.): they bundle target temperature, operating modes and current temperature into one entity. If your device exposes one, map it here; if not, use a plain control entity instead (a switch, select or number). Heating/AC: climate or control entity. Hot water: water-heater or control entity. Wallbox/battery: charge mode.",
             "data": {
               "entity_climate": "Climate entity",
               "entity_control": "Control entity",
@@ -569,17 +573,17 @@
               "entity_vorlauf_setpoint_c": "Flow setpoint (optional)",
               "entity_charge_mode": "Charge mode",
               "entity_wallbox_charge_current_a": "Charging current (optional)",
-              "entity_water_heater": "Water-heater entity"
+              "entity_water_heater": "Water-heater entity (optional)"
             },
             "data_description": {
-              "entity_climate": "Your heat pump's thermostat entity — control and modes are derived from it. For heating, its temperature is treated as the flow temperature; map the room temperature separately as current temperature.",
+              "entity_climate": "The climate (thermostat) entity of your heat pump (prefixed climate.) — control and modes are derived from it. For heating, its temperature is treated as the flow temperature; map the room temperature separately as current temperature.",
               "entity_control": "Switches the device on and off — a switch, select or number (e.g. SG-Ready).",
               "entity_current_temp_c": "Heating: room temperature (required — this is how Crowdergy tracks your comfort). Hot water: tank temperature. Manual: your temperature sensor (required).",
               "entity_vorlauf_temp_c": "Flow-temperature sensor of the heating. Improves the heat pump's efficiency estimate — leave empty if not available.",
               "entity_vorlauf_setpoint_c": "Manual control only: writable flow setpoint in °C. Crowdergy then modulates the heating smoothly instead of just on/off. Leave empty with a climate entity.",
               "entity_charge_mode": "Wallbox: charge-mode select. Battery: operating-mode entity.",
               "entity_wallbox_charge_current_a": "Sets the charging current in amps (typically 6–16 A). Lets Crowdergy match the charging power to the solar surplus instead of always charging at full power.",
-              "entity_water_heater": "Water-heater entity of your DHW heat pump — control, modes and temperature are derived from it."
+              "entity_water_heater": "Optional: the water_heater entity of your DHW heat pump (prefixed water_heater.). Control, modes and tank temperature are derived from it. If you don't have one, leave this empty and map a control entity instead."
             }
           }
         }
