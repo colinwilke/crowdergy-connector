@@ -14,8 +14,6 @@ from homeassistant.helpers.typing import ConfigType
 from .const import (
     CONF_ACCESS_TOKEN,
     CONF_API_URL,
-    CONF_DEVICE_ID,
-    CONF_DEVICES,
     CONF_EMAIL,
     CONF_REFRESH_TOKEN,
     CONF_USER_ID,
@@ -120,7 +118,37 @@ async def async_setup_entry(hass: HomeAssistant, entry: CrowdergyConfigEntry) ->
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 
+    _prune_legacy_device_cards(hass, entry)
+
     return True
+
+
+def _prune_legacy_device_cards(
+    hass: HomeAssistant, entry: CrowdergyConfigEntry
+) -> None:
+    """Remove pre-v3.38.0 per-device registry cards.
+
+    Until v3.38.0 the connector registered one `Crowdergy_<Name>` device
+    per mapped device. Since v3.38.0 every entity attaches to the single
+    hub device ``(DOMAIN, entry_id)``; the old per-device cards are left
+    entity-less (their "Crowdergy AI" switch re-homed to the hub above,
+    their mirror sensors were removed in v3.37.0). Detach those leftovers
+    from this entry so HA clears the empty cards automatically.
+
+    Without this the user has to delete the stale cards by hand — and a
+    card-delete used to trigger a real backend device delete (see
+    ``async_remove_config_entry_device``), so tidying up the empty cards
+    silently deleted live devices. Pruning here (after the switches have
+    re-homed to the hub) is safe: the leftover cards carry no entities.
+    """
+    dev_reg = dr.async_get(hass)
+    hub_identifier = (DOMAIN, entry.entry_id)
+    for device in dr.async_entries_for_config_entry(dev_reg, entry.entry_id):
+        if hub_identifier in device.identifiers:
+            continue
+        dev_reg.async_update_device(
+            device.id, remove_config_entry_id=entry.entry_id
+        )
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: CrowdergyConfigEntry) -> bool:
@@ -145,64 +173,33 @@ async def async_remove_config_entry_device(
     config_entry: CrowdergyConfigEntry,
     device_entry: dr.DeviceEntry,
 ) -> bool:
-    """Allow the user to delete a device card directly in the HA UI.
+    """Handle a device-card deletion from the HA UI.
 
-    Deletes the device on the Crowdergy backend, drops it from the config
-    entry's devices list, then lets HA finish removing the registry entry.
-    Returning True signals HA to proceed with the removal.
+    Since v3.38.0 the integration registers a single "Crowdergy" hub
+    device ``(DOMAIN, entry_id)`` that all switches and the connectivity
+    sensor attach to — there are no per-device cards for active devices
+    anymore. So this hook must NEVER delete a backend device: it only
+    decides whether HA may remove a card.
+
+    - **Hub device** (identifier == entry_id): the live integration
+      device. Refuse deletion (return False) so a stray card-delete can't
+      orphan every switch; the whole integration is removed via its entry.
+    - **Any other ``(DOMAIN, …)`` card**: a pre-v3.38.0 per-device
+      leftover (now entity-less). Allow HA to clear the empty card, but
+      leave the backend untouched — the real device still lives under the
+      hub. Removing a device is done explicitly via Configure → Remove
+      device (options flow), which deletes it on the backend.
+
+    Historic behaviour (delete the backend device + reload on any card
+    deletion) was destructive under the hub model: deleting an empty
+    leftover card silently deleted the live device it used to represent.
     """
-    # Pull the Crowdergy device-id from the (DOMAIN, …) identifier tuple.
-    crowdergy_device_id: str | None = None
     for domain, identifier in device_entry.identifiers:
-        if domain == DOMAIN:
-            crowdergy_device_id = identifier
-            break
+        if domain == DOMAIN and identifier == config_entry.entry_id:
+            # The live hub device — don't let a card-delete remove it out
+            # from under its entities.
+            return False
 
-    if crowdergy_device_id is None:
-        # No Crowdergy identifier — nothing to talk to the backend about.
-        return True
-
-    # Cluster B Connector (2026-06-09): vorher hatte dieser Pfad einen
-    # eigenen httpx-Client ohne 401-Refresh — bei abgelaufenem Token
-    # blieb das Device backend-seitig als Orphan zurück. Jetzt
-    # delegiert er an `coordinator.delete_device_backend()` der den
-    # selben authentifizierten Request-Pfad nutzt wie alles andere.
-    coordinator: CrowdergyCoordinator | None = (
-        hass.data.get(DOMAIN, {}).get(config_entry.entry_id)
-    )
-    if coordinator is not None:
-        try:
-            await coordinator.delete_device_backend(crowdergy_device_id)
-        except Exception as err:  # noqa: BLE001
-            _LOGGER.warning(
-                "Backend delete for %s raised %s — removing locally anyway",
-                crowdergy_device_id, err,
-            )
-
-    # Drop the device from our persisted config-entry list so the
-    # coordinator stops polling/pushing for it on the next reload.
-    devices = [
-        d for d in config_entry.data.get(CONF_DEVICES, [])
-        if d.get(CONF_DEVICE_ID) != crowdergy_device_id
-    ]
-    new_data = {**config_entry.data, CONF_DEVICES: devices}
-    hass.config_entries.async_update_entry(config_entry, data=new_data)
-
-    # Prune the coordinator's per-device bookkeeping dicts (inkl.
-    # self.devices + Entity-Index seit CN-8) so nothing PATCHes the
-    # deleted device while the scheduled reload below is still
-    # pending.
-    coordinator: CrowdergyCoordinator | None = (
-        hass.data.get(DOMAIN, {}).get(config_entry.entry_id)
-    )
-    if coordinator is not None:
-        coordinator.forget_device(crowdergy_device_id)
-
-    # CN-8 (2026-06-11): Reload schedulen, damit Coordinator/Entities
-    # sauber auf der neuen Geräteliste neu aufsetzen — HA erzwingt
-    # nach async_remove_config_entry_device keinen Reload, und der
-    # laufende Coordinator hat die Liste sonst nur via forget_device
-    # in-memory gepatcht (Platform-Entities blieben registriert).
-    hass.config_entries.async_schedule_reload(config_entry.entry_id)
-
+    # A stale per-device leftover card: let HA clear the empty card, no
+    # backend delete (device removal lives in the options flow).
     return True
