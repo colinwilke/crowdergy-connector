@@ -1585,6 +1585,7 @@ class CrowdergyOptionsFlow(OptionsFlow):
             # Helper-only-Mapping; das Backend akzeptiert NULL.
             from .entity_mapper import (
                 dominant_integration_domain,
+                required_helper_specs,
                 required_integration_domains,
             )
 
@@ -1607,6 +1608,14 @@ class CrowdergyOptionsFlow(OptionsFlow):
             }
             if value_map:
                 payload["value_map"] = value_map
+            # Strukturierte Specs der HA-Helfer (input_select/input_number/
+            # input_boolean), die die entity_map referenziert — damit ein
+            # empfangender User sie nachbauen kann (der Consumer legt sie
+            # vor dem Mapping an). Nur mitschicken, wenn welche existieren
+            # (Slot→id, daher die volle Map, nicht nur die Werte).
+            helper_specs = required_helper_specs(self.hass, entity_map)
+            if helper_specs:
+                payload["required_helpers"] = helper_specs
             # CN-12 (2026-06-11): über `_authenticated_config_request`
             # (401-Refresh + Client-Bau im Executor). CN-14: auch das
             # JSON-Parsing defensiv — ValueError landet im selben
