@@ -197,6 +197,24 @@ normales User-JWT, kein separater Auth-Pfad. Nicht-Kurator → 403
   unbekannter Key → 404 `PRESET_NOT_FOUND`. Contribution-Audit-Zeilen
   ziehen mit (approve: pending→active, reject: →rejected, stage:
   →pending).
+* `GET /api/v1/crowd-presets/curation/all` — wie `/queue`, aber ALLE
+  Status (staged/approved/rejected) für die Admin-Tabelle; sortiert nach
+  Status-Gruppe (staged, approved, rejected), dann device_type/vendor/model.
+* `PUT /api/v1/crowd-presets/curation/preset` — Kurator-Direkt-Upsert
+  (`PresetEditRequest`: wie Contribute minus `notes`, plus optionalem
+  `status`). Schreibt entity_map/value_map/helper_yaml/integration_domain/
+  required_integrations DIREKT auf `VendorPreset` — **bewusst auch über
+  den `approved`-Freeze hinweg** (der Kurator ist autoritativ; genau dafür
+  ist die Bearbeiten-Funktion da). Unbekannter Key → neue Zeile
+  (Default-Status `approved`, override via `status`). Key-Felder
+  unveränderlich; „Umbenennen" = neue Zeile + alte rejecten.
+  `contribution_count` bleibt unangetastet.
+* `GET /api/v1/crowd-presets/admin` — self-contained HTML-Tabelle
+  (Kurator-Login → Liste → Inline-Edit/Neu-Anlegen/Ablehnen). Der Shell
+  ist auth-frei, ALLE Datenoperationen laufen curator-gated. Bewusst NUR
+  am API-Host `api.theothergas.de` (die crowdergy.de-nginx-CSP würde das
+  Inline-JS blocken; die App selbst setzt keine CSP). „Löschen" in der UI
+  = `decide reject` (kein Hard-Delete).
 * **Empirische Validierung:** der Self-Hosted-Preset-Picker ist das
   Test-Vehikel — ein staged Preset gegen die eigene Hardware (KOSTAL)
   anwenden, bevor es approved wird.
@@ -235,14 +253,26 @@ normales User-JWT, kein separater Auth-Pfad. Nicht-Kurator → 403
    persistieren (Box zusätzlich: `crowd_preset_updated_at` = `updated_at`
    des angewandten Presets, Baseline für #28).
 
-## Admin-Ausbau (Design-Vorschlag 2026-06-12 — Stufe 2, noch nicht umgesetzt)
+## Admin-Ausbau (Stufe 2 — teilweise umgesetzt 2026-07-04)
 
-Die implementierte Kurations-API oben ist Stufe 1. Der weitergehende
-Admin-Bereich bleibt als abgestimmtes Design dokumentiert:
+Die Kurator-Tabelle (`GET /admin` + `/curation/all` + `PUT /curation/preset`,
+s.o.) realisiert den Kern von Stufe 2: **alle Status listen, Maps inline
+bearbeiten, neue Zeile anlegen, ablehnen**. Bewusste Abweichungen vom
+Ur-Design (User-Entscheid 2026-07-04):
 
-- **Erreichbarkeit:** Admin-Router nur auf localhost binden, Zugriff
-  per SSH-Tunnel (bestehendes Staging-Muster) — kein öffentlicher
-  Admin-Endpunkt, solange es genau einen Admin gibt.
+- **Erreichbarkeit:** die Tabelle ist am **öffentlichen API-Host** erreichbar
+  (curator-gated statt localhost/SSH-Tunnel), damit sie ohne Tunnel im
+  Browser läuft (CORS ist zu → same-origin-Zwang; die App hat keine CSP).
+  Das Ur-Design „nur localhost binden" ist damit überholt.
+- **Kein Hard-Delete** — „Löschen" = `reject` (Profil verschwindet aus dem
+  Lookup, Zeile bleibt sichtbar + wieder freigebbar). Ein echter DELETE
+  (DSGVO/Abuse) bleibt offen.
+
+Noch offen aus dem Ur-Design:
+
+- **Erreichbarkeit (Ur-Fassung, überholt):** Admin-Router nur auf localhost
+  binden, Zugriff per SSH-Tunnel (bestehendes Staging-Muster) — kein
+  öffentlicher Admin-Endpunkt, solange es genau einen Admin gibt.
 - **Endpoints:** `GET /admin/crowd-presets?status=…` (Queue inkl.
   approved/rejected), Detail mit allen Roh-Contributions +
   Konsens-Diff (Fingerprint-Vergleich: je Slot der Messnamens-Suffix,
