@@ -301,6 +301,30 @@ dort: Cluster C (#16–#22).
   Payload trägt Feld / Picker labelt Integrationen inkl.
   `integration_domain`-Fallback + unbekannter Slug / Display-Name
   bekannt+Fallback).
+- **Crowd-Preset `required_helpers` — HA-Helfer-Provisionierung (User
+  2026-07-05, Branch `claude/ha-helpers-profile-sharing-iicz4p`, PR
+  connector#39 DRAFT):** ein Preset kann einen Slot auf einen selbst
+  angelegten HA-Helfer mappen (`input_select`/`input_number`/`input_boolean`);
+  ein Empfänger hat ihn nicht. **Produce:** `entity_mapper.
+  required_helper_specs(hass, entity_map)` leitet je Slot, der auf einen
+  `input_*`-Helfer zeigt, die Spec aus der LIVE-HA-Config ab (options/min/max/
+  step/unit/friendly_name); native `select`/`number` sind KEINE Helfer → keine
+  Spec. Contribute-Payload trägt `required_helpers` nur wenn welche existieren.
+  **Apply — DURABLE LEHRE: der Connector kann `input_*`-Helfer NICHT
+  zuverlässig selbst anlegen.** Er läuft INNERHALB der HA, aber die
+  input_*-Storage-Collection wird von HA nirgends abrufbar in `hass.data`
+  abgelegt (anders als z. B. `zone`, das seine Collection unter
+  `hass.data[DOMAIN]` ablegt — bei input_* ist das die EntityComponent, nicht
+  die Collection). Es gibt keine stabile API + keine WS-Connection von innen.
+  Deshalb KEIN Fake-Anlegen: der Profil-Picker labelt „· HA-Helfer nötig: …"
+  (`config_flow_schemas._preset_required_helpers_label`) und die Helfer-Slot-
+  IDs werden im Entity-Step als Vorschlag vorbefüllt; der User legt die Helfer
+  1× in HA an. **Die BOX legt sie automatisch an** (steuert HA von AUSSEN per
+  WS-Collection-`<domain>/create`). **Regel: HA-Helfer programmatisch anlegen
+  geht nur von AUSSEN (Box/WS), NICHT aus einem HACS-Component heraus.**
+  Backend-Hälfte (Feld speichern/ausliefern): PR backend#90. Vertrag
+  `docs/crowd-preset-store.md` (HelperSpec + per-Consumer-Pflicht). Tests
+  `test_contribute_flow.py` (+5).
 - **UI-Text-Stil (User-Vorgabe 2026-07-02, kompletter Rewrite strings.json +
   de.json):** Config-Flow-Texte **fachlich statt technisch** und kurz; JEDE
   Seite beginnt mit 1–2 Sätzen, WOFÜR die Zuordnung gebraucht wird („Damit

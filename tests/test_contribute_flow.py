@@ -326,3 +326,171 @@ def test_integration_display_name_known_and_fallback():
     # unbekannte Domain → Slug aufgehübscht
     assert integration_display_name("acme_meter_x") == "Acme Meter X"
     assert integration_display_name("") == ""
+
+
+# ── required_helpers (HA-Helfer-Provisionierung, 2026-07-04) ───────────
+
+# Batterie, deren Steuer-Slots auf selbst angelegte HA-HELFER zeigen
+# (input_select/input_number) statt native Integrations-Entities — der
+# reale Kostal-Fall (input_select treibt eine Modbus-Automation).
+HELPER_BATTERY_DEV = {
+    "device_id": "dev-bat-helper",
+    "device_name": "Speicher (Helfer)",
+    "device_type": "battery",
+    "entity_current_power_kw": "sensor.solar_battery_power",
+    "entity_soc_percent": "sensor.solar_battery_soc",
+    "entity_battery_mode": "input_select.hausbatterie_lademodus",
+    "value_battery_mode_active": "Extern",
+    "value_battery_mode_passive": "Automatik",
+    "entity_battery_power_setpoint_w": "input_number.hausbatterie_zielleistung",
+}
+
+
+def test_required_helper_specs_reads_input_helpers(hass: HomeAssistant):
+    """Pure Funktion: liest je Helfer-Slot die HA-Config aus; native
+    Entities (sensor/select/number) werden übersprungen."""
+    from custom_components.theothergas.entity_mapper import required_helper_specs
+
+    hass.states.async_set(
+        "input_select.hausbatterie_lademodus",
+        "Extern",
+        {"options": ["Extern", "Automatik", "Laden"], "friendly_name": "Lademodus"},
+    )
+    hass.states.async_set(
+        "input_number.hausbatterie_zielleistung",
+        "0",
+        {"min": -10000, "max": 10000, "step": 100, "unit_of_measurement": "W"},
+    )
+    specs = required_helper_specs(
+        hass,
+        {
+            "entity_current_power_kw": "sensor.solar_battery_power",  # native → skip
+            "entity_battery_mode": "input_select.hausbatterie_lademodus",
+            "entity_battery_power_setpoint_w": "input_number.hausbatterie_zielleistung",
+        },
+    )
+    assert specs == [
+        {
+            "slot": "entity_battery_mode",
+            "type": "input_select",
+            "options": ["Extern", "Automatik", "Laden"],
+            "name": "Lademodus",
+        },
+        {
+            "slot": "entity_battery_power_setpoint_w",
+            "type": "input_number",
+            "min": -10000.0,
+            "max": 10000.0,
+            "step": 100.0,
+            "unit": "W",
+            # kein friendly_name gesetzt → kein "name"
+        },
+    ]
+
+
+def test_required_helper_specs_skips_unreadable_and_none_without_helpers(
+    hass: HomeAssistant,
+):
+    from custom_components.theothergas.entity_mapper import required_helper_specs
+
+    # native-only map → None
+    assert (
+        required_helper_specs(
+            hass,
+            {"entity_battery_mode": "select.native", "x": "sensor.y"},
+        )
+        is None
+    )
+    # input_select ohne options (State fehlt) → übersprungen → None
+    assert (
+        required_helper_specs(
+            hass, {"entity_battery_mode": "input_select.ghost"}
+        )
+        is None
+    )
+
+
+async def test_contribute_payload_carries_required_helpers(hass: HomeAssistant):
+    """Der Contribute-Payload trägt strukturierte Helfer-Specs, wenn die
+    entity_map auf HA-Helfer zeigt — damit ein Empfänger sie nachbaut."""
+    hass.states.async_set(
+        "input_select.hausbatterie_lademodus",
+        "Extern",
+        {"options": ["Extern", "Automatik"], "friendly_name": "Lademodus"},
+    )
+    hass.states.async_set(
+        "input_number.hausbatterie_zielleistung",
+        "0",
+        {"min": -5000, "max": 5000, "unit_of_measurement": "W"},
+    )
+    flow = _make_flow(hass, [HELPER_BATTERY_DEV])
+    await flow.async_step_contribute_preset({CONF_DEVICE_ID: "dev-bat-helper"})
+    captured: dict = {}
+
+    async def fake_request(hass_, entry_, method, path, **kwargs):
+        captured.update(kwargs["json"])
+        return _response(200, {"status": "staged", "contribution_count": 1})
+
+    with patch(
+        "custom_components.theothergas.config_flow._authenticated_config_request",
+        new=AsyncMock(side_effect=fake_request),
+    ):
+        result = await flow.async_step_contribute_preset_form(
+            {"vendor": "KOSTAL", "model": "Plenticore plus 8.5"}
+        )
+
+    assert result["reason"] == "contribute_success"
+    slots = {h["slot"]: h for h in captured["required_helpers"]}
+    assert slots["entity_battery_mode"]["type"] == "input_select"
+    assert slots["entity_battery_mode"]["options"] == ["Extern", "Automatik"]
+    assert slots["entity_battery_power_setpoint_w"]["type"] == "input_number"
+    assert slots["entity_battery_power_setpoint_w"]["min"] == -5000.0
+
+
+def test_pick_schema_labels_required_helpers(hass: HomeAssistant):
+    """Der Profil-Picker informiert, wenn ein Profil HA-Helfer braucht
+    (required_helpers) — der User muss sie in HA anlegen."""
+    schema = config_flow._vendor_preset_pick_schema(
+        [
+            {"vendor": "A", "model": "M1", "status": "approved",
+             "contribution_count": 3,
+             "required_helpers": [
+                 {"slot": "entity_battery_mode", "type": "input_select",
+                  "options": ["x"], "name": "Lademodus"},
+                 {"slot": "entity_battery_power_setpoint_w",
+                  "type": "input_number", "min": 0, "max": 1},
+             ]},
+            # ohne required_helpers → kein Hinweis
+            {"vendor": "B", "model": "M2", "status": "approved",
+             "contribution_count": 1},
+        ]
+    )
+    selector_cfg = next(iter(schema.schema.values())).config
+    labels = {o["value"]: o["label"] for o in selector_cfg["options"]}
+    # Name wenn vorhanden, sonst Slot-Name
+    assert "HA-Helfer nötig: Lademodus, entity_battery_power_setpoint_w" in labels["A::M1"]
+    assert "HA-Helfer" not in labels["B::M2"]
+
+
+async def test_contribute_native_entities_have_no_required_helpers(
+    hass: HomeAssistant,
+):
+    """Native select/number-Entities (BATTERY_DEV) → kein required_helpers
+    im Payload (nur echte input_*-Helfer werden mitgeschickt)."""
+    flow = _make_flow(hass, [BATTERY_DEV])
+    await flow.async_step_contribute_preset({CONF_DEVICE_ID: "dev-bat"})
+    captured: dict = {}
+
+    async def fake_request(hass_, entry_, method, path, **kwargs):
+        captured.update(kwargs["json"])
+        return _response(200, {"status": "staged", "contribution_count": 1})
+
+    with patch(
+        "custom_components.theothergas.config_flow._authenticated_config_request",
+        new=AsyncMock(side_effect=fake_request),
+    ):
+        await flow.async_step_contribute_preset_form(
+            {"vendor": "KOSTAL", "model": "Plenticore plus 8.5"}
+        )
+
+    assert "required_helpers" not in captured

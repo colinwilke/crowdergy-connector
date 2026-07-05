@@ -46,6 +46,7 @@ wie eingereicht (Normalisierung auf `lower()` + Key-Erweiterung um
 | `value_map` | `{slot: string}` \| `null` | Select-Optionen/Flags der Integration (z.B. `value_battery_mode_active: "External"`). **Verbatim** übernehmen. Boolean-Flags als String `"true"`; nicht gesetzte Slots fehlen. `null`/fehlend = Beitrag ohne Value-Slots (Connector < v3.24). |
 | `integration_domain` | string \| `null` | HA-Integration der gemappten Entities (aus der Entity-Registry über den ConfigEntry hergeleitet — nie aus Entity-ID-Präfixen). Bei gemischten Setups die **häufigste** Domain. `null` = Legacy-Beitrag; die Box filtert solche Presets raus. |
 | `required_integrations` | `[string]` \| `null` | **Alle DISTINKTEN** HA-Integrationen, die die `entity_map` braucht, damit sie vollständig auflösbar ist (Superset von `integration_domain`, sortiert). Der Connector zeigt sie neuen Usern beim Profil-Pick an („dafür brauchst du folgende Integration(en): …", Klarname mit Slug-Fallback). `null` = Legacy-Beitrag (Connector < 2026-07). Die Box ignoriert das Feld (filtert weiter über `integration_domain`). |
+| `required_helpers` | `[HelperSpec]` \| `null` | **Strukturierte Specs der HA-Helper** (`input_select`/`input_number`/`input_boolean`), die die `entity_map` referenziert, die ein empfangender User aber NICHT hat — vom Contributor selbst angelegt (z. B. `input_select.hausbatterie_lademodus`, das eine Modbus-Write-Automation treibt). Consumer (Box/Connector) legen die fehlenden Helfer VOR dem Mapping an und wiren den Slot auf die frisch erzeugte Entity. **Bewusst KEIN Roh-YAML/Template** — nur die drei `input_*`-Typen, damit kein ausführbarer Code an eine config-schreibende Provisionierung wandert (Box-Invariante „kein beliebiger Code"). Der Hardware-Pfad HINTER einem Helfer (Modbus-Automation, Register-Plan, host/slave) ist installations-spezifisch und gehört NICHT hierher (kuratiertes Vendor-Package). `null` = kein helferbasierter Slot / Legacy-Beitrag. |
 | `status` | `"staged"` \| `"approved"` | Siehe Lifecycle. `rejected` erscheint nie im Lookup. |
 | `contribution_count` | int | Alle gezählten Beiträge für den Key (auch Mehrfach-Beiträge desselben Users). |
 | `updated_at` | ISO-Datetime | Letzte **Mapping**-Änderung (nicht: letzter Beitrag, nicht: Status-Übergang). Basis für den „Verbessertes Profil verfügbar"-Prompt (Backlog #28). |
@@ -108,6 +109,47 @@ Slot-Art: Entity-Slots gegen `MAPPABLE_ENTITY_DOMAINS` (Default-DENY),
 Value-/Flag-Slots gegen `PRESET_VALUE_SLOTS`, unbekannte Keys werden
 abgelehnt. Invarianten Test-gesichert (`test_preset_spec`).
 
+### `required_helpers` — HelperSpec (HA-Helfer-Provisionierung)
+
+Ein Contributor mappt manchmal einen Slot auf einen **selbst angelegten
+HA-Helfer** statt eine native Integrations-Entity — z. B.
+`entity_battery_mode → input_select.hausbatterie_lademodus`, den seine
+eigene Modbus-Write-Automation liest. Ein empfangender User hat diesen
+Helfer nicht → der Slot löst per Suffix-Match nie auf. `required_helpers`
+trägt je solchem Slot eine **strukturierte** Spec, aus der die Consumer
+den Helfer nachbauen:
+
+```json
+[
+  {"slot": "entity_battery_mode", "type": "input_select",
+   "options": ["Extern", "Automatik", "Laden", "Entladen"],
+   "name": "Batterie-Lademodus"},
+  {"slot": "entity_battery_power_setpoint_w", "type": "input_number",
+   "min": -10000, "max": 10000, "step": 100, "unit": "W"}
+]
+```
+
+HelperSpec-Felder (Backend validiert die Shape, Zahlen → float):
+
+| Feld | Typ | Für | Semantik |
+|---|---|---|---|
+| `slot` | str (≤ 64) | alle | Entity-Slot, den der Helfer backt (Key in `entity_map`) |
+| `type` | str | alle | `input_select` \| `input_number` \| `input_boolean` — **Allowlist, sonst 400** (kein Template/Automation → kein Code) |
+| `name` | str \| — | optional | Anzeigename des Helfers (Fallback: Consumer generiert einen) |
+| `options` | `[str]` (1..64) | `input_select` | die Auswahl-Optionen (Pflicht) |
+| `min` / `max` | number | `input_number` | Range (Pflicht, `max` > `min`) |
+| `step` | number > 0 | `input_number` | optionale Schrittweite |
+| `unit` | str (≤ 32) | `input_number` | optionale Einheit |
+
+**Grenze (bewusst):** `required_helpers` provisioniert nur den Helfer
+selbst. Die **Hardware-Brücke dahinter** (Modbus-Automation,
+Register-Plan, host/slave) ist installations-spezifisch und wird NICHT
+über einen anonymen Crowd-Beitrag verteilt — sie gehört in ein
+kuratiertes Vendor-Package (z. B. Kostal-Builtin-Modbus, Backlog #22).
+Für read-only Template-Sensoren, die nur eine Ableitung berechnen, ist
+`required_helpers` (v1) noch nicht zuständig (Template = Code → separater,
+kuratierter Pfad).
+
 ## Lifecycle: Staging → Approval → Kuration
 
 ```
@@ -157,6 +199,10 @@ Contribute ──► staged ──(≥ CROWD_PRESET_THRESHOLD distinct User)─�
   "entity_map": {"entity_current_power_kw": "sensor.x_battery_power"},
   "value_map": {"value_battery_mode_active": "External", "battery_setpoint_invert_sign": "true"},
   "integration_domain": "kostal_plenticore",
+  "required_helpers": [
+    {"slot": "entity_battery_mode", "type": "input_select",
+     "options": ["Extern", "Automatik"], "name": "Lademodus"}
+  ],
   "notes": "optional, ≤ 280 Zeichen",
   "helper_yaml": null
 }
@@ -237,7 +283,19 @@ normales User-JWT, kein separater Auth-Pfad. Nicht-Kurator → 403
 ## Konsumenten-Pflichten beim Anwenden
 
 1. Entity-Slots gegen die EIGENE Installation auflösen (Suffix-Match,
-   s.o.); `value_map` verbatim.
+   s.o.); `value_map` verbatim. **`required_helpers` beim Anwenden
+   berücksichtigen — je nach Consumer verschieden:**
+   - **Box** (steuert HA von außen per WebSocket): legt fehlende Helfer
+     VOR dem Mapping automatisch an (`<domain>/create`, mit der
+     Contributor-object_id → exakter Match), idempotent (State-Check → kein
+     Dublett), fail-soft (Create-Fehler → Slot bleibt `missing`, kein
+     Wizard-Abbruch).
+   - **Connector** (läuft INNERHALB der HA): kann `input_*`-Helfer NICHT
+     zuverlässig selbst anlegen (keine stabile HA-API — die Storage-
+     Collection ist nicht abrufbar). Er INFORMIERT den User am Profil-
+     Picker („· HA-Helfer nötig: …") und füllt die Helfer-Slot-IDs im
+     Entity-Step als Vorschlag vor; der User legt die Helfer einmal in HA
+     an (Einstellungen → Geräte & Dienste → Helfer).
 2. Steuer-Slots schalten reale Hardware: bereits registrierte Geräte
    NIE stumm auf ein neueres Preset re-applien (Re-Apply nur mit
    explizitem User-Prompt, Backlog #28; `updated_at` liefert das
@@ -345,10 +403,13 @@ Exakt-Match-Slots wirken, der Rest braucht den Connector-Hook.
   (Preset) bleibt. Das Design „user_id anonymisieren statt löschen"
   (Mapping-Daten sind technisch) ist offen — braucht eine bewusste
   DSGVO-Entscheidung.
-- **`helper_yaml`-Pfad:** Feld existiert im Vertrag, die Box wendet
-  es nicht an — Presets mit Steuer-Slots auf HA-HELPERS funktionieren
-  auf der Box erst mit Helper-Provisionierung; native
-  Integration-Entities (Select/Number) funktionieren heute.
+- **`helper_yaml`-Pfad:** das rohe YAML-Feld existiert im Vertrag, wird
+  aber von keinem Consumer angewendet (Roh-YAML = Code-Fläche). Der
+  strukturierte Nachfolger ist **`required_helpers`** (s. o.) —
+  input_select/input_number/input_boolean werden seit 2026-07 von Box +
+  Connector provisioniert. `helper_yaml` bleibt nur als Kurator-Notiz-
+  Feld; ein kuratierter Template-Sensor-/Modbus-Package-Pfad ist separat
+  (Backlog #22).
 - **Wallbox auf der Box:** Spec + box_add_device können es; es fehlt
   eine Wallbox-Integration in der kuratierten Support-Tabelle
   (`crowdergy-box/box-manager/app/integrations.py`).

@@ -782,7 +782,15 @@ __all__ = [
     "INTEGRATION_DISPLAY_NAMES",
     "integration_display_name",
     "required_integration_domains",
+    "required_helper_specs",
+    "PROVISIONABLE_HELPER_DOMAINS",
 ]
+
+# HA-Helfer-Domains, die ein Preset über `required_helpers` portabel
+# machen kann — der Consumer legt sie beim Anwenden nach. NUR diese drei
+# reinen Datenhelfer; ein Template-/Automation-Helfer trüge ausführbaren
+# Code an eine config-schreibende Provisionierung (Box-Invariante).
+PROVISIONABLE_HELPER_DOMAINS = ("input_select", "input_number", "input_boolean")
 
 
 # Klarnamen für die verbreitetsten HA-Integrationen, damit die
@@ -881,6 +889,61 @@ def required_integration_domains(
         if config_entry is not None:
             domains.add(config_entry.domain)
     return sorted(domains)
+
+
+def required_helper_specs(
+    hass: HomeAssistant, entity_map: dict[str, str]
+) -> list[dict] | None:
+    """Strukturierte Specs der HA-Helfer, die die entity_map referenziert
+    (input_select/input_number/input_boolean) — damit ein empfangender
+    User sie nachbauen kann.
+
+    Ein solcher Helfer existiert nur bei DIESEM Contributor (selbst
+    angelegt, z. B. `input_select.hausbatterie_lademodus`, das eine
+    Modbus-Automation treibt); ohne Nachbau löst der Slot beim Empfänger
+    nie auf. Je Slot, dessen Entity-Domain ein `input_*`-Helfer ist, wird
+    die aktuelle HA-Config (options/min/max/step/unit + friendly_name)
+    ausgelesen. Ein Helfer, dessen Config nicht lesbar ist (fehlender
+    State / input_select ohne options / input_number ohne min|max), wird
+    ÜBERSPRUNGEN (kein unvollständiger Spec). None, wenn kein Slot einen
+    Helfer nutzt. Vertrag: docs/crowd-preset-store.md (required_helpers).
+    """
+    specs: list[dict] = []
+    for slot, entity_id in entity_map.items():
+        if not isinstance(entity_id, str) or "." not in entity_id:
+            continue
+        domain = entity_id.split(".", 1)[0]
+        if domain not in PROVISIONABLE_HELPER_DOMAINS:
+            continue
+        state = hass.states.get(entity_id)
+        attrs = dict(state.attributes) if state is not None else {}
+        spec: dict = {"slot": slot, "type": domain}
+        if domain == "input_select":
+            options = attrs.get("options")
+            if not isinstance(options, (list, tuple)) or not options:
+                continue  # ohne Optionen nicht nachbaubar
+            spec["options"] = [str(o) for o in options]
+        elif domain == "input_number":
+            lo = attrs.get("min")
+            hi = attrs.get("max")
+            if isinstance(lo, bool) or isinstance(hi, bool):
+                continue
+            if not isinstance(lo, (int, float)) or not isinstance(hi, (int, float)):
+                continue  # ohne Range nicht nachbaubar
+            spec["min"] = float(lo)
+            spec["max"] = float(hi)
+            step = attrs.get("step")
+            if isinstance(step, (int, float)) and not isinstance(step, bool) and step > 0:
+                spec["step"] = float(step)
+            unit = attrs.get("unit_of_measurement")
+            if isinstance(unit, str) and unit.strip():
+                spec["unit"] = unit.strip()
+        # input_boolean: keine weiteren Felder
+        name = attrs.get("friendly_name")
+        if isinstance(name, str) and name.strip():
+            spec["name"] = name.strip()
+        specs.append(spec)
+    return specs or None
 
 
 def dominant_integration_domain(
