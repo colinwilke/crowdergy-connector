@@ -283,13 +283,19 @@ normales User-JWT, kein separater Auth-Pfad. Nicht-Kurator → 403
 ## Konsumenten-Pflichten beim Anwenden
 
 1. Entity-Slots gegen die EIGENE Installation auflösen (Suffix-Match,
-   s.o.); `value_map` verbatim. **`required_helpers` VOR der Auflösung
-   anwenden:** je Spec, deren Slot lokal nicht auflöst, den HA-Helfer
-   anlegen (`input_select`/`input_number`/`input_boolean`) und den Slot
-   auf die neu erzeugte Entity wiren; der Connector informiert den User,
-   dass Helfer angelegt werden, die Box provisioniert sie im Wizard.
-   Fail-soft: schlägt eine Helfer-Anlage fehl, bleibt der Slot in
-   `missing_slots` (kein Wizard-Abbruch).
+   s.o.); `value_map` verbatim. **`required_helpers` beim Anwenden
+   berücksichtigen — je nach Consumer verschieden:**
+   - **Box** (steuert HA von außen per WebSocket): legt fehlende Helfer
+     VOR dem Mapping automatisch an (`<domain>/create`, mit der
+     Contributor-object_id → exakter Match), idempotent (State-Check → kein
+     Dublett), fail-soft (Create-Fehler → Slot bleibt `missing`, kein
+     Wizard-Abbruch).
+   - **Connector** (läuft INNERHALB der HA): kann `input_*`-Helfer NICHT
+     zuverlässig selbst anlegen (keine stabile HA-API — die Storage-
+     Collection ist nicht abrufbar). Er INFORMIERT den User am Profil-
+     Picker („· HA-Helfer nötig: …") und füllt die Helfer-Slot-IDs im
+     Entity-Step als Vorschlag vor; der User legt die Helfer einmal in HA
+     an (Einstellungen → Geräte & Dienste → Helfer).
 2. Steuer-Slots schalten reale Hardware: bereits registrierte Geräte
    NIE stumm auf ein neueres Preset re-applien (Re-Apply nur mit
    explizitem User-Prompt, Backlog #28; `updated_at` liefert das

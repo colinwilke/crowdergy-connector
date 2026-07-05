@@ -359,6 +359,26 @@ def _preset_required_integrations_label(preset: dict[str, Any]) -> str:
     return ", ".join(names)
 
 
+def _preset_required_helpers_label(preset: dict[str, Any]) -> str:
+    """Kurze Liste der HA-Helfer, die dieses Preset braucht
+    (`required_helpers`) — input_select/input_number/input_boolean, die der
+    Beitragende selbst angelegt hat. Der User legt sie in seiner HA an
+    (Einstellungen → Geräte & Dienste → Helfer); der Connector kann
+    input_*-Helfer nicht selbst anlegen (die Box tut es beim Setup). Leerer
+    String ohne Helfer-Slots."""
+    raw = preset.get("required_helpers")
+    if not isinstance(raw, list) or not raw:
+        return ""
+    names: list[str] = []
+    for spec in raw:
+        if not isinstance(spec, dict):
+            continue
+        name = spec.get("name") or spec.get("slot")
+        if isinstance(name, str) and name and name not in names:
+            names.append(name)
+    return ", ".join(names)
+
+
 def _vendor_preset_pick_schema(presets: list[dict[str, Any]]) -> vol.Schema:
     """Picker für Vendor-Presets. Option `__manual__` skipt das Preset
     und führt zum klassischen manuellen Entity-Mapping. Pro Preset
@@ -378,6 +398,12 @@ def _vendor_preset_pick_schema(presets: list[dict[str, Any]]) -> vol.Schema:
         needed = _preset_required_integrations_label(p)
         if needed:
             label += f" · benötigt: {needed}"
+        helpers = _preset_required_helpers_label(p)
+        if helpers:
+            # Der User muss diese Helfer in HA anlegen (der Connector kann
+            # input_*-Helfer nicht selbst erzeugen); die Slot-IDs werden im
+            # Entity-Step vorbefüllt.
+            label += f" · HA-Helfer nötig: {helpers}"
         options.append({"value": f"{p['vendor']}::{p['model']}", "label": label})
     options.append({"value": "__manual__", "label": "Manuell konfigurieren"})
     return vol.Schema(

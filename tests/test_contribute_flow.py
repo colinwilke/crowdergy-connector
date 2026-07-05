@@ -447,6 +447,31 @@ async def test_contribute_payload_carries_required_helpers(hass: HomeAssistant):
     assert slots["entity_battery_power_setpoint_w"]["min"] == -5000.0
 
 
+def test_pick_schema_labels_required_helpers(hass: HomeAssistant):
+    """Der Profil-Picker informiert, wenn ein Profil HA-Helfer braucht
+    (required_helpers) — der User muss sie in HA anlegen."""
+    schema = config_flow._vendor_preset_pick_schema(
+        [
+            {"vendor": "A", "model": "M1", "status": "approved",
+             "contribution_count": 3,
+             "required_helpers": [
+                 {"slot": "entity_battery_mode", "type": "input_select",
+                  "options": ["x"], "name": "Lademodus"},
+                 {"slot": "entity_battery_power_setpoint_w",
+                  "type": "input_number", "min": 0, "max": 1},
+             ]},
+            # ohne required_helpers → kein Hinweis
+            {"vendor": "B", "model": "M2", "status": "approved",
+             "contribution_count": 1},
+        ]
+    )
+    selector_cfg = next(iter(schema.schema.values())).config
+    labels = {o["value"]: o["label"] for o in selector_cfg["options"]}
+    # Name wenn vorhanden, sonst Slot-Name
+    assert "HA-Helfer nötig: Lademodus, entity_battery_power_setpoint_w" in labels["A::M1"]
+    assert "HA-Helfer" not in labels["B::M2"]
+
+
 async def test_contribute_native_entities_have_no_required_helpers(
     hass: HomeAssistant,
 ):
