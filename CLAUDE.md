@@ -302,8 +302,8 @@ dort: Cluster C (#16–#22).
   `integration_domain`-Fallback + unbekannter Slug / Display-Name
   bekannt+Fallback).
 - **Crowd-Preset `required_helpers` — HA-Helfer-Provisionierung (User
-  2026-07-05, Branch `claude/ha-helpers-profile-sharing-iicz4p`, PR
-  connector#39 DRAFT):** ein Preset kann einen Slot auf einen selbst
+  2026-07-05, PR connector#39 → `main`, RELEASED **v3.41.0** via
+  `tag-release.yml`; User-Freigabe Merge+Release):** ein Preset kann einen Slot auf einen selbst
   angelegten HA-Helfer mappen (`input_select`/`input_number`/`input_boolean`);
   ein Empfänger hat ihn nicht. **Produce:** `entity_mapper.
   required_helper_specs(hass, entity_map)` leitet je Slot, der auf einen
