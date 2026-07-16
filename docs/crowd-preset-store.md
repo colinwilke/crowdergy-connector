@@ -186,6 +186,17 @@ Contribute ──► staged ──(≥ CROWD_PRESET_THRESHOLD distinct User)─�
 * **`rejected`** (nur per Kurator) verschwindet aus dem Lookup und
   wird von weiteren Beiträgen NICHT resurrected (Beiträge werden als
   Audit-Zeilen trotzdem gespeichert, Response-Status `rejected`).
+* **Kurator-Beiträge sind AUTORITATIV (Install-Box-Workflow,
+  2026-07-16):** ein Contribute eines Accounts mit `is_curator=true`
+  wird sofort `approved` (kein Threshold) und überschreibt das Mapping
+  auch über den `approved`-Freeze und ein `rejected` hinweg — dieselbe
+  Semantik wie der Kurator-Upsert `PUT /curation/preset`, nur über den
+  normalen Connector-Contribute-Flow. Damit mappt die Install-Box
+  (privates Box-Repo, `docs/install-box.md`) ein Gerät beim Kunden und
+  die Kunden-Box zieht das Preset live, ohne separaten Approve-Schritt.
+  Ein Mapping-Update bumpt `updated_at` → Bestands-Boxen bekommen den
+  Re-Apply-Prompt (#28). Community-Beiträge sind unverändert (staged /
+  Threshold / Freeze).
 
 ## API (Backend, alle auth-pflichtig, Bearer-Header)
 
