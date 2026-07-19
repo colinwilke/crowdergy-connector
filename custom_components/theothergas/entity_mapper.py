@@ -974,3 +974,154 @@ def dominant_integration_domain(
     if not domains:
         return None
     return Counter(domains).most_common(1)[0][0]
+
+
+# ── Registry-Identität für Crowd-Presets (user-namens-unabhängig) ──────
+#
+# Entity-IDs tragen den KUNDENSEITIGEN Gerätenamen als Präfix („Solar"
+# vs „Wechselrichter") — ein Preset mit rohen Entity-IDs löst beim
+# Empfänger nur per Suffix-Heuristik auf. Die Entity-Registry kennt je
+# Entity dagegen namens-UNABHÄNGIGE Identität: `platform` (Integration),
+# `translation_key` (stabiler Integrations-Key des Entity-Typs) und
+# `original_name` (Integrations-Default-Name vor jedem User-Rename).
+# Beide überleben sowohl Geräte- als auch Entity-Umbenennungen.
+#
+# PRIVACY-REGEL: `unique_id` wird BEWUSST NICHT mitgeschickt — der trägt
+# bei vielen Integrationen die Geräte-Seriennummer (installations-
+# identifizierend); translation_key/original_name/platform sind reine
+# Integrations-Vokabeln ohne PII (Anonymisierungs-Schicht des
+# Preset-Stores, s. preset_spec-Moduldoku).
+
+_MIN_SUFFIX_MATCH = 6
+_IDENTITY_KEYS = ("platform", "translation_key", "original_name")
+
+
+def entity_identity_map(
+    hass: HomeAssistant, entity_map: dict[str, str]
+) -> dict[str, dict[str, str]] | None:
+    """Registry-Identität je Entity-Slot fürs Crowd-Contribute.
+
+    Liefert `{slot: {platform, translation_key?, original_name?}}` für
+    jeden Slot, dessen Entity in der Registry steht (Helfer-/Template-
+    Entities ohne Registry-Eintrag werden übersprungen — für die greift
+    weiter required_helpers bzw. der Suffix-Match). None, wenn kein Slot
+    eine Identität hergibt (Alt-Backend-kompatibel: Feld fehlt dann im
+    Payload)."""
+    ent_reg = er.async_get(hass)
+    out: dict[str, dict[str, str]] = {}
+    for slot, entity_id in entity_map.items():
+        if not isinstance(entity_id, str):
+            continue
+        entry = ent_reg.async_get(entity_id)
+        if entry is None or not entry.platform:
+            continue
+        identity: dict[str, str] = {"platform": entry.platform}
+        if entry.translation_key:
+            identity["translation_key"] = entry.translation_key
+        if entry.original_name:
+            identity["original_name"] = str(entry.original_name)
+        out[slot] = identity
+    return out or None
+
+
+def _identity_candidates(
+    entries: list, domain: str, identity: dict
+) -> list:
+    """Registry-Einträge DIESER Installation, die zur Preset-Identität
+    passen. Leiter: platform-Pool → translation_key-Gleichheit →
+    original_name-Gleichheit (nur wenn der tk-Schritt LEER ausgeht —
+    ein älterer Integrations-Stand ohne translation_key). Leere Liste =
+    Identität hier nicht auflösbar (Caller fällt auf Suffix zurück)."""
+    platform = identity.get("platform")
+    if not platform:
+        return []
+    pool = [
+        e for e in entries
+        if e.domain == domain and e.platform == platform
+    ]
+    tk = identity.get("translation_key")
+    if tk:
+        hits = [e for e in pool if e.translation_key == tk]
+        if hits:
+            return hits
+    original = identity.get("original_name")
+    if original:
+        hits = [e for e in pool if str(e.original_name or "") == original]
+        if hits:
+            return hits
+    return []
+
+
+def _suffix_match(preset_entity_id: str, available: list[str]) -> str | None:
+    """Anchored-endswith-Suffix-Match (Port der Box-`match_entity`-
+    Heuristik, verschärft): längster `_`-Grenzen-Suffix (≥ 6 Zeichen)
+    der Preset-ID, den GENAU EINE same-domain-Entity trägt. Der Suffix
+    ist der Integrations-Messgrößenname, der Präfix der Gerätename des
+    Contributors. Mehrdeutig → None (Prefill rät nie; der Mensch wählt
+    im Picker)."""
+    if "." not in preset_entity_id:
+        return None
+    domain, object_id = preset_entity_id.split(".", 1)
+    parts = object_id.split("_")
+    for start in range(1, len(parts)):
+        suffix = "_".join(parts[start:])
+        if len(suffix) < _MIN_SUFFIX_MATCH:
+            break
+        candidates = [
+            entity_id
+            for entity_id in available
+            if entity_id.startswith(f"{domain}.")
+            and entity_id.endswith(f"_{suffix}")
+        ]
+        if len(candidates) == 1:
+            return candidates[0]
+        if candidates:
+            return None
+    return None
+
+
+def resolve_preset_entities(
+    hass: HomeAssistant,
+    entity_map: dict[str, str],
+    identity_map: dict[str, dict] | None = None,
+) -> dict[str, str]:
+    """Contributed Entity-IDs gegen DIESE Installation auflösen (Prefill
+    beim Profil-Pick). Leiter je Slot, fail-safe eskalierend:
+
+    1. exakte ID existiert hier (Registry ODER States) → behalten;
+    2. Registry-Identität (`_identity_candidates`) → GENAU EIN Treffer
+       ersetzt die ID; mehrere (Multi-Inverter) → verbatim, der Mensch
+       entscheidet im Picker;
+    3. Entity-ID-Suffix-Match (`_suffix_match`) für Alt-Presets ohne
+       Identität bzw. Registry-Lücken.
+
+    Unauflösbare Slots behalten die Contributor-ID verbatim — das ist
+    das heutige Verhalten und für `input_*`-Helfer-Slots sogar
+    erwünscht (die ID ist die Anlege-Anleitung, required_helpers)."""
+    ent_reg = er.async_get(hass)
+    entries = list(ent_reg.entities.values())
+    identity_map = identity_map or {}
+    resolved: dict[str, str] = {}
+    for slot, entity_id in entity_map.items():
+        if not isinstance(entity_id, str) or "." not in entity_id:
+            resolved[slot] = entity_id
+            continue
+        if (
+            hass.states.get(entity_id) is not None
+            or ent_reg.async_get(entity_id) is not None
+        ):
+            resolved[slot] = entity_id
+            continue
+        domain = entity_id.split(".", 1)[0]
+        identity = identity_map.get(slot)
+        if isinstance(identity, dict):
+            hits = _identity_candidates(entries, domain, identity)
+            if len(hits) == 1:
+                resolved[slot] = hits[0].entity_id
+                continue
+            if len(hits) > 1:
+                resolved[slot] = entity_id
+                continue
+        match = _suffix_match(entity_id, hass.states.async_entity_ids(domain))
+        resolved[slot] = match or entity_id
+    return resolved

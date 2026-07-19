@@ -9,6 +9,35 @@ dort: Cluster C (#16–#22).
 
 ## Repo-Regeln & getroffene Entscheidungen
 
+- **Crowd-Preset `entity_identity_map` — namens-unabhängige Preset-Auflösung
+  (User colin 2026-07-19 „unabhängig vom benutzeränderbaren Namen … komplett
+  fail-safe", Branch `claude/integration-mappings-user-independent-n20b07`;
+  Backend- + Box-Hälfte gleiche Branch-Namen):** Entity-IDs tragen den
+  User-Gerätenamen als Präfix („Solar" vs „Wechselrichter") — der Suffix-Match
+  bricht zudem, wenn der Empfänger einzelne ENTITIES umbenannt hat. Neu:
+  **(1) Capture** — `entity_mapper.entity_identity_map(hass, entity_map)`
+  liest je Slot die Registry-Identität `{platform, translation_key?,
+  original_name?}`; der Contribute-Payload trägt sie als
+  `entity_identity_map` (nur wenn nicht leer, Alt-Backend-kompatibel).
+  **PII-Regel: NIE `unique_id` mitschicken** (trägt oft Seriennummern; das
+  Backend 400t sie hart). **(2) Apply** — der Profil-Pick (beide
+  Flow-Klassen) läuft durch `entity_mapper.resolve_preset_entities`:
+  Leiter exakt → Identität (platform-Pool, translation_key-Gleichheit,
+  bei LEEREM tk-Schritt original_name) → `_suffix_match` (verschärfter
+  Port der Box-Heuristik: nur EINDEUTIGE Treffer). Nur ein eindeutiger
+  Treffer ersetzt die Vorbefüllung; mehrdeutig/unauflösbar → verbatim
+  (der Mensch wählt im Entity-Step; input_*-Helfer-Slots behalten so ihre
+  Anlege-Anleitung). `_picked_preset_maps` ist jetzt 3-Tuple
+  (entity/value/identity). **Regeln:** (a) neue Identitäts-Felder nur aus
+  der Registry-Allowlist {platform, translation_key, original_name} —
+  unique_id bleibt tabu; (b) der Resolver darf NIE raten (Ambiguität →
+  verbatim), fail-safe by construction. Vertrag
+  `docs/crowd-preset-store.md` („entity_identity_map"). Tests
+  `test_contribute_flow.py` (+5: Payload-Capture ohne unique_id /
+  Voll-Rename-Auflösung / exakt+ambiguous / Suffix-Fallback+Helfer /
+  Flow-Prefill). Backend speichert/liefert das Feld (mig
+  `20260719_0003`), die Box matcht identisch (`match_entity_identity`).
+
 - **Wallbox 1/3-Phasen-Umschaltung (User ulla/colin 2026-07-19, v3.42.0;
   Backend-Hälfte backend#107 `66fdb78` prod-deployed Run #95):** drei neue
   Connector-lokale Slots `entity_wallbox_phase_mode` (Select, go-e

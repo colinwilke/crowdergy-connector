@@ -166,8 +166,16 @@ Token-Ablauf UND reaktiv bei 401 (retry einmal).
   (`entity_mapper.dominant_integration_domain`) und
   `entity_map`/`value_map` per `preset_spec.extract_preset_maps`
   (Allowlist = Anonymisierung; `value_map` nur wenn belegt —
-  Alt-Backend-kompatibel). Store-Vertrag: `docs/crowd-preset-store.md` —
-  Lookup liefert `status` (staged/approved), `value_map`, `updated_at`;
+  Alt-Backend-kompatibel). Seit 2026-07-19 zusätzlich
+  `entity_identity_map` (`entity_mapper.entity_identity_map`: je Slot
+  platform + translation_key/original_name aus der Registry, NIE
+  unique_id) — der Profil-Pick löst die Preset-Entity-IDs damit
+  namens-unabhängig gegen die eigene Installation auf
+  (`entity_mapper.resolve_preset_entities`: exakt → Identität →
+  Suffix-Match; mehrdeutig/unauflösbar → verbatim-Prefill).
+  Store-Vertrag: `docs/crowd-preset-store.md` —
+  Lookup liefert `status` (staged/approved), `value_map`, `updated_at`,
+  `entity_identity_map`;
   staged = Badge „Community, noch unbestätigt" in Picker + Box-GUI.
 - `_authenticated_config_request` baut den httpx-Client im Executor
   (HA-Blocking-Call-Warnung, live gefunden).
