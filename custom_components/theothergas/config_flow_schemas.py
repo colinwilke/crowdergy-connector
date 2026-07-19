@@ -20,6 +20,9 @@ from .const import (
     CONFIG_MODE_MANUAL,
     CONF_ENTITY_CHARGE_MODE,
     CONF_ENTITY_WALLBOX_CHARGE_CURRENT,
+    CONF_ENTITY_WALLBOX_PHASE_MODE,
+    CONF_VALUE_WALLBOX_PHASE_1,
+    CONF_VALUE_WALLBOX_PHASE_3,
     CONF_ENTITY_CLIMATE,
     CONF_ENTITY_WATER_HEATER,
     CONF_ENTITY_CONTROL,
@@ -239,6 +242,14 @@ _ENTITY_SELECTORS: dict[str, selector.EntitySelector] = {
     # gesetzt). Wenn gemappt, lädt der Solver variabel im „An"-Modus.
     CONF_ENTITY_WALLBOX_CHARGE_CURRENT: selector.EntitySelector(
         selector.EntitySelectorConfig(domain=["number", "input_number"])
+    ),
+    # Wallbox-only OPTIONALE 1/3-Phasen-Select-Entity (2026-07-19, go-e
+    # „nur 1"/„nur 3"/„Auto"). Zusammen mit den zwei Phasen-Werten (im
+    # Lademodus-Werte-Step) + der Ladestrom-Entity → Backend-Capability
+    # `wallbox_supports_phase_switching`: die AI dimmt dann 1-phasig ab
+    # ~1,4 kW und kommandiert die Phase explizit (nie „Auto").
+    CONF_ENTITY_WALLBOX_PHASE_MODE: selector.EntitySelector(
+        selector.EntitySelectorConfig(domain=["select", "input_select"])
     ),
     # Energy meter — HA `total_increasing` kWh sensor (lifetime
     # cumulative). Restricted to plain sensor entities; the backend
@@ -531,11 +542,16 @@ def _entities_schema(
         # variablem Strom (6–16 A) laden statt nur volle Leistung; der
         # Connector schreibt den AI-Strom dann hierher. Leer = „An" =
         # volle Leistung (unverändert). Solar/Lock bleiben stromlos.
+        # Optionale Phasen-Select-Entity (2026-07-19): erlaubt der AI
+        # 1-phasiges PV-Dimmen ab ~1,4 kW; die zwei Options-Strings
+        # („nur 1"/„nur 3") werden im Lademodus-Werte-Step gemappt.
         control_schema = vol.Schema({
             _entity_field(CONF_ENTITY_CHARGE_MODE, d):
                 _ENTITY_SELECTORS[CONF_ENTITY_CHARGE_MODE],
             _entity_field(CONF_ENTITY_WALLBOX_CHARGE_CURRENT, d):
                 _ENTITY_SELECTORS[CONF_ENTITY_WALLBOX_CHARGE_CURRENT],
+            _entity_field(CONF_ENTITY_WALLBOX_PHASE_MODE, d):
+                _ENTITY_SELECTORS[CONF_ENTITY_WALLBOX_PHASE_MODE],
         })
         schema_dict[vol.Required("control_section")] = section(
             control_schema, {"collapsed": False}
@@ -916,26 +932,16 @@ def _vehicle_status_schema(
 # ── v2.2: charge-mode-values ternary mapping (wallbox-only) ─────────────────
 
 
-def _charge_mode_values_schema(
-    hass, entity_charge_mode: str, defaults: dict[str, Any] | None = None
-) -> vol.Schema:
-    """Schema for the three Lademodus mappings — Aus / An / Solaroptimiert
-    → the wallbox's HA select-options. Mirrors `_vehicle_status_schema`:
-    introspects the select entity's `options` attribute to render a
-    dropdown when available, falls back to free-text otherwise. All
-    three fields are optional — modes the user leaves blank simply
-    don't get a button in the iOS tile.
-    """
-    d = defaults or {}
-
-    field_type: Any = str
-    if entity_charge_mode:
-        domain = entity_charge_mode.split(".", 1)[0]
-        state = hass.states.get(entity_charge_mode)
+def _select_options_field(hass, entity_id: str) -> Any:
+    """Free-text field, upgraded to a dropdown of the select entity's
+    `options` when the entity is a (input_)select with known options."""
+    if entity_id:
+        domain = entity_id.split(".", 1)[0]
+        state = hass.states.get(entity_id)
         if domain in ("select", "input_select") and state is not None:
             opts = state.attributes.get("options") or []
             if opts:
-                field_type = selector.SelectSelector(
+                return selector.SelectSelector(
                     selector.SelectSelectorConfig(
                         options=[
                             selector.SelectOptionDict(value=o, label=o)
@@ -944,6 +950,29 @@ def _charge_mode_values_schema(
                         mode=selector.SelectSelectorMode.DROPDOWN,
                     )
                 )
+    return str
+
+
+def _charge_mode_values_schema(
+    hass, entity_charge_mode: str, defaults: dict[str, Any] | None = None,
+    entity_phase_mode: str = "",
+) -> vol.Schema:
+    """Schema for the three Lademodus mappings — Aus / An / Solaroptimiert
+    → the wallbox's HA select-options. Mirrors `_vehicle_status_schema`:
+    introspects the select entity's `options` attribute to render a
+    dropdown when available, falls back to free-text otherwise. All
+    three fields are optional — modes the user leaves blank simply
+    don't get a button in the iOS tile.
+
+    Phasen-Werte (2026-07-19): hat der User im Entity-Step eine
+    Phasen-Select-Entity gemappt, kommen hier die zwei Options-Strings
+    für „nur 1-phasig" / „nur 3-phasig" dazu (Dropdown aus DEREN
+    Options). Der „Auto"-Wert wird bewusst NICHT gemappt — der
+    Connector kommandiert die Phase immer explizit.
+    """
+    d = defaults or {}
+
+    field_type: Any = _select_options_field(hass, entity_charge_mode)
 
     def _field(key: str) -> Any:
         default = d.get(key) or ""
@@ -955,12 +984,17 @@ def _charge_mode_values_schema(
             return vol.Optional(key, description={"suggested_value": default})
         return vol.Optional(key)
 
-    return vol.Schema({
+    fields: dict[Any, Any] = {
         _field(CONF_CHARGE_MODE_VALUE_LOCK): field_type,
         _field(CONF_CHARGE_MODE_VALUE_POWER): field_type,
         _field(CONF_CHARGE_MODE_VALUE_SOLAR): field_type,
-        _hold_mode_field(d): _hold_mode_selector(),
-    })
+    }
+    if entity_phase_mode:
+        phase_field_type = _select_options_field(hass, entity_phase_mode)
+        fields[_field(CONF_VALUE_WALLBOX_PHASE_1)] = phase_field_type
+        fields[_field(CONF_VALUE_WALLBOX_PHASE_3)] = phase_field_type
+    fields[_hold_mode_field(d)] = _hold_mode_selector()
+    return vol.Schema(fields)
 
 
 # ── v3.8.0: battery setpoint dispatch (Phase 3 Option D) ─────────────────────

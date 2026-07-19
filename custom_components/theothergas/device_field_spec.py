@@ -49,6 +49,9 @@ from .const import (
     CONF_ENTITY_CONTROL,
     CONF_ENTITY_COOL_CONTROL,
     CONF_ENTITY_WALLBOX_CHARGE_CURRENT,
+    CONF_ENTITY_WALLBOX_PHASE_MODE,
+    CONF_VALUE_WALLBOX_PHASE_1,
+    CONF_VALUE_WALLBOX_PHASE_3,
     CONF_REGION,
     CONF_SHARES_HARDWARE_WITH,
     CONF_SUPPORTS_COOLING,
@@ -109,6 +112,26 @@ def _compute_supports_charge_current(
     Solver den Strom variabel wählen darf. Leer → False = Binär-Box."""
     return bool(
         (entity_input.get(CONF_ENTITY_WALLBOX_CHARGE_CURRENT, "") or "").strip()
+    )
+
+
+def _compute_supports_phase_switching(
+    entity_input: dict[str, Any], dtype: str
+) -> bool:
+    """1/3-Phasen-Umschalt-Capability (2026-07-19) = Phasen-Select-Entity
+    UND beide Options-Strings („nur 1"/„nur 3") UND die Ladestrom-Entity
+    gemappt. Alle drei nötig: ohne Werte kann der Connector das
+    `phases`-Command-Feld nicht anwenden, ohne Ladestrom gibt es keinen
+    Feinregler — und ein True ohne Anwendbarkeit wäre exakt die
+    ×3-Überzieh-Falle (Ampere 1- vs 3-phasig). Entities bleiben
+    Connector-lokal; ans Backend geht nur das Bool."""
+    return bool(
+        (entity_input.get(CONF_ENTITY_WALLBOX_PHASE_MODE, "") or "").strip()
+        and (entity_input.get(CONF_VALUE_WALLBOX_PHASE_1, "") or "").strip()
+        and (entity_input.get(CONF_VALUE_WALLBOX_PHASE_3, "") or "").strip()
+        and (
+            entity_input.get(CONF_ENTITY_WALLBOX_CHARGE_CURRENT, "") or ""
+        ).strip()
     )
 
 
@@ -241,6 +264,16 @@ SPEC: tuple[DeviceField, ...] = (
         types=_WALLBOX_ONLY,
         on_create="always", on_update="always",
         compute=_compute_supports_charge_current,
+    ),
+    # 1/3-Phasen-Umschalt-Capability (2026-07-19): abgeleitetes Bool ob
+    # Phasen-Entity + beide Werte + Ladestrom-Entity gemappt sind.
+    # `always` in beide Richtungen — Clearen sendet False → Backend
+    # fällt auf den 3-Phasen-Floor (~4,1 kW) zurück.
+    DeviceField(
+        api_name="wallbox_supports_phase_switching",
+        types=_WALLBOX_ONLY,
+        on_create="always", on_update="always",
+        compute=_compute_supports_phase_switching,
     ),
     # Uniform control-capability für ALLE steuerbaren Typen. always/always
     # in beide Richtungen — ein Entmappen der Steuer-Entity sendet False →

@@ -732,6 +732,7 @@ class CrowdergyCoordinator(
         self.state.charge_mode_hold_tasks.clear()
         self.state.held_charge_mode.clear()
         self.state.held_charge_current.clear()
+        self.state.held_charge_phases.clear()
         # P3 (2026-06-11): `_client` ist bis `async_init()` None —
         # ein Shutdown vor/abseits des regulären Setups darf nicht
         # an `None.aclose()` sterben.

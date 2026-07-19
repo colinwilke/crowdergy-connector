@@ -220,6 +220,21 @@ CONF_CHARGE_MODE_VALUE_SOLAR = "charge_mode_value_solar"
 # Leistung (Verhalten unverändert). Solar/Lock tragen nie einen Strom.
 CONF_ENTITY_WALLBOX_CHARGE_CURRENT = "entity_wallbox_charge_current_a"
 
+# Wallbox-only OPTIONALE 1/3-Phasen-Umschaltung (2026-07-19; go-e
+# Phasen-Select „nur 1"/„nur 3"/„Auto"). Eine Select-Entity, die die
+# Phasenzahl stellt, plus die zwei Options-Strings für 1- bzw.
+# 3-phasig. Sind Entity UND beide Werte gemappt (und die Ladestrom-
+# Entity dazu), meldet der Connector `wallbox_supports_phase_switching`
+# ans Backend — der Solver darf dann bis zum 1-Phasen-6-A-Floor
+# (~1,4 kW) dimmen statt nur bis ~4,1 kW (3-phasig) und kommandiert
+# die Phase EXPLIZIT je Tick (`phases: 1|3` im set_charge_mode-
+# Command). Der „Auto"-Wert der Box wird bewusst NIE geschrieben: ein
+# extern gerechnetes Ampere-Kommando ist unter Auto ×3-mehrdeutig
+# (1- vs 3-phasig). Schreib-Reihenfolge: Phase VOR Strom VOR Modus.
+CONF_ENTITY_WALLBOX_PHASE_MODE = "entity_wallbox_phase_mode"
+CONF_VALUE_WALLBOX_PHASE_1 = "value_wallbox_phase_1"
+CONF_VALUE_WALLBOX_PHASE_3 = "value_wallbox_phase_3"
+
 # Battery dispatch v3.8.0 (Phase 3 Option D, 2026-06-02). Aus den alten
 # 4 mode-string Werten wird ein 2-Entity-Setup mit kontinuierlichem
 # Power-Setpoint. Backend Solver wählt:
@@ -488,6 +503,7 @@ MAPPABLE_ENTITY_DOMAINS: dict[str, frozenset[str]] = {
     CONF_ENTITY_COOL_CONTROL: _CONTROL_DOMAINS,
     CONF_ENTITY_CHARGE_MODE: _SELECT_DOMAINS,
     CONF_ENTITY_WALLBOX_CHARGE_CURRENT: _NUMBER_DOMAINS,
+    CONF_ENTITY_WALLBOX_PHASE_MODE: _SELECT_DOMAINS,
     CONF_ENTITY_BATTERY_MODE: _SELECT_DOMAINS,
     CONF_ENTITY_BATTERY_POWER_SETPOINT: _NUMBER_DOMAINS,
     CONF_ENTITY_VORLAUF_SETPOINT: _SETPOINT_DOMAINS,

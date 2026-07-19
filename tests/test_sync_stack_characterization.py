@@ -346,7 +346,7 @@ async def test_dispatch_command_wallbox_reads_value(hass: HomeAssistant):
         }
     )
     coord._apply_charge_mode.assert_awaited_once_with(
-        "w1", "solar", charge_current_a=None
+        "w1", "solar", charge_current_a=None, charge_phases=None
     )
 
 
@@ -364,7 +364,7 @@ async def test_dispatch_command_wallbox_forwards_charge_current(hass: HomeAssist
         }
     )
     coord._apply_charge_mode.assert_awaited_once_with(
-        "w1", "Power Mode", charge_current_a=10
+        "w1", "Power Mode", charge_current_a=10, charge_phases=None
     )
 
 

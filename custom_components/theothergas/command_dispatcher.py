@@ -30,6 +30,9 @@ from .const import (
     CONF_DEVICES,
     CONF_ENTITY_CHARGE_MODE,
     CONF_ENTITY_WALLBOX_CHARGE_CURRENT,
+    CONF_ENTITY_WALLBOX_PHASE_MODE,
+    CONF_VALUE_WALLBOX_PHASE_1,
+    CONF_VALUE_WALLBOX_PHASE_3,
     CONF_ENTITY_CONTROL,
     CONF_ENTITY_CONTROL_HOLD,
     CONF_ENTITY_VORLAUF_SETPOINT,
@@ -392,11 +395,20 @@ class CommandDispatcherMixin:
                         self._cancel_charge_mode_hold(device_id)
                     else:
                         current_a = data.get("current_a")
+                        # 1/3-Phasen-Umschaltung (2026-07-19): explizite
+                        # Phasenzahl vom Solver, nur im Power-Modus auf
+                        # Boxen mit gemappter Phasen-Entity.
+                        phases = data.get("phases")
                         await self._apply_charge_mode(
                             device_id, str(value),
                             charge_current_a=(
                                 int(current_a)
                                 if current_a is not None
+                                else None
+                            ),
+                            charge_phases=(
+                                int(phases)
+                                if phases is not None
                                 else None
                             ),
                         )
@@ -493,6 +505,7 @@ class CommandDispatcherMixin:
         *,
         schedule_hold: bool = True,
         charge_current_a: int | None = None,
+        charge_phases: int | None = None,
     ) -> None:
         """Write the device's configured entity_charge_mode entity.
 
@@ -564,6 +577,50 @@ class CommandDispatcherMixin:
                 self.state.held_charge_current[device_id] = int(charge_current_a)
             else:
                 self.state.held_charge_current.pop(device_id, None)
+            if charge_phases is not None:
+                self.state.held_charge_phases[device_id] = int(charge_phases)
+            else:
+                self.state.held_charge_phases.pop(device_id, None)
+
+        # 1/3-Phasenzahl (2026-07-19) VOR dem Strom schreiben: die
+        # Ampere-Zahl bedeutet je Phasenzahl das Dreifache an Leistung —
+        # erst der Grobregler (Phase), dann der Feinregler (Strom), dann
+        # der Modus. „Auto" wird nie geschrieben; ohne gemappte Entity/
+        # Werte wird das Feld still ignoriert (fail-soft — das Backend
+        # sendet `phases` nur bei gemeldeter Capability). Eigenes
+        # try/except — ein Phasen-Write-Fehler blockiert nie Strom/Modus.
+        if charge_phases is not None:
+            phase_entity = (
+                dev.get(CONF_ENTITY_WALLBOX_PHASE_MODE, "") or ""
+            )
+            phase_value = (
+                dev.get(CONF_VALUE_WALLBOX_PHASE_1, "")
+                if int(charge_phases) == 1
+                else dev.get(CONF_VALUE_WALLBOX_PHASE_3, "")
+            ) or ""
+            if phase_entity and phase_value:
+                phase_domain = phase_entity.split(".", 1)[0]
+                _LOGGER.log(
+                    log_level,
+                    "set_charge_mode: %s → %s (%d-phasig)",
+                    phase_entity, phase_value, int(charge_phases),
+                )
+                try:
+                    await self.hass.services.async_call(
+                        phase_domain, "select_option",
+                        {"entity_id": phase_entity, "option": phase_value},
+                        blocking=True,
+                    )
+                except Exception as err:  # noqa: BLE001
+                    _LOGGER.exception(
+                        "set_charge_mode: phase write FAILED for %s: %s",
+                        phase_entity, err,
+                    )
+            else:
+                _LOGGER.debug(
+                    "set_charge_mode: phases=%s ignoriert — Phasen-Entity/"
+                    "-Werte nicht gemappt für %s", charge_phases, device_id,
+                )
 
         # Wallbox-Ladestrom (Ampere) ZUERST schreiben, damit die Box den
         # Strom schon hat wenn der Power-Modus gleich darunter greift
@@ -661,6 +718,7 @@ class CommandDispatcherMixin:
         """
         self.state.held_charge_mode.pop(device_id, None)
         self.state.held_charge_current.pop(device_id, None)
+        self.state.held_charge_phases.pop(device_id, None)
         task = self.state.charge_mode_hold_tasks.pop(device_id, None)
         if task is not None and not task.done():
             task.cancel()
@@ -702,11 +760,14 @@ class CommandDispatcherMixin:
                     )
                     self.state.held_charge_mode.pop(device_id, None)
                     self.state.held_charge_current.pop(device_id, None)
+                    self.state.held_charge_phases.pop(device_id, None)
                     return
                 held_current = self.state.held_charge_current.get(device_id)
+                held_phases = self.state.held_charge_phases.get(device_id)
                 await self._apply_charge_mode(
                     device_id, mode, schedule_hold=False,
                     charge_current_a=held_current,
+                    charge_phases=held_phases,
                 )
                 await asyncio.sleep(CHARGE_MODE_HOLD_INTERVAL)
         except asyncio.CancelledError:

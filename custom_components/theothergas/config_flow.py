@@ -49,6 +49,9 @@ from .const import (
     CONF_CHARGE_MODE_VALUE_LOCK,
     CONF_CHARGE_MODE_VALUE_POWER,
     CONF_CHARGE_MODE_VALUE_SOLAR,
+    CONF_ENTITY_WALLBOX_PHASE_MODE,
+    CONF_VALUE_WALLBOX_PHASE_1,
+    CONF_VALUE_WALLBOX_PHASE_3,
     CONF_ENTITY_BATTERY_MODE,
     CONF_VALUE_BATTERY_MODE_ACTIVE,
     CONF_VALUE_BATTERY_MODE_PASSIVE,
@@ -1177,6 +1180,9 @@ class CrowdergyConfigFlow(ConfigFlow, domain=DOMAIN):
         device_name = self._pending_name or ""
         entity_input = dict(self._pending_entity_input or {})
         entity_charge_mode = entity_input.get(CONF_ENTITY_CHARGE_MODE, "")
+        entity_phase_mode = entity_input.get(
+            CONF_ENTITY_WALLBOX_PHASE_MODE, ""
+        )
 
         if user_input is not None:
             entity_input[CONF_CHARGE_MODE_VALUE_LOCK] = user_input.get(
@@ -1188,6 +1194,14 @@ class CrowdergyConfigFlow(ConfigFlow, domain=DOMAIN):
             entity_input[CONF_CHARGE_MODE_VALUE_SOLAR] = user_input.get(
                 CONF_CHARGE_MODE_VALUE_SOLAR, ""
             )
+            # Phasen-Werte (2026-07-19): nur relevant wenn die Phasen-
+            # Entity gemappt ist; leere Strings sind sonst harmlos.
+            entity_input[CONF_VALUE_WALLBOX_PHASE_1] = user_input.get(
+                CONF_VALUE_WALLBOX_PHASE_1, ""
+            )
+            entity_input[CONF_VALUE_WALLBOX_PHASE_3] = user_input.get(
+                CONF_VALUE_WALLBOX_PHASE_3, ""
+            )
             entity_input[CONF_ENTITY_CONTROL_HOLD] = user_input.get(
                 CONF_ENTITY_CONTROL_HOLD, ENTITY_CONTROL_HOLD_AUTO
             )
@@ -1196,7 +1210,8 @@ class CrowdergyConfigFlow(ConfigFlow, domain=DOMAIN):
         return self.async_show_form(
             step_id="device_charge_mode_values",
             data_schema=_charge_mode_values_schema(
-                self.hass, entity_charge_mode, _preset_step_defaults(self)
+                self.hass, entity_charge_mode, _preset_step_defaults(self),
+                entity_phase_mode=entity_phase_mode,
             ),
             description_placeholders={
                 "device_type": DEVICE_TYPE_LABELS_DE.get(device_type, device_type),
@@ -1901,6 +1916,9 @@ class CrowdergyOptionsFlow(OptionsFlow):
         device_name = self._pending_name or ""
         entity_input = dict(self._pending_entity_input or {})
         entity_charge_mode = entity_input.get(CONF_ENTITY_CHARGE_MODE, "")
+        entity_phase_mode = entity_input.get(
+            CONF_ENTITY_WALLBOX_PHASE_MODE, ""
+        )
 
         if user_input is not None:
             entity_input[CONF_CHARGE_MODE_VALUE_LOCK] = user_input.get(
@@ -1912,6 +1930,14 @@ class CrowdergyOptionsFlow(OptionsFlow):
             entity_input[CONF_CHARGE_MODE_VALUE_SOLAR] = user_input.get(
                 CONF_CHARGE_MODE_VALUE_SOLAR, ""
             )
+            # Phasen-Werte (2026-07-19): nur relevant wenn die Phasen-
+            # Entity gemappt ist; leere Strings sind sonst harmlos.
+            entity_input[CONF_VALUE_WALLBOX_PHASE_1] = user_input.get(
+                CONF_VALUE_WALLBOX_PHASE_1, ""
+            )
+            entity_input[CONF_VALUE_WALLBOX_PHASE_3] = user_input.get(
+                CONF_VALUE_WALLBOX_PHASE_3, ""
+            )
             entity_input[CONF_ENTITY_CONTROL_HOLD] = user_input.get(
                 CONF_ENTITY_CONTROL_HOLD, ENTITY_CONTROL_HOLD_AUTO
             )
@@ -1920,7 +1946,8 @@ class CrowdergyOptionsFlow(OptionsFlow):
         return self.async_show_form(
             step_id="add_device_charge_mode_values",
             data_schema=_charge_mode_values_schema(
-                self.hass, entity_charge_mode, _preset_step_defaults(self)
+                self.hass, entity_charge_mode, _preset_step_defaults(self),
+                entity_phase_mode=entity_phase_mode,
             ),
             description_placeholders={
                 "device_type": DEVICE_TYPE_LABELS_DE.get(device_type, device_type),
@@ -2323,6 +2350,9 @@ class CrowdergyOptionsFlow(OptionsFlow):
         device_name = self._edit_pending_name or target[CONF_DEVICE_NAME]
         entity_input = dict(self._edit_pending_entity_input or {})
         entity_charge_mode = entity_input.get(CONF_ENTITY_CHARGE_MODE, "")
+        entity_phase_mode = entity_input.get(
+            CONF_ENTITY_WALLBOX_PHASE_MODE, ""
+        )
 
         if user_input is not None:
             entity_input[CONF_CHARGE_MODE_VALUE_LOCK] = user_input.get(
@@ -2334,6 +2364,14 @@ class CrowdergyOptionsFlow(OptionsFlow):
             entity_input[CONF_CHARGE_MODE_VALUE_SOLAR] = user_input.get(
                 CONF_CHARGE_MODE_VALUE_SOLAR, ""
             )
+            # Phasen-Werte (2026-07-19): nur relevant wenn die Phasen-
+            # Entity gemappt ist; leere Strings sind sonst harmlos.
+            entity_input[CONF_VALUE_WALLBOX_PHASE_1] = user_input.get(
+                CONF_VALUE_WALLBOX_PHASE_1, ""
+            )
+            entity_input[CONF_VALUE_WALLBOX_PHASE_3] = user_input.get(
+                CONF_VALUE_WALLBOX_PHASE_3, ""
+            )
             entity_input[CONF_ENTITY_CONTROL_HOLD] = user_input.get(
                 CONF_ENTITY_CONTROL_HOLD, ENTITY_CONTROL_HOLD_AUTO
             )
@@ -2342,7 +2380,8 @@ class CrowdergyOptionsFlow(OptionsFlow):
         return self.async_show_form(
             step_id="edit_device_charge_mode_values",
             data_schema=_charge_mode_values_schema(
-                self.hass, entity_charge_mode, target
+                self.hass, entity_charge_mode, target,
+                entity_phase_mode=entity_phase_mode,
             ),
             description_placeholders={
                 "device_type": DEVICE_TYPE_LABELS_DE.get(device_type, device_type),

@@ -42,14 +42,38 @@
         "description": "Diese Geräte wurden in deinem Home Assistant erkannt:\n\n{summary}\n\n✓ = sicher erkannt · ? = bitte prüfen. Öffne eine Sektion, um die Zuordnung anzupassen. Haken bei „Einschließen“ entfernen überspringt das Gerät.",
         "submit": "Alle bestätigen",
         "sections": {
-          "solar":     {"name": "Solar",      "description": "{solar_conf}"},
-          "battery":   {"name": "Batterie",   "description": "{battery_conf}"},
-          "grid":      {"name": "Netz",       "description": "{grid_conf}"},
-          "heating":   {"name": "Heizung",    "description": "{heating_conf}"},
-          "warmwater": {"name": "Warmwasser", "description": "{warmwater_conf}"},
-          "wallbox":   {"name": "Wallbox",    "description": "{wallbox_conf}"},
-          "generic":   {"name": "Sonstiges",  "description": "{generic_conf}"},
-          "haushalt":  {"name": "Haushalt",   "description": "{haushalt_conf}"}
+          "solar": {
+            "name": "Solar",
+            "description": "{solar_conf}"
+          },
+          "battery": {
+            "name": "Batterie",
+            "description": "{battery_conf}"
+          },
+          "grid": {
+            "name": "Netz",
+            "description": "{grid_conf}"
+          },
+          "heating": {
+            "name": "Heizung",
+            "description": "{heating_conf}"
+          },
+          "warmwater": {
+            "name": "Warmwasser",
+            "description": "{warmwater_conf}"
+          },
+          "wallbox": {
+            "name": "Wallbox",
+            "description": "{wallbox_conf}"
+          },
+          "generic": {
+            "name": "Sonstiges",
+            "description": "{generic_conf}"
+          },
+          "haushalt": {
+            "name": "Haushalt",
+            "description": "{haushalt_conf}"
+          }
         }
       },
       "device_type": {
@@ -137,6 +161,7 @@
               "entity_vorlauf_setpoint_c": "Vorlauf-Sollwert (optional)",
               "entity_charge_mode": "Lademodus",
               "entity_wallbox_charge_current_a": "Ladestrom (optional)",
+              "entity_wallbox_phase_mode": "Phasenumschaltung (optional)",
               "entity_water_heater": "Warmwasser-Entität (optional)"
             },
             "data_description": {
@@ -147,6 +172,7 @@
               "entity_vorlauf_setpoint_c": "Nur bei manueller Steuerung: schreibbarer Vorlauf-Sollwert in °C. Crowdergy regelt die Heizung dann stufenlos statt nur an/aus. Bei Climate-Entität leer lassen.",
               "entity_charge_mode": "Wallbox: Auswahl der Lademodi (Sperren/Laden/Solar). Batterie: Entität für den Betriebsmodus.",
               "entity_wallbox_charge_current_a": "Stellt den Ladestrom in Ampere (typisch 6–16 A). Damit passt Crowdergy die Ladeleistung an den Solarüberschuss an, statt nur mit voller Leistung zu laden.",
+              "entity_wallbox_phase_mode": "Select-Entity, die die Wallbox zwischen 1- und 3-phasigem Laden umschaltet (z. B. go-e). Damit kann Crowdergy schon ab ~1,4 kW Solarüberschuss einphasig laden statt erst ab ~4 kW. Die \"Auto\"-Option wird nie genutzt — Crowdergy stellt die Phase immer explizit.",
               "entity_water_heater": "Optional: die „water_heater\"-Entität deiner Brauchwasser-Wärmepumpe (Präfix water_heater.). Steuerung, Modi und Speichertemperatur werden daraus abgeleitet. Hast du keine solche Entität, lass das Feld leer und ordne stattdessen eine Steuer-Entität zu."
             }
           }
@@ -177,12 +203,16 @@
           "charge_mode_value_lock": "Aus",
           "charge_mode_value_power": "An",
           "charge_mode_value_solar": "Solaroptimiert",
+          "value_wallbox_phase_1": "Wert für 1-phasig",
+          "value_wallbox_phase_3": "Wert für 3-phasig",
           "entity_control_hold": "Befehl wiederholen"
         },
         "data_description": {
           "charge_mode_value_lock": "Option, die das Laden sperrt (z. B. „Lock“, „Aus“).",
           "charge_mode_value_power": "Option, die mit voller Leistung lädt (z. B. „Power“, „Boost“).",
           "charge_mode_value_solar": "Option, die dem Solarüberschuss folgt (z. B. „Solar“, „Eco“).",
+          "value_wallbox_phase_1": "Option, die 1-phasiges Laden erzwingt (z. B. \"nur 1\").",
+          "value_wallbox_phase_3": "Option, die 3-phasiges Laden erzwingt (z. B. \"nur 3\"). \"Auto\" nicht mappen.",
           "entity_control_hold": "Auto/Immer: alle 30 s erneut schreiben. Nur einmal: einmal schreiben."
         }
       },
@@ -409,6 +439,7 @@
               "entity_vorlauf_setpoint_c": "Vorlauf-Sollwert (optional)",
               "entity_charge_mode": "Lademodus",
               "entity_wallbox_charge_current_a": "Ladestrom (optional)",
+              "entity_wallbox_phase_mode": "Phasenumschaltung (optional)",
               "entity_water_heater": "Warmwasser-Entität (optional)"
             },
             "data_description": {
@@ -419,6 +450,7 @@
               "entity_vorlauf_setpoint_c": "Nur bei manueller Steuerung: schreibbarer Vorlauf-Sollwert in °C. Crowdergy regelt die Heizung dann stufenlos statt nur an/aus. Bei Climate-Entität leer lassen.",
               "entity_charge_mode": "Wallbox: Auswahl der Lademodi (Sperren/Laden/Solar). Batterie: Entität für den Betriebsmodus.",
               "entity_wallbox_charge_current_a": "Stellt den Ladestrom in Ampere (typisch 6–16 A). Damit passt Crowdergy die Ladeleistung an den Solarüberschuss an, statt nur mit voller Leistung zu laden.",
+              "entity_wallbox_phase_mode": "Select-Entity, die die Wallbox zwischen 1- und 3-phasigem Laden umschaltet (z. B. go-e). Damit kann Crowdergy schon ab ~1,4 kW Solarüberschuss einphasig laden statt erst ab ~4 kW. Die \"Auto\"-Option wird nie genutzt — Crowdergy stellt die Phase immer explizit.",
               "entity_water_heater": "Optional: die „water_heater\"-Entität deiner Brauchwasser-Wärmepumpe (Präfix water_heater.). Steuerung, Modi und Speichertemperatur werden daraus abgeleitet. Hast du keine solche Entität, lass das Feld leer und ordne stattdessen eine Steuer-Entität zu."
             }
           }
@@ -449,12 +481,16 @@
           "charge_mode_value_lock": "Aus",
           "charge_mode_value_power": "An",
           "charge_mode_value_solar": "Solaroptimiert",
+          "value_wallbox_phase_1": "Wert für 1-phasig",
+          "value_wallbox_phase_3": "Wert für 3-phasig",
           "entity_control_hold": "Befehl wiederholen"
         },
         "data_description": {
           "charge_mode_value_lock": "Option, die das Laden sperrt (z. B. „Lock“, „Aus“).",
           "charge_mode_value_power": "Option, die mit voller Leistung lädt (z. B. „Power“, „Boost“).",
           "charge_mode_value_solar": "Option, die dem Solarüberschuss folgt (z. B. „Solar“, „Eco“).",
+          "value_wallbox_phase_1": "Option, die 1-phasiges Laden erzwingt (z. B. \"nur 1\").",
+          "value_wallbox_phase_3": "Option, die 3-phasiges Laden erzwingt (z. B. \"nur 3\"). \"Auto\" nicht mappen.",
           "entity_control_hold": "Auto/Immer: alle 30 s erneut schreiben. Nur einmal: einmal schreiben."
         }
       },
@@ -573,6 +609,7 @@
               "entity_vorlauf_setpoint_c": "Vorlauf-Sollwert (optional)",
               "entity_charge_mode": "Lademodus",
               "entity_wallbox_charge_current_a": "Ladestrom (optional)",
+              "entity_wallbox_phase_mode": "Phasenumschaltung (optional)",
               "entity_water_heater": "Warmwasser-Entität (optional)"
             },
             "data_description": {
@@ -583,6 +620,7 @@
               "entity_vorlauf_setpoint_c": "Nur bei manueller Steuerung: schreibbarer Vorlauf-Sollwert in °C. Crowdergy regelt die Heizung dann stufenlos statt nur an/aus. Bei Climate-Entität leer lassen.",
               "entity_charge_mode": "Wallbox: Auswahl der Lademodi. Batterie: Entität für den Betriebsmodus.",
               "entity_wallbox_charge_current_a": "Stellt den Ladestrom in Ampere (typisch 6–16 A). Damit passt Crowdergy die Ladeleistung an den Solarüberschuss an, statt nur mit voller Leistung zu laden.",
+              "entity_wallbox_phase_mode": "Select-Entity, die die Wallbox zwischen 1- und 3-phasigem Laden umschaltet (z. B. go-e). Damit kann Crowdergy schon ab ~1,4 kW Solarüberschuss einphasig laden statt erst ab ~4 kW. Die \"Auto\"-Option wird nie genutzt — Crowdergy stellt die Phase immer explizit.",
               "entity_water_heater": "Optional: die „water_heater\"-Entität deiner Brauchwasser-Wärmepumpe (Präfix water_heater.). Steuerung, Modi und Speichertemperatur werden daraus abgeleitet. Hast du keine solche Entität, lass das Feld leer und ordne stattdessen eine Steuer-Entität zu."
             }
           }
@@ -613,12 +651,16 @@
           "charge_mode_value_lock": "Aus",
           "charge_mode_value_power": "An",
           "charge_mode_value_solar": "Solaroptimiert",
+          "value_wallbox_phase_1": "Wert für 1-phasig",
+          "value_wallbox_phase_3": "Wert für 3-phasig",
           "entity_control_hold": "Befehl wiederholen"
         },
         "data_description": {
           "charge_mode_value_lock": "Option, die das Laden sperrt (z. B. „Lock“, „Aus“).",
           "charge_mode_value_power": "Option, die mit voller Leistung lädt (z. B. „Power“, „Boost“).",
           "charge_mode_value_solar": "Option, die dem Solarüberschuss folgt (z. B. „Solar“, „Eco“).",
+          "value_wallbox_phase_1": "Option, die 1-phasiges Laden erzwingt (z. B. \"nur 1\").",
+          "value_wallbox_phase_3": "Option, die 3-phasiges Laden erzwingt (z. B. \"nur 3\"). \"Auto\" nicht mappen.",
           "entity_control_hold": "Auto/Immer: alle 30 s erneut schreiben. Nur einmal: einmal schreiben."
         }
       },

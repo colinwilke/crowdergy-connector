@@ -124,6 +124,43 @@ def test_control_entities_mapped_battery_needs_mode_not_just_setpoint():
     assert _mapped("battery", full) is True
 
 
+def test_phase_switching_capability_needs_all_three_pieces():
+    """1/3-Phasen-Umschaltung (2026-07-19): das Capability-Bool wird nur
+    True wenn Phasen-Entity + BEIDE Options-Strings + Ladestrom-Entity
+    gemappt sind. Jedes fehlende Stück → False — ein True ohne
+    Anwendbarkeit wäre die ×3-Überzieh-Falle (Ampere 1- vs 3-phasig)."""
+    from custom_components.theothergas.const import (
+        CONF_ENTITY_WALLBOX_CHARGE_CURRENT,
+        CONF_ENTITY_WALLBOX_PHASE_MODE,
+        CONF_VALUE_WALLBOX_PHASE_1,
+        CONF_VALUE_WALLBOX_PHASE_3,
+    )
+
+    def _cap(entity_input):
+        out = build_payload(
+            mode="create", dtype="wallbox", name="x",
+            entity_input=entity_input,
+        )
+        return out.get("wallbox_supports_phase_switching")
+
+    full = {
+        CONF_ENTITY_WALLBOX_PHASE_MODE: "select.goe_phasen",
+        CONF_VALUE_WALLBOX_PHASE_1: "nur 1",
+        CONF_VALUE_WALLBOX_PHASE_3: "nur 3",
+        CONF_ENTITY_WALLBOX_CHARGE_CURRENT: "number.goe_amp",
+    }
+    assert _cap(full) is True
+    for missing in full:
+        partial = {k: v for k, v in full.items() if k != missing}
+        assert _cap(partial) is False, f"must be False without {missing}"
+    # Entmappen im Update sendet False (always/always) → Backend fällt
+    # auf den 3-Phasen-Floor zurück.
+    out = build_payload(
+        mode="update", dtype="wallbox", name="x", entity_input={}
+    )
+    assert out.get("wallbox_supports_phase_switching") is False
+
+
 def test_control_entities_mapped_per_type():
     assert _mapped("wallbox", {CONF_ENTITY_CHARGE_MODE: "select.wb_mode"}) is True
     assert _mapped("wallbox", {}) is False
