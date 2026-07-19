@@ -994,7 +994,15 @@ class CrowdergyConfigFlow(ConfigFlow, domain=DOMAIN):
             if choice != "__manual__" and self._pending_lookup_cache:
                 maps = _picked_preset_maps(self._pending_lookup_cache, choice)
                 if maps is not None:
-                    self._pending_preset_entity_map = maps[0]
+                    # Contributed Entity-IDs gegen DIESE Installation
+                    # auflösen (Registry-Identität → Suffix-Match) — die
+                    # rohen IDs tragen den Gerätenamen des Contributors
+                    # und existieren hier i. d. R. nicht.
+                    from .entity_mapper import resolve_preset_entities
+
+                    self._pending_preset_entity_map = resolve_preset_entities(
+                        self.hass, maps[0], maps[2]
+                    )
                     self._pending_preset_value_map = maps[1]
             return await self.async_step_device_entities()
 
@@ -1600,6 +1608,7 @@ class CrowdergyOptionsFlow(OptionsFlow):
             # Helper-only-Mapping; das Backend akzeptiert NULL.
             from .entity_mapper import (
                 dominant_integration_domain,
+                entity_identity_map,
                 required_helper_specs,
                 required_integration_domains,
             )
@@ -1631,6 +1640,13 @@ class CrowdergyOptionsFlow(OptionsFlow):
             helper_specs = required_helper_specs(self.hass, entity_map)
             if helper_specs:
                 payload["required_helpers"] = helper_specs
+            # Registry-Identität je Entity-Slot (platform +
+            # translation_key/original_name) — macht das Preset beim
+            # Empfänger unabhängig vom User-Gerätenamen auflösbar.
+            # BEWUSST ohne unique_id (trägt oft Seriennummern — PII).
+            identity_map = entity_identity_map(self.hass, entity_map)
+            if identity_map:
+                payload["entity_identity_map"] = identity_map
             # CN-12 (2026-06-11): über `_authenticated_config_request`
             # (401-Refresh + Client-Bau im Executor). CN-14: auch das
             # JSON-Parsing defensiv — ValueError landet im selben
@@ -1774,7 +1790,14 @@ class CrowdergyOptionsFlow(OptionsFlow):
             if choice != "__manual__" and self._pending_lookup_cache:
                 maps = _picked_preset_maps(self._pending_lookup_cache, choice)
                 if maps is not None:
-                    self._pending_preset_entity_map = maps[0]
+                    # Identische Auflösung wie im Initial-Flow-Picker:
+                    # Registry-Identität → Suffix-Match, unauflösbar →
+                    # verbatim (Mensch wählt im Entity-Step).
+                    from .entity_mapper import resolve_preset_entities
+
+                    self._pending_preset_entity_map = resolve_preset_entities(
+                        self.hass, maps[0], maps[2]
+                    )
                     self._pending_preset_value_map = maps[1]
             return await self.async_step_add_device_entities()
 

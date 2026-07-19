@@ -47,6 +47,7 @@ wie eingereicht (Normalisierung auf `lower()` + Key-Erweiterung um
 | `integration_domain` | string \| `null` | HA-Integration der gemappten Entities (aus der Entity-Registry über den ConfigEntry hergeleitet — nie aus Entity-ID-Präfixen). Bei gemischten Setups die **häufigste** Domain. `null` = Legacy-Beitrag; die Box filtert solche Presets raus. |
 | `required_integrations` | `[string]` \| `null` | **Alle DISTINKTEN** HA-Integrationen, die die `entity_map` braucht, damit sie vollständig auflösbar ist (Superset von `integration_domain`, sortiert). Der Connector zeigt sie neuen Usern beim Profil-Pick an („dafür brauchst du folgende Integration(en): …", Klarname mit Slug-Fallback). `null` = Legacy-Beitrag (Connector < 2026-07). Die Box ignoriert das Feld (filtert weiter über `integration_domain`). |
 | `required_helpers` | `[HelperSpec]` \| `null` | **Strukturierte Specs der HA-Helper** (`input_select`/`input_number`/`input_boolean`), die die `entity_map` referenziert, die ein empfangender User aber NICHT hat — vom Contributor selbst angelegt (z. B. `input_select.hausbatterie_lademodus`, das eine Modbus-Write-Automation treibt). Consumer (Box/Connector) legen die fehlenden Helfer VOR dem Mapping an und wiren den Slot auf die frisch erzeugte Entity. **Bewusst KEIN Roh-YAML/Template** — nur die drei `input_*`-Typen, damit kein ausführbarer Code an eine config-schreibende Provisionierung wandert (Box-Invariante „kein beliebiger Code"). Der Hardware-Pfad HINTER einem Helfer (Modbus-Automation, Register-Plan, host/slave) ist installations-spezifisch und gehört NICHT hierher (kuratiertes Vendor-Package). `null` = kein helferbasierter Slot / Legacy-Beitrag. |
+| `entity_identity_map` | `{slot: Identity}` \| `null` | **Registry-Identität je Entity-Slot** (seit 2026-07-19) — die namens-UNABHÄNGIGE Auflösungs-Grundlage: `{platform, translation_key?, original_name?}`. `platform` = HA-Integration, die die Entity erzeugt hat (Registry `platform`, Pflicht je Eintrag); `translation_key` = stabiler per-Entity-Key der Integration (bevorzugt); `original_name` = Integrations-Default-Name VOR jedem User-Rename (Fallback für Integrationen ohne translation_key). Vom Connector beim Contribute aus der Entity-Registry hergeleitet; Slots ohne Registry-Eintrag (input_*-Helfer, Templates) fehlen. **PII-Regel: `unique_id` wird NIE transportiert** (trägt oft Geräte-Seriennummern) — das Backend lehnt sie hart mit 400 ab. `null` = Legacy-Beitrag → Consumer nutzen nur den Suffix-Match. |
 | `status` | `"staged"` \| `"approved"` | Siehe Lifecycle. `rejected` erscheint nie im Lookup. |
 | `contribution_count` | int | Alle gezählten Beiträge für den Key (auch Mehrfach-Beiträge desselben Users). |
 | `updated_at` | ISO-Datetime | Letzte **Mapping**-Änderung (nicht: letzter Beitrag, nicht: Status-Übergang). Basis für den „Verbessertes Profil verfügbar"-Prompt (Backlog #28). |
@@ -150,6 +151,50 @@ Für read-only Template-Sensoren, die nur eine Ableitung berechnen, ist
 `required_helpers` (v1) noch nicht zuständig (Template = Code → separater,
 kuratierter Pfad).
 
+### `entity_identity_map` — namens-unabhängige Entity-Auflösung
+
+Entity-IDs tragen den frei wählbaren Gerätenamen des Contributors als
+Präfix (`sensor.solar_battery_power` vs
+`sensor.wechselrichter_battery_power`) — der Suffix-Match neutralisiert
+das nur, solange der Empfänger die INTEGRATIONS-Hälfte der object_id
+unangetastet lässt (ein Entity-Rename bricht ihn). Die Registry-Identität
+löst beides:
+
+```json
+"entity_identity_map": {
+  "entity_current_power_kw": {
+    "platform": "kostal_plenticore",
+    "translation_key": "battery_power"
+  },
+  "entity_battery_mode": {
+    "platform": "kostal_plenticore",
+    "original_name": "Battery Operating Mode"
+  }
+}
+```
+
+**Auflösungs-Leiter beim Anwenden (Box `match_entity_identity` /
+Connector `resolve_preset_entities`), fail-safe eskalierend:**
+
+1. **Exakte ID** existiert beim Empfänger → verwenden.
+2. **Identität:** same-domain-Entities der `platform`, erst
+   `translation_key`-Gleichheit, wenn das LEER ausgeht (älterer
+   Integrations-Stand) `original_name`-Gleichheit. Genau EIN Treffer →
+   auflösen; mehrere (echtes Multi-Inverter-Setup) → Box:
+   `AMBIGUOUS_MAPPING` mit Kandidaten (#29-GUI-Picker), Connector:
+   Contributor-ID verbatim belassen (der Mensch wählt im Entity-Step).
+   **Nie raten.**
+3. **Suffix-Match** (Legacy-Verhalten) für Presets ohne Identität bzw.
+   Slots, die die Identity-Leiter nicht auflöst.
+
+Die Identität wird beim Contribute erfasst (`entity_mapper.
+entity_identity_map`), nur-wenn-mitgeliefert auf staged Presets
+überschrieben (ein Alt-Connector entfernt sie nicht wieder) und vom
+Kurator-Upsert unbedingt geschrieben (Admin-Seite schickt das Feld
+send-always). Backend-Validierung: Key-Allowlist
+`{platform, translation_key, original_name}` — **`unique_id` → 400**
+(Seriennummern-PII).
+
 ## Lifecycle: Staging → Approval → Kuration
 
 ```
@@ -214,6 +259,11 @@ Contribute ──► staged ──(≥ CROWD_PRESET_THRESHOLD distinct User)─�
     {"slot": "entity_battery_mode", "type": "input_select",
      "options": ["Extern", "Automatik"], "name": "Lademodus"}
   ],
+  "entity_identity_map": {
+    "entity_current_power_kw": {
+      "platform": "kostal_plenticore", "translation_key": "battery_power"
+    }
+  },
   "notes": "optional, ≤ 280 Zeichen",
   "helper_yaml": null
 }
@@ -293,8 +343,9 @@ normales User-JWT, kein separater Auth-Pfad. Nicht-Kurator → 403
 
 ## Konsumenten-Pflichten beim Anwenden
 
-1. Entity-Slots gegen die EIGENE Installation auflösen (Suffix-Match,
-   s.o.); `value_map` verbatim. **`required_helpers` beim Anwenden
+1. Entity-Slots gegen die EIGENE Installation auflösen (exakt →
+   Registry-Identität → Suffix-Match, s. „entity_identity_map");
+   `value_map` verbatim. **`required_helpers` beim Anwenden
    berücksichtigen — je nach Consumer verschieden:**
    - **Box** (steuert HA von außen per WebSocket): legt fehlende Helfer
      VOR dem Mapping automatisch an (`<domain>/create`, mit der

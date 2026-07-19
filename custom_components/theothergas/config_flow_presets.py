@@ -25,12 +25,14 @@ from .const import (
 
 def _picked_preset_maps(
     presets: list[dict[str, Any]], choice: str
-) -> tuple[dict[str, str], dict[str, str]] | None:
+) -> tuple[dict[str, str], dict[str, str], dict[str, dict]] | None:
     """Auflösung der Picker-Wahl `<vendor>::<model>` → (entity_map,
-    value_map) des Presets, beide str→str-gefiltert. None wenn die
-    Wahl nicht (mehr) im Lookup-Cache liegt. value_map ist neu im
-    Mapping-Store-Vertrag — ältere Backends liefern das Feld nicht,
-    dann bleibt die Map leer (Werte-Steps zeigen keine Vorschläge)."""
+    value_map, entity_identity_map) des Presets, defensiv gefiltert.
+    None wenn die Wahl nicht (mehr) im Lookup-Cache liegt. value_map +
+    entity_identity_map sind jüngere Vertragsfelder — ältere Backends
+    liefern sie nicht, dann bleiben die Maps leer (Werte-Steps zeigen
+    keine Vorschläge; die Entity-Auflösung fällt auf den
+    Suffix-Match zurück)."""
     for p in presets:
         if f"{p['vendor']}::{p['model']}" != choice:
             continue
@@ -43,7 +45,19 @@ def _picked_preset_maps(
                 if isinstance(k, str) and isinstance(v, str)
             }
 
-        return _str_map(p.get("entity_map")), _str_map(p.get("value_map"))
+        def _identity_map(raw: Any) -> dict[str, dict]:
+            if not isinstance(raw, dict):
+                return {}
+            return {
+                k: v for k, v in raw.items()
+                if isinstance(k, str) and isinstance(v, dict)
+            }
+
+        return (
+            _str_map(p.get("entity_map")),
+            _str_map(p.get("value_map")),
+            _identity_map(p.get("entity_identity_map")),
+        )
     return None
 
 

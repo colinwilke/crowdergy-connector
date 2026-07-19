@@ -494,3 +494,184 @@ async def test_contribute_native_entities_have_no_required_helpers(
         )
 
     assert "required_helpers" not in captured
+
+
+# ── entity_identity_map: user-namens-unabhängige Preset-Auflösung ──────
+
+
+def _register(hass, domain, object_id, platform, unique_id, **kwargs):
+    from homeassistant.helpers import entity_registry as er
+
+    return er.async_get(hass).async_get_or_create(
+        domain, platform, unique_id,
+        suggested_object_id=object_id, **kwargs,
+    )
+
+
+async def test_contribute_payload_carries_entity_identity_map(
+    hass: HomeAssistant,
+):
+    """Der Contribute-Payload trägt je Entity-Slot die Registry-Identität
+    (platform + translation_key/original_name) — NIE die unique_id
+    (Seriennummern-PII)."""
+    _register(
+        hass, "sensor", "anlage_battery_power", "kostal_plenticore",
+        "SERIAL123_battery_power", translation_key="battery_power",
+    )
+    _register(
+        hass, "select", "anlage_battery_mode", "kostal_plenticore",
+        "SERIAL123_battery_mode", original_name="Battery Operating Mode",
+    )
+    flow = _make_flow(hass, [BATTERY_DEV])
+    await flow.async_step_contribute_preset({CONF_DEVICE_ID: "dev-bat"})
+    captured: dict = {}
+
+    async def fake_request(hass_, entry_, method, path, **kwargs):
+        captured.update(kwargs["json"])
+        return _response(200, {"status": "staged", "contribution_count": 1})
+
+    with patch(
+        "custom_components.theothergas.config_flow._authenticated_config_request",
+        new=AsyncMock(side_effect=fake_request),
+    ):
+        result = await flow.async_step_contribute_preset_form(
+            {"vendor": "KOSTAL", "model": "Plenticore plus 8.5"}
+        )
+
+    assert result["reason"] == "contribute_success"
+    identity = captured["entity_identity_map"]
+    assert identity["entity_current_power_kw"] == {
+        "platform": "kostal_plenticore",
+        "translation_key": "battery_power",
+    }
+    assert identity["entity_battery_mode"] == {
+        "platform": "kostal_plenticore",
+        "original_name": "Battery Operating Mode",
+    }
+    # Slots ohne Registry-Eintrag (setpoint/soc hier nicht registriert)
+    # fehlen — und unique_id taucht NIRGENDS auf.
+    assert "unique_id" not in str(identity)
+
+
+async def test_resolve_preset_entities_via_identity_ignores_device_name(
+    hass: HomeAssistant,
+):
+    """Contributor nannte den WR „Solar", der Empfänger „Wechselrichter"
+    (und hat die Power-Entity sogar komplett umbenannt): die Registry-
+    Identität löst trotzdem auf — der Suffix-Match hätte beim Voll-
+    Rename keine Chance."""
+    from custom_components.theothergas.entity_mapper import (
+        resolve_preset_entities,
+    )
+
+    _register(
+        hass, "sensor", "mein_speicher_leistung", "kostal_plenticore",
+        "S9_battery_power", translation_key="battery_power",
+    )
+    resolved = resolve_preset_entities(
+        hass,
+        {"entity_current_power_kw": "sensor.solar_battery_power"},
+        {"entity_current_power_kw": {
+            "platform": "kostal_plenticore",
+            "translation_key": "battery_power",
+        }},
+    )
+    assert resolved == {
+        "entity_current_power_kw": "sensor.mein_speicher_leistung"
+    }
+
+
+async def test_resolve_preset_entities_exact_and_ambiguous(
+    hass: HomeAssistant,
+):
+    """Exakte ID gewinnt unverändert; mehrere Identity-Treffer
+    (Multi-Inverter) → verbatim, nie raten."""
+    from custom_components.theothergas.entity_mapper import (
+        resolve_preset_entities,
+    )
+
+    # exakt: die Contributor-ID existiert hier
+    hass.states.async_set("sensor.solar_battery_power", "1.0")
+    ident = {"platform": "kostal_plenticore", "translation_key": "battery_power"}
+    resolved = resolve_preset_entities(
+        hass,
+        {"entity_current_power_kw": "sensor.solar_battery_power"},
+        {"entity_current_power_kw": ident},
+    )
+    assert resolved["entity_current_power_kw"] == "sensor.solar_battery_power"
+
+    # mehrdeutig: zwei WR mit derselben Identität
+    _register(
+        hass, "sensor", "wr1_battery_power", "kostal_plenticore",
+        "WR1_bp", translation_key="battery_power",
+    )
+    _register(
+        hass, "sensor", "wr2_battery_power", "kostal_plenticore",
+        "WR2_bp", translation_key="battery_power",
+    )
+    resolved = resolve_preset_entities(
+        hass,
+        {"entity_current_power_kw": "sensor.fremd_battery_power"},
+        {"entity_current_power_kw": ident},
+    )
+    assert resolved["entity_current_power_kw"] == "sensor.fremd_battery_power"
+
+
+async def test_resolve_preset_entities_suffix_fallback_without_identity(
+    hass: HomeAssistant,
+):
+    """Alt-Preset ohne entity_identity_map → Suffix-Match (Box-Heuristik):
+    eindeutiger same-domain-Suffix löst auf, unauflösbar bleibt verbatim
+    (input_*-Helfer-Slots behalten so ihre Anlege-Anleitung)."""
+    from custom_components.theothergas.entity_mapper import (
+        resolve_preset_entities,
+    )
+
+    hass.states.async_set("sensor.wechselrichter_battery_power", "0.5")
+    resolved = resolve_preset_entities(
+        hass,
+        {
+            "entity_current_power_kw": "sensor.solar_battery_power",
+            "entity_battery_mode": "input_select.hausbatterie_lademodus",
+        },
+        None,
+    )
+    assert resolved == {
+        "entity_current_power_kw": "sensor.wechselrichter_battery_power",
+        "entity_battery_mode": "input_select.hausbatterie_lademodus",
+    }
+
+
+async def test_add_preset_pick_resolves_entity_prefill(hass: HomeAssistant):
+    """Flow-Ebene: der Profil-Pick befüllt den Entity-Step mit den
+    AUFGELÖSTEN eigenen Entity-IDs statt der rohen Contributor-IDs."""
+    _register(
+        hass, "sensor", "wechselrichter_batterieleistung", "kostal_plenticore",
+        "X_bp", translation_key="battery_power",
+    )
+    flow = _make_flow(hass, [])
+    flow._pending_type = "battery"
+    flow._pending_name = "Speicher"
+    flow._pending_lookup_cache = [
+        {
+            "vendor": "KOSTAL",
+            "model": "Plenticore plus 8.5",
+            "entity_map": {
+                "entity_current_power_kw": "sensor.solar_battery_power",
+            },
+            "value_map": {},
+            "entity_identity_map": {
+                "entity_current_power_kw": {
+                    "platform": "kostal_plenticore",
+                    "translation_key": "battery_power",
+                },
+            },
+        }
+    ]
+    result = await flow.async_step_add_vendor_preset_pick(
+        {"preset_choice": "KOSTAL::Plenticore plus 8.5"}
+    )
+    assert result["step_id"] == "add_device_entities"
+    assert flow._pending_preset_entity_map == {
+        "entity_current_power_kw": "sensor.wechselrichter_batterieleistung"
+    }
