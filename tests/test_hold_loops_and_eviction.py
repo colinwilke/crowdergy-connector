@@ -277,7 +277,8 @@ async def test_charge_mode_hold_loop_rewrites_while_fresh(hass: HomeAssistant):
         await _run_until_stopped(coord._charge_mode_hold_loop("w1"))
 
     coord._apply_charge_mode.assert_awaited_once_with(
-        "w1", "solar", schedule_hold=False, charge_current_a=None
+        "w1", "solar", schedule_hold=False, charge_current_a=None,
+        charge_phases=None,
     )
 
 
@@ -294,7 +295,8 @@ async def test_charge_mode_hold_loop_rewrites_held_current(hass: HomeAssistant):
         await _run_until_stopped(coord._charge_mode_hold_loop("w1"))
 
     coord._apply_charge_mode.assert_awaited_once_with(
-        "w1", "Power", schedule_hold=False, charge_current_a=9
+        "w1", "Power", schedule_hold=False, charge_current_a=9,
+        charge_phases=None,
     )
 
 
@@ -415,6 +417,82 @@ async def test_sse_command_writes_charge_current_before_mode(hass: HomeAssistant
     assert sel_calls[0].data["option"] == "Power"
     assert coord.state.held_charge_mode["w1"] == "Power"
     assert coord.state.held_charge_current["w1"] == 12
+
+
+async def test_sse_command_writes_phase_before_current_and_mode(hass: HomeAssistant):
+    """1/3-Phasen-Umschaltung (2026-07-19): ein Power-Frame mit `phases`
+    auf einer Box mit gemappter Phasen-Entity schreibt ZUERST die Phase
+    (select), DANN den Strom (number), DANN den Modus (select) — und
+    cached die Phase für die Hold-Loop. Die Reihenfolge ist der Kern:
+    die Ampere-Zahl bedeutet je Phasenzahl das Dreifache an Leistung."""
+    from custom_components.theothergas.const import (
+        CONF_ENTITY_WALLBOX_PHASE_MODE,
+        CONF_VALUE_WALLBOX_PHASE_1,
+        CONF_VALUE_WALLBOX_PHASE_3,
+    )
+    dev = {
+        CONF_DEVICE_ID: "w1",
+        CONF_DEVICE_TYPE: "wallbox",
+        CONF_ENTITY_CHARGE_MODE: "select.lademodus",
+        CONF_ENTITY_WALLBOX_CHARGE_CURRENT: "number.wb_amp",
+        CONF_ENTITY_WALLBOX_PHASE_MODE: "select.wb_phasen",
+        CONF_VALUE_WALLBOX_PHASE_1: "nur 1",
+        CONF_VALUE_WALLBOX_PHASE_3: "nur 3",
+    }
+    coord = make_coordinator(hass, [dev])
+    coord._start_charge_mode_hold = MagicMock()
+    hass.states.async_set("select.lademodus", "Eco")
+    hass.states.async_set("select.wb_phasen", "Auto")
+    hass.states.async_set("number.wb_amp", 6)
+    num_calls = async_mock_service(hass, "number", "set_value")
+    sel_calls = async_mock_service(hass, "select", "select_option")
+
+    await coord._handle_ws_message(
+        {"type": "command", "action": "set_charge_mode", "device_id": "w1",
+         "value": "Power", "current_a": 9, "phases": 1}
+    )
+
+    # Zwei select_option-Calls: erst Phase, dann Modus.
+    assert len(sel_calls) == 2
+    assert sel_calls[0].data["entity_id"] == "select.wb_phasen"
+    assert sel_calls[0].data["option"] == "nur 1"
+    assert sel_calls[1].data["entity_id"] == "select.lademodus"
+    assert sel_calls[1].data["option"] == "Power"
+    assert len(num_calls) == 1
+    assert num_calls[0].data["value"] == 9
+    assert coord.state.held_charge_phases["w1"] == 1
+    assert coord.state.held_charge_current["w1"] == 9
+
+
+async def test_sse_phases_ignored_without_mapped_entity(hass: HomeAssistant):
+    """Fail-soft: `phases` im Frame ohne gemappte Phasen-Entity/-Werte
+    wird still ignoriert — Strom + Modus laufen normal durch (Alt-Setup
+    bleibt byte-identisch; das Backend sendet `phases` ohnehin nur bei
+    gemeldeter Capability)."""
+    dev = {
+        CONF_DEVICE_ID: "w1",
+        CONF_DEVICE_TYPE: "wallbox",
+        CONF_ENTITY_CHARGE_MODE: "select.lademodus",
+        CONF_ENTITY_WALLBOX_CHARGE_CURRENT: "number.wb_amp",
+    }
+    coord = make_coordinator(hass, [dev])
+    coord._start_charge_mode_hold = MagicMock()
+    hass.states.async_set("select.lademodus", "Eco")
+    hass.states.async_set("number.wb_amp", 6)
+    num_calls = async_mock_service(hass, "number", "set_value")
+    sel_calls = async_mock_service(hass, "select", "select_option")
+
+    await coord._handle_ws_message(
+        {"type": "command", "action": "set_charge_mode", "device_id": "w1",
+         "value": "Power", "current_a": 12, "phases": 3}
+    )
+
+    assert len(sel_calls) == 1  # nur der Modus, kein Phasen-Write
+    assert sel_calls[0].data["entity_id"] == "select.lademodus"
+    assert len(num_calls) == 1
+    # gehaltene Phase bleibt gecacht (für den Fall dass die Entity später
+    # gemappt wird schadet sie nicht; der Write-Pfad prüft je Tick).
+    assert coord.state.held_charge_phases["w1"] == 3
 
 
 async def test_sse_solar_clears_held_charge_current(hass: HomeAssistant):

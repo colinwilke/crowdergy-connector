@@ -17,6 +17,9 @@ from .const import (
     CONFIG_MODE_MANUAL,
     CONF_ENTITY_CHARGE_MODE,
     CONF_ENTITY_WALLBOX_CHARGE_CURRENT,
+    CONF_ENTITY_WALLBOX_PHASE_MODE,
+    CONF_VALUE_WALLBOX_PHASE_1,
+    CONF_VALUE_WALLBOX_PHASE_3,
     CONF_ENTITY_CLIMATE,
     CONF_ENTITY_WATER_HEATER,
     CONF_ENTITY_CONTROL,
@@ -230,6 +233,19 @@ def _build_device_record(
         # False zurück.
         CONF_ENTITY_WALLBOX_CHARGE_CURRENT: entity_input.get(
             CONF_ENTITY_WALLBOX_CHARGE_CURRENT, ""
+        ),
+        # 2026-07-19: 1/3-Phasen-Umschaltung (Entity + zwei Options-
+        # Strings, alle Connector-lokal). Gleiche Regel wie beim
+        # Ladestrom: fehlt der Key hier, droppt der Submit ihn stumm →
+        # Dispatcher liest leer, Capability fällt beim Edit auf False.
+        CONF_ENTITY_WALLBOX_PHASE_MODE: entity_input.get(
+            CONF_ENTITY_WALLBOX_PHASE_MODE, ""
+        ),
+        CONF_VALUE_WALLBOX_PHASE_1: entity_input.get(
+            CONF_VALUE_WALLBOX_PHASE_1, ""
+        ),
+        CONF_VALUE_WALLBOX_PHASE_3: entity_input.get(
+            CONF_VALUE_WALLBOX_PHASE_3, ""
         ),
         # v2.0: ternary vehicle-status mapping (wallbox-only). Empty
         # strings on non-wallbox types — they get filtered out before

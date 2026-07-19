@@ -42,14 +42,38 @@
         "description": "These devices were detected in your Home Assistant:\n\n{summary}\n\n✓ = confident match · ? = please review. Expand a section to adjust the mapping; uncheck \"Include\" to skip a device.",
         "submit": "Confirm all",
         "sections": {
-          "solar":     {"name": "Solar",     "description": "{solar_conf}"},
-          "battery":   {"name": "Battery",   "description": "{battery_conf}"},
-          "grid":      {"name": "Grid",      "description": "{grid_conf}"},
-          "heating":   {"name": "Heating",   "description": "{heating_conf}"},
-          "warmwater": {"name": "Hot water", "description": "{warmwater_conf}"},
-          "wallbox":   {"name": "Wallbox",   "description": "{wallbox_conf}"},
-          "generic":   {"name": "Other",     "description": "{generic_conf}"},
-          "haushalt":  {"name": "Household", "description": "{haushalt_conf}"}
+          "solar": {
+            "name": "Solar",
+            "description": "{solar_conf}"
+          },
+          "battery": {
+            "name": "Battery",
+            "description": "{battery_conf}"
+          },
+          "grid": {
+            "name": "Grid",
+            "description": "{grid_conf}"
+          },
+          "heating": {
+            "name": "Heating",
+            "description": "{heating_conf}"
+          },
+          "warmwater": {
+            "name": "Hot water",
+            "description": "{warmwater_conf}"
+          },
+          "wallbox": {
+            "name": "Wallbox",
+            "description": "{wallbox_conf}"
+          },
+          "generic": {
+            "name": "Other",
+            "description": "{generic_conf}"
+          },
+          "haushalt": {
+            "name": "Household",
+            "description": "{haushalt_conf}"
+          }
         }
       },
       "device_type": {
@@ -136,6 +160,7 @@
               "entity_vorlauf_setpoint_c": "Flow setpoint (optional)",
               "entity_charge_mode": "Charge mode",
               "entity_wallbox_charge_current_a": "Charging current (optional)",
+              "entity_wallbox_phase_mode": "Phase switch (optional)",
               "entity_water_heater": "Water-heater entity (optional)"
             },
             "data_description": {
@@ -146,6 +171,7 @@
               "entity_vorlauf_setpoint_c": "Manual control only: writable flow setpoint in °C. Crowdergy then modulates the heating smoothly instead of just on/off. Leave empty with a climate entity.",
               "entity_charge_mode": "Wallbox: charge-mode select (lock/charge/solar). Battery: operating-mode entity.",
               "entity_wallbox_charge_current_a": "Sets the charging current in amps (typically 6–16 A). Lets Crowdergy match the charging power to the solar surplus instead of always charging at full power.",
+              "entity_wallbox_phase_mode": "Select entity that switches the wallbox between 1-phase and 3-phase charging (e.g. go-e). With it mapped, Crowdergy can charge single-phase from ~1.4 kW solar surplus instead of needing ~4 kW. The \"auto\" option is never used — Crowdergy always sets the phase explicitly.",
               "entity_water_heater": "Optional: the water_heater entity of your DHW heat pump (prefixed water_heater.). Control, modes and tank temperature are derived from it. If you don't have one, leave this empty and map a control entity instead."
             }
           }
@@ -176,12 +202,16 @@
           "charge_mode_value_lock": "Off",
           "charge_mode_value_power": "On",
           "charge_mode_value_solar": "Solar-optimised",
+          "value_wallbox_phase_1": "1-phase value",
+          "value_wallbox_phase_3": "3-phase value",
           "entity_control_hold": "Repeat command"
         },
         "data_description": {
           "charge_mode_value_lock": "Option that blocks charging (e.g. \"Lock\", \"Off\").",
           "charge_mode_value_power": "Option that charges at full power (e.g. \"Power\", \"Boost\").",
           "charge_mode_value_solar": "Option that follows the solar surplus (e.g. \"Solar\", \"Eco\").",
+          "value_wallbox_phase_1": "Option that forces 1-phase charging (e.g. \"nur 1\").",
+          "value_wallbox_phase_3": "Option that forces 3-phase charging (e.g. \"nur 3\"). Do not map \"auto\".",
           "entity_control_hold": "Auto/Always: rewrite every 30 s. Once only: write once."
         },
         "submit": "Next"
@@ -408,6 +438,7 @@
               "entity_vorlauf_setpoint_c": "Flow setpoint (optional)",
               "entity_charge_mode": "Charge mode",
               "entity_wallbox_charge_current_a": "Charging current (optional)",
+              "entity_wallbox_phase_mode": "Phase switch (optional)",
               "entity_water_heater": "Water-heater entity (optional)"
             },
             "data_description": {
@@ -418,6 +449,7 @@
               "entity_vorlauf_setpoint_c": "Manual control only: writable flow setpoint in °C. Crowdergy then modulates the heating smoothly instead of just on/off. Leave empty with a climate entity.",
               "entity_charge_mode": "Wallbox: charge-mode select (lock/charge/solar). Battery: operating-mode entity.",
               "entity_wallbox_charge_current_a": "Sets the charging current in amps (typically 6–16 A). Lets Crowdergy match the charging power to the solar surplus instead of always charging at full power.",
+              "entity_wallbox_phase_mode": "Select entity that switches the wallbox between 1-phase and 3-phase charging (e.g. go-e). With it mapped, Crowdergy can charge single-phase from ~1.4 kW solar surplus instead of needing ~4 kW. The \"auto\" option is never used — Crowdergy always sets the phase explicitly.",
               "entity_water_heater": "Optional: the water_heater entity of your DHW heat pump (prefixed water_heater.). Control, modes and tank temperature are derived from it. If you don't have one, leave this empty and map a control entity instead."
             }
           }
@@ -448,12 +480,16 @@
           "charge_mode_value_lock": "Off",
           "charge_mode_value_power": "On",
           "charge_mode_value_solar": "Solar-optimised",
+          "value_wallbox_phase_1": "1-phase value",
+          "value_wallbox_phase_3": "3-phase value",
           "entity_control_hold": "Repeat command"
         },
         "data_description": {
           "charge_mode_value_lock": "Option that blocks charging (e.g. \"Lock\", \"Off\").",
           "charge_mode_value_power": "Option that charges at full power (e.g. \"Power\", \"Boost\").",
           "charge_mode_value_solar": "Option that follows the solar surplus (e.g. \"Solar\", \"Eco\").",
+          "value_wallbox_phase_1": "Option that forces 1-phase charging (e.g. \"nur 1\").",
+          "value_wallbox_phase_3": "Option that forces 3-phase charging (e.g. \"nur 3\"). Do not map \"auto\".",
           "entity_control_hold": "Auto/Always: rewrite every 30 s. Once only: write once."
         },
         "submit": "Next"
@@ -573,6 +609,7 @@
               "entity_vorlauf_setpoint_c": "Flow setpoint (optional)",
               "entity_charge_mode": "Charge mode",
               "entity_wallbox_charge_current_a": "Charging current (optional)",
+              "entity_wallbox_phase_mode": "Phase switch (optional)",
               "entity_water_heater": "Water-heater entity (optional)"
             },
             "data_description": {
@@ -583,6 +620,7 @@
               "entity_vorlauf_setpoint_c": "Manual control only: writable flow setpoint in °C. Crowdergy then modulates the heating smoothly instead of just on/off. Leave empty with a climate entity.",
               "entity_charge_mode": "Wallbox: charge-mode select. Battery: operating-mode entity.",
               "entity_wallbox_charge_current_a": "Sets the charging current in amps (typically 6–16 A). Lets Crowdergy match the charging power to the solar surplus instead of always charging at full power.",
+              "entity_wallbox_phase_mode": "Select entity that switches the wallbox between 1-phase and 3-phase charging (e.g. go-e). With it mapped, Crowdergy can charge single-phase from ~1.4 kW solar surplus instead of needing ~4 kW. The \"auto\" option is never used — Crowdergy always sets the phase explicitly.",
               "entity_water_heater": "Optional: the water_heater entity of your DHW heat pump (prefixed water_heater.). Control, modes and tank temperature are derived from it. If you don't have one, leave this empty and map a control entity instead."
             }
           }
@@ -613,12 +651,16 @@
           "charge_mode_value_lock": "Off",
           "charge_mode_value_power": "On",
           "charge_mode_value_solar": "Solar-optimised",
+          "value_wallbox_phase_1": "1-phase value",
+          "value_wallbox_phase_3": "3-phase value",
           "entity_control_hold": "Repeat command"
         },
         "data_description": {
           "charge_mode_value_lock": "Option that blocks charging (e.g. \"Lock\", \"Off\").",
           "charge_mode_value_power": "Option that charges at full power (e.g. \"Power\", \"Boost\").",
           "charge_mode_value_solar": "Option that follows the solar surplus (e.g. \"Solar\", \"Eco\").",
+          "value_wallbox_phase_1": "Option that forces 1-phase charging (e.g. \"nur 1\").",
+          "value_wallbox_phase_3": "Option that forces 3-phase charging (e.g. \"nur 3\"). Do not map \"auto\".",
           "entity_control_hold": "Auto/Always: rewrite every 30 s. Once only: write once."
         }
       },

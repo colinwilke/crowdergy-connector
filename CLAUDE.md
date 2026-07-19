@@ -9,6 +9,34 @@ dort: Cluster C (#16–#22).
 
 ## Repo-Regeln & getroffene Entscheidungen
 
+- **Wallbox 1/3-Phasen-Umschaltung (User ulla/colin 2026-07-19, v3.42.0;
+  Backend-Hälfte backend#107 `66fdb78` prod-deployed Run #95):** drei neue
+  Connector-lokale Slots `entity_wallbox_phase_mode` (Select, go-e
+  „nur 1"/„nur 3"/„Auto") + `value_wallbox_phase_1`/`_3` — Wallbox-
+  Control-Section + Lademodus-Werte-Step (`_charge_mode_values_schema`
+  nimmt jetzt `entity_phase_mode` für den Options-Dropdown), in
+  `MAPPABLE_ENTITY_DOMAINS` UND `_build_device_record` (Round-Trip-Test
+  `test_build_device_record_persists_phase_switching_slots` — die
+  v3.33.x-Naht). Capability `wallbox_supports_phase_switching`
+  (`device_field_spec`, always/always) = Entity + BEIDE Werte + Ladestrom-
+  Entity gemappt — jedes fehlende Stück → False (ein True ohne
+  Anwendbarkeit wäre die ×3-Überzieh-Falle: gleiche Ampere ≙ 1- vs
+  3-phasig Faktor 3 Leistung). **Dispatch: `set_charge_mode`-Frames
+  tragen `phases: 1|3` (nur power-Mode); Schreib-Reihenfolge Phase VOR
+  Strom VOR Modus** (Grobregler vor Feinregler); „Auto" wird NIE
+  geschrieben. Hold-Loop hält `held_charge_phases` mit (Re-Write neben
+  Modus+Strom, SSE-Stale-Bail räumt auf). Fail-soft: `phases` ohne
+  gemappte Entity/Werte → still ignoriert (Alt-Setups byte-identisch;
+  Backend sendet das Feld nur bei gemeldeter Capability). Übersetzungen
+  strings.json + de.json. Tests: field_spec (+1 Allowlist-Kombinatorik),
+  hold_loops (+2 Phase-vor-Strom-Reihenfolge / fail-soft), house_
+  consumption_extras (+1 Record-Round-Trip); bestehende strikte
+  `_apply_charge_mode`-Asserts um `charge_phases=None` erweitert.
+  Vertrag: `crowdergy-backend/docs/wallbox-charge-strategies.md`
+  („1/3-Phasen-Umschaltung"). **User-Hand nach HACS-Update: an ullas
+  go-e die Phasen-Entity + „nur 1"/„nur 3" mappen (Auto NICHT) →
+  Capability geht ans Backend → AI dimmt 1-phasig ab ~1,4 kW.**
+
 - **SSOT-Regeln (immer einhalten):**
   - Neue Backend-Device-Felder NUR in `device_field_spec.py` (Roundtrip
     create/update), nie direkt in `_register_device`/`_update_device_backend`.

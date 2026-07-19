@@ -205,6 +205,33 @@ def test_build_device_record_charge_current_default_empty():
     assert record[CONF_ENTITY_WALLBOX_CHARGE_CURRENT] == ""
 
 
+def test_build_device_record_persists_phase_switching_slots():
+    """Round-Trip-Regression (2026-07-19, gleiche Naht wie der
+    v3.33.x-Ladestrom-Defekt): Phasen-Entity + beide Options-Strings
+    MÜSSEN aus dem Submit in den persistierten Record — sonst liest der
+    Dispatcher leer und `wallbox_supports_phase_switching` fällt beim
+    Edit auf False zurück."""
+    from custom_components.theothergas.const import (
+        CONF_ENTITY_WALLBOX_PHASE_MODE,
+        CONF_VALUE_WALLBOX_PHASE_1,
+        CONF_VALUE_WALLBOX_PHASE_3,
+    )
+    entity_input = {
+        CONF_ENTITY_WALLBOX_PHASE_MODE: "select.goe_phasen",
+        CONF_VALUE_WALLBOX_PHASE_1: "nur 1",
+        CONF_VALUE_WALLBOX_PHASE_3: "nur 3",
+    }
+    record = _build_device_record("dev-wb3", "wallbox", "Wallbox", entity_input)
+    assert record[CONF_ENTITY_WALLBOX_PHASE_MODE] == "select.goe_phasen"
+    assert record[CONF_VALUE_WALLBOX_PHASE_1] == "nur 1"
+    assert record[CONF_VALUE_WALLBOX_PHASE_3] == "nur 3"
+    # Default: leere Strings, kein KeyError.
+    empty = _build_device_record("dev-wb4", "wallbox", "Wallbox", {})
+    assert empty[CONF_ENTITY_WALLBOX_PHASE_MODE] == ""
+    assert empty[CONF_VALUE_WALLBOX_PHASE_1] == ""
+    assert empty[CONF_VALUE_WALLBOX_PHASE_3] == ""
+
+
 def test_build_device_record_hc_slots_default_empty():
     """Ohne HC-Eingaben tragen die Slots leere Strings (wie alle anderen
     Read-Slots) — kein KeyError, sauberer stale-Mapping-Drop bei

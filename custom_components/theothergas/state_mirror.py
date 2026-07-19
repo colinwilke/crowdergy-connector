@@ -66,6 +66,12 @@ class DeviceStateMirror:
     # im Power-Modus; sonst leer (= volle Leistung / kein Strom-Write).
     held_charge_current: dict[str, int] = field(default_factory=dict)
 
+    # Letzte Wallbox-Phasenzahl (1|3) pro Device (2026-07-19). Vom
+    # Solver im Power-Modus explizit kommandiert (nie „Auto"); der
+    # charge_mode_hold_loop schreibt sie zusammen mit Strom + Modus
+    # re. Nur gesetzt für Boxen mit gemappter Phasen-Entity.
+    held_charge_phases: dict[str, int] = field(default_factory=dict)
+
     # Wall-Clock des letzten SSE-Events (any Type). Hold-Loops gaten
     # darauf via SSE_STALE_THRESHOLD_S damit ein Backend-Outage die
     # periodische Re-Write-Logik pausiert.
