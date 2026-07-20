@@ -36,7 +36,11 @@ dort: Cluster C (#16–#22).
   `test_contribute_flow.py` (+5: Payload-Capture ohne unique_id /
   Voll-Rename-Auflösung / exakt+ambiguous / Suffix-Fallback+Helfer /
   Flow-Prefill). Backend speichert/liefert das Feld (mig
-  `20260719_0003`), die Box matcht identisch (`match_entity_identity`).
+  `20260719_0003`, prod-deployed Run #97), die Box matcht identisch
+  (`match_entity_identity`). **RELEASED v3.43.0 (2026-07-20, PR #43
+  `f80e8d8` → `main`, Tag+Release via `tag-release.yml`; Release-Notes
+  `docs/releases/v3.43.0.md`).** HACS zieht das Release automatisch;
+  kein Re-Provisionieren nötig.
 
 - **Wallbox 1/3-Phasen-Umschaltung (User ulla/colin 2026-07-19, v3.42.0;
   Backend-Hälfte backend#107 `66fdb78` prod-deployed Run #95):** drei neue
