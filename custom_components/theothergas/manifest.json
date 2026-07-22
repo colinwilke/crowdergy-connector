@@ -1,12 +1,16 @@
 {
   "domain": "theothergas",
   "name": "Crowdergy Connector",
-  "version": "3.43.0",
+  "version": "3.43.1",
   "config_flow": true,
   "documentation": "https://github.com/colinwilke/crowdergy-connector",
   "issue_tracker": "https://github.com/colinwilke/crowdergy-connector/issues",
-  "codeowners": ["@colinwilke"],
+  "codeowners": [
+    "@colinwilke"
+  ],
   "dependencies": [],
-  "requirements": ["httpx>=0.24.0"],
+  "requirements": [
+    "httpx>=0.24.0"
+  ],
   "iot_class": "cloud_push"
 }
