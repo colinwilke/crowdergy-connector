@@ -461,6 +461,22 @@ fängt das NICHT. `tests/test_json_assets.py` parst jetzt jede
 ausgelieferte `*.json`. Deutsche Hilfetexte tragen typografische
 Anführungszeichen `„…"` (NICHT gerade `"` ohne Escape).
 
+**`translations/en.json` MUSS mitgeliefert werden (Lektion v3.43.1, User
+colin: „neuer User sieht im Menü nur leere Einträge", HA auf Englisch):**
+HA liest Config-Flow-Übersetzungen zur Laufzeit AUSSCHLIESSLICH aus
+`translations/<lang>.json`; `strings.json` ist reine Entwickler-Quelle und
+wird bei einer Custom-Integration NICHT gelesen (bei Core-Integrationen
+generiert der Build daraus `translations/en.json`). Bis v3.43.0 lag nur
+`de.json` im `translations/`-Verzeichnis → jeder User mit englischer
+(= Default-)HA-Sprache sah den KOMPLETTEN Flow mit leeren Menü-/Feld-
+Einträgen (kein `en`-Fallback). **Die alte Memory-Regel „strings.json (EN)
+und de.json synchron" war der Denkfehler** — strings.json bedient EN zur
+Laufzeit NICHT. Fix (v3.43.1): `translations/en.json` = struktur-/key-
+gleich zu `strings.json`. `tests/test_json_assets.py` erzwingt jetzt:
+`en.json` existiert + `en`/`de` decken die `strings.json`-Keys VOLL.
+**Regel: `strings.json`-Touch ⇒ IMMER `translations/en.json` UND `de.json`
+mitziehen (der Guard fängt es, aber vor dem Push dran denken).**
+
 ## Agent-Ownership (Interferenz-Schutz, User-Vorgabe 2026-06-10)
 
 - **Schreib-Ownership dieses Repos: die Remote-/Web-Session** (zusammen mit
