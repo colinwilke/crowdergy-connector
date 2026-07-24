@@ -39,6 +39,7 @@ from .const import (
     CONF_PAIRING_CODE,
     CONF_REFRESH_TOKEN,
     CONF_REGION,
+    GERMAN_STATES,
     CONF_USER_ID,
     CONF_ENTITY_CONTROL_HOLD,
     CONF_VALUE_OFF,
@@ -333,6 +334,34 @@ async def _resolve_location_defaults(hass) -> dict[str, str]:
         CONF_CITY: city or fallback_city,
         CONF_REGION: region,
     }
+
+
+def _region_selector_field(current: str) -> tuple[Any, Any]:
+    """Build the (vol key, SelectSelector) for the Bundesland dropdown.
+
+    A fixed dropdown of the 16 official German states so the Crowdwerk map
+    groups every spelling of a region ("NRW" == "Nordrhein-Westfalen") into
+    one bucket. Stadt/Stadtteil stay free text (open sets, no dropdown).
+    Pre-fills only when `current` is already one of the 16 (the Nominatim
+    reverse-geocode returns exactly those with accept-language=de); an
+    unrecognized/legacy value is not preselected — the user picks. Uses
+    `suggested_value`, never `default=` (HA re-injects the latter and makes
+    the field unclearable).
+    """
+    sel = selector.SelectSelector(
+        selector.SelectSelectorConfig(
+            options=list(GERMAN_STATES),
+            mode=selector.SelectSelectorMode.DROPDOWN,
+            sort=False,
+        )
+    )
+    valid = (current or "").strip()
+    if valid in GERMAN_STATES:
+        return (
+            vol.Optional(CONF_REGION, description={"suggested_value": valid}),
+            sel,
+        )
+    return vol.Optional(CONF_REGION), sel
 
 
 async def _refresh_token(
@@ -709,13 +738,16 @@ class CrowdergyConfigFlow(ConfigFlow, domain=DOMAIN):
         # just hits Submit. Resolved once per fresh location step; if the
         # user goes back and edits we keep whatever they typed.
         defaults = await _resolve_location_defaults(self.hass)
+        region_key, region_selector = _region_selector_field(
+            defaults[CONF_REGION]
+        )
         return self.async_show_form(
             step_id="location",
             data_schema=vol.Schema(
                 {
                     vol.Optional(CONF_DISTRICT, default=defaults[CONF_DISTRICT]): str,
                     vol.Optional(CONF_CITY, default=defaults[CONF_CITY]): str,
-                    vol.Optional(CONF_REGION, default=defaults[CONF_REGION]): str,
+                    region_key: region_selector,
                     vol.Optional(CONF_ENTITY_OUTDOOR_TEMP): selector.EntitySelector(
                         selector.EntitySelectorConfig(domain="sensor")
                     ),
@@ -1738,13 +1770,14 @@ class CrowdergyOptionsFlow(OptionsFlow):
             if current_outdoor
             else vol.Optional(CONF_ENTITY_OUTDOOR_TEMP)
         )
+        region_key, region_selector = _region_selector_field(current_region)
         return self.async_show_form(
             step_id="edit_base_settings",
             data_schema=vol.Schema(
                 {
                     _str_field(CONF_DISTRICT, current_district): str,
                     _str_field(CONF_CITY, current_city): str,
-                    _str_field(CONF_REGION, current_region): str,
+                    region_key: region_selector,
                     outdoor_field: selector.EntitySelector(
                         selector.EntitySelectorConfig(domain="sensor")
                     ),
