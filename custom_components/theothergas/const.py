@@ -73,6 +73,29 @@ CONF_ENTITY_POWER_2 = "entity_current_power_kw_2"
 CONF_DISTRICT = "district"
 CONF_CITY = "city"
 CONF_REGION = "region"
+# The 16 German states, official German spelling — the closed option set
+# the region (Bundesland) dropdown offers so the Crowdwerk map doesn't
+# split "NRW" vs "Nordrhein-Westfalen" into separate groups. SSOT mirrors
+# the backend's app/location_normalize.GERMAN_STATES. Single-region V1:
+# every user is in Germany. Stadt/Stadtteil stay free text (open sets).
+GERMAN_STATES: tuple[str, ...] = (
+    "Baden-Württemberg",
+    "Bayern",
+    "Berlin",
+    "Brandenburg",
+    "Bremen",
+    "Hamburg",
+    "Hessen",
+    "Mecklenburg-Vorpommern",
+    "Niedersachsen",
+    "Nordrhein-Westfalen",
+    "Rheinland-Pfalz",
+    "Saarland",
+    "Sachsen",
+    "Sachsen-Anhalt",
+    "Schleswig-Holstein",
+    "Thüringen",
+)
 # Integration-wide (not per-device): an HA sensor with the current
 # outdoor temperature in °C. Optional — when missing, the backend
 # falls back to Open-Meteo for the user's location every 15 min.

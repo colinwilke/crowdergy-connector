@@ -9,6 +9,29 @@ dort: Cluster C (#16–#22).
 
 ## Repo-Regeln & getroffene Entscheidungen
 
+- **Region-Dropdown (Bundesland) im Location-Flow (User colin 2026-07-24
+  „unterschiedliche Schreibarten verhindern", Branch `claude/connector-
+  location-sync-equjpu`, RELEASED v3.44.0):** Der Standort-Step
+  (`async_step_location`) UND der Grundeinstellungen-Edit
+  (`async_step_edit_base_settings`) bieten Bundesland jetzt als **fixes
+  Dropdown der 16 offiziellen Bundesländer** (`const.GERMAN_STATES`, SSOT
+  gespiegelt aus Backend `app/location_normalize.GERMAN_STATES`) statt
+  Freitext → die Crowdwerk-Karte faltet „NRW"/„Nordrhein-Westfalen" nicht
+  mehr in zwei Gruppen. Helper `config_flow._region_selector_field(current)`
+  = `SelectSelector(options=GERMAN_STATES, DROPDOWN)`; **Pre-Fill via
+  `suggested_value` NUR wenn `current` schon eins der 16 ist** (der
+  Nominatim-Reverse-Geocode liefert mit `accept-language=de` exakt die
+  Kanon-Namen); unbekannt/legacy → nicht vorselektiert, User picked. **KEIN
+  `default=`** (HA-Reinject-Falle). **Stadt/Stadtteil bleiben Freitext**
+  (offene Menge — Backend macht dafür nur Trim/Whitespace-Normalisierung,
+  kein Dropdown möglich). `region` ist ein PLAIN-Data-Feld (kein Entity-Slot)
+  → KEIN `_build_device_record`-Eintrag nötig, kein Backend-Feld-Change (das
+  Backend kanonisiert serverseitig, s. dortiges CLAUDE.md). Inline-Options
+  ohne `translation_key` → KEIN strings.json/en.json/de.json-Change (Guard
+  bleibt grün). Tests `test_region_dropdown.py` (4: 16-States, Select-mit-
+  allen-Options, Pre-Fill-nur-valide, kein-Pre-Fill-bei-unknown/leer).
+  Full-Suite 257 grün (+ 2 bekannte SSE-Flakes deselektiert).
+
 - **Crowd-Preset `entity_identity_map` — namens-unabhängige Preset-Auflösung
   (User colin 2026-07-19 „unabhängig vom benutzeränderbaren Namen … komplett
   fail-safe", Branch `claude/integration-mappings-user-independent-n20b07`;
