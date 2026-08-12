@@ -42,6 +42,8 @@ from pytest_homeassistant_custom_component.common import (
 )
 
 from custom_components.theothergas.const import (
+    COMMAND_LEASE_TTL_S,
+    CONF_CHARGE_MODE_VALUE_SOLAR,
     CONF_DEVICE_ID,
     CONF_DEVICE_TYPE,
     CONF_ENTITY_CHARGE_MODE,
@@ -239,17 +241,21 @@ async def test_hold_loop_auto_rewrites_on_drift(hass: HomeAssistant):
 
 async def test_charge_mode_hold_loop_bails_and_clears_when_stale(hass: HomeAssistant):
     """SSE stale → Loop bailt UND räumt den gehaltenen Wert ab, damit die
-    native Inverter-Logik wieder übernimmt (kein hängender Befehl)."""
+    native Inverter-Logik wieder übernimmt (kein hängender Befehl).
+    #B2 (2026-08-12): der Bail startet zusätzlich den One-shot-Lease-
+    Expiry-Task (stickige Mode-Selects latchen sonst die ganze Outage)."""
     coord = make_coordinator(hass, [])
     coord.state.held_charge_mode["w1"] = "solar"
     coord.state.last_sse_event_at = time.time() - SSE_STALE_THRESHOLD_S - 30
     coord._apply_charge_mode = AsyncMock()
+    coord._start_charge_mode_lease_expiry = MagicMock()
 
     with patch(_SLEEP, _breaking_sleep(8)):
         await _run_until_stopped(coord._charge_mode_hold_loop("w1"))
 
     coord._apply_charge_mode.assert_not_awaited()
     assert "w1" not in coord.state.held_charge_mode
+    coord._start_charge_mode_lease_expiry.assert_called_once_with("w1")
 
 
 async def test_charge_mode_hold_loop_returns_when_held_cleared(hass: HomeAssistant):
@@ -298,6 +304,126 @@ async def test_charge_mode_hold_loop_rewrites_held_current(hass: HomeAssistant):
         "w1", "Power", schedule_hold=False, charge_current_a=9,
         charge_phases=None,
     )
+
+
+# ════════════════════════════════════════════════════════════════════
+# B2. Kommandos als Lease — `_charge_mode_lease_expiry` (2026-08-12)
+# ════════════════════════════════════════════════════════════════════
+#
+# Der SSE-Stale-Bail (Test oben) stoppt nur das RE-WRITE — auf einer Box
+# mit stickigem Mode-Select (go-e) bleibt der zuletzt geschriebene Modus
+# stehen. Der Lease-Expiry-One-shot schreibt nach COMMAND_LEASE_TTL_S
+# ohne SSE-Event EINMAL den per-Typ-Safe-Default (Restlücke der Worker-
+# Stall-Incidents 2026-07-19/20: „ganzer Prozess tot ⇒ nur ein
+# Connector-seitiges Command-TTL hilft").
+
+
+def _solar_wallbox_device(solar_value="Solar Pure Mode") -> dict:
+    dev = {
+        CONF_DEVICE_ID: "w1",
+        CONF_DEVICE_TYPE: "wallbox",
+        CONF_ENTITY_CHARGE_MODE: "select.wallbox_lademodus",
+    }
+    if solar_value:
+        dev[CONF_CHARGE_MODE_VALUE_SOLAR] = solar_value
+    return dev
+
+
+async def test_lease_expiry_aborts_when_sse_recovers(hass: HomeAssistant):
+    """SSE wieder frisch → kein Write (der nächste MPC-Tick re-etabliert
+    den Zustand ohnehin)."""
+    coord = make_coordinator(hass, [_solar_wallbox_device()])
+    coord.state.last_sse_event_at = time.time()
+    coord._apply_charge_mode = AsyncMock()
+    coord._apply_battery_setpoint = AsyncMock()
+
+    await coord._charge_mode_lease_expiry("w1")
+
+    coord._apply_charge_mode.assert_not_awaited()
+    coord._apply_battery_setpoint.assert_not_awaited()
+
+
+async def test_lease_expiry_keeps_waiting_inside_ttl(hass: HomeAssistant):
+    """Stale, aber TTL noch nicht um → die Loop schläft weiter statt zu
+    schreiben (kein vorzeitiger Safe-Default)."""
+    coord = make_coordinator(hass, [_solar_wallbox_device()])
+    coord.state.last_sse_event_at = (
+        time.time() - SSE_STALE_THRESHOLD_S - 30  # stale, ≪ TTL
+    )
+    coord._apply_charge_mode = AsyncMock()
+
+    with patch(_SLEEP, _breaking_sleep(3)):
+        await _run_until_stopped(coord._charge_mode_lease_expiry("w1"))
+
+    coord._apply_charge_mode.assert_not_awaited()
+
+
+async def test_lease_expiry_wallbox_writes_solar_once(hass: HomeAssistant):
+    """TTL abgelaufen → EIN Solar-Write ohne neuen Hold (One-shot)."""
+    coord = make_coordinator(hass, [_solar_wallbox_device()])
+    coord.state.last_sse_event_at = time.time() - COMMAND_LEASE_TTL_S - 5
+    coord._apply_charge_mode = AsyncMock()
+
+    await coord._charge_mode_lease_expiry("w1")
+
+    coord._apply_charge_mode.assert_awaited_once_with(
+        "w1", "Solar Pure Mode", schedule_hold=False,
+    )
+
+
+async def test_lease_expiry_wallbox_without_solar_leaves_box_alone(
+    hass: HomeAssistant,
+):
+    """Kein Solar-Modus gemappt → NICHTS schreiben. Auf toter Cloud nie
+    lock/power kommandieren — die Box gehört dann dem User."""
+    coord = make_coordinator(hass, [_solar_wallbox_device(solar_value="")])
+    coord.state.last_sse_event_at = time.time() - COMMAND_LEASE_TTL_S - 5
+    coord._apply_charge_mode = AsyncMock()
+
+    await coord._charge_mode_lease_expiry("w1")
+
+    coord._apply_charge_mode.assert_not_awaited()
+
+
+async def test_lease_expiry_battery_falls_back_to_passive(hass: HomeAssistant):
+    coord = make_coordinator(hass, [{
+        CONF_DEVICE_ID: "w1",
+        CONF_DEVICE_TYPE: "battery",
+    }])
+    coord.state.last_sse_event_at = time.time() - COMMAND_LEASE_TTL_S - 5
+    coord._apply_battery_setpoint = AsyncMock()
+
+    await coord._charge_mode_lease_expiry("w1")
+
+    coord._apply_battery_setpoint.assert_awaited_once_with(
+        "w1", "passive", 0.0,
+    )
+
+
+async def test_fresh_command_and_cancel_clear_pending_lease(
+    hass: HomeAssistant,
+):
+    """Ein frisches Kommando (`_start_charge_mode_hold`) UND der
+    Cancel-Pfad (`_cancel_charge_mode_hold`, z. B. AI-off/Removal)
+    räumen einen wartenden Lease-Task ab."""
+    coord = make_coordinator(hass, [_solar_wallbox_device()])
+
+    fake = MagicMock()
+    fake.done.return_value = False
+    coord.state.charge_mode_lease_tasks["w1"] = fake
+    coord._cancel_charge_mode_hold("w1")
+    fake.cancel.assert_called_once()
+    assert "w1" not in coord.state.charge_mode_lease_tasks
+
+    fake2 = MagicMock()
+    fake2.done.return_value = False
+    coord.state.charge_mode_lease_tasks["w1"] = fake2
+    coord._start_charge_mode_hold("w1")
+    fake2.cancel.assert_called_once()
+    assert "w1" not in coord.state.charge_mode_lease_tasks
+    # Aufräumen: der von _start_charge_mode_hold gestartete Hold-Task
+    # darf den Test nicht überleben.
+    coord._cancel_charge_mode_hold("w1")
 
 
 # ════════════════════════════════════════════════════════════════════

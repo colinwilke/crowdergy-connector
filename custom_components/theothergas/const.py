@@ -411,6 +411,19 @@ CHARGE_MODE_HOLD_INTERVAL = 15
 # packet loss.
 SSE_STALE_THRESHOLD_S = 60
 
+# #B2 (2026-08-12) Kommandos als Lease: der SSE-Stale-Bail oben stoppt
+# nur das RE-WRITE — auf einer Box mit stickigem Mode-Select (go-e)
+# bleibt der zuletzt geschriebene Modus trotzdem stehen (ein latchendes
+# power/lock, solange die Cloud tot ist: die Restlücke der Worker-Stall-
+# Incidents 2026-07-19/20, „ganzer Prozess tot ⇒ nur ein Connector-
+# seitiges Command-TTL hilft"). Nach COMMAND_LEASE_TTL_S ohne SSE-Event
+# schreibt der Connector deshalb EINMAL den per-Typ-Safe-Default:
+# Wallbox → Solar-Modus wenn gemappt (NIE lock/power ohne lebende
+# Cloud), Batterie → Passiv. Kommt SSE vorher zurück, passiert nichts —
+# der nächste MPC-Tick re-etabliert den Zustand ohnehin. 15 min ≫ jedem
+# normalen Reconnect-Blip, ≪ einer Nacht am falschen Modus.
+COMMAND_LEASE_TTL_S = 900
+
 # CN (2026-07-03): der eigene `sensor`-Platform-Mirror
 # (Crowdergy_Current Power / State of Charge) wurde entfernt — er
 # doppelte nur die schon vorhandenen Integrations-Entities des Users
