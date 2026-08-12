@@ -47,6 +47,8 @@ from .const import (
     HOLD_POLL_INTERVAL,
     CHARGE_MODE_HOLD_INITIAL_DELAY,
     CHARGE_MODE_HOLD_INTERVAL,
+    COMMAND_LEASE_TTL_S,
+    CONF_CHARGE_MODE_VALUE_SOLAR,
     SSE_STALE_THRESHOLD_S,
     is_temperature_control,
 )
@@ -693,6 +695,9 @@ class CommandDispatcherMixin:
         prev = self.state.charge_mode_hold_tasks.pop(device_id, None)
         if prev is not None and not prev.done():
             prev.cancel()
+        # #B2: ein frisches Kommando bedeutet lebende Cloud — ein noch
+        # wartender Lease-Expiry-Task ist damit obsolet.
+        self._cancel_charge_mode_lease_expiry(device_id)
         dev = next(
             (d for d in self.devices if d.get(CONF_DEVICE_ID) == device_id),
             None,
@@ -722,6 +727,107 @@ class CommandDispatcherMixin:
         task = self.state.charge_mode_hold_tasks.pop(device_id, None)
         if task is not None and not task.done():
             task.cancel()
+        self._cancel_charge_mode_lease_expiry(device_id)
+
+    # ── #B2 (2026-08-12): Kommandos als Lease — TTL-Expiry ────────────
+
+    def _start_charge_mode_lease_expiry(self, device_id: str) -> None:
+        """One-shot-Task nach dem SSE-Stale-Bail: wartet bis
+        COMMAND_LEASE_TTL_S ohne SSE-Event verstrichen sind und schreibt
+        dann EINMAL den per-Typ-Safe-Default. Ersetzt einen laufenden
+        Lease-Task (idempotent)."""
+        prev = self.state.charge_mode_lease_tasks.pop(device_id, None)
+        if prev is not None and not prev.done():
+            prev.cancel()
+        self.state.charge_mode_lease_tasks[device_id] = (
+            self.hass.async_create_background_task(
+                self._charge_mode_lease_expiry(device_id),
+                name=f"theothergas_charge_mode_lease_{device_id}",
+            )
+        )
+
+    def _cancel_charge_mode_lease_expiry(self, device_id: str) -> None:
+        task = self.state.charge_mode_lease_tasks.pop(device_id, None)
+        if task is not None and not task.done():
+            task.cancel()
+
+    async def _charge_mode_lease_expiry(self, device_id: str) -> None:
+        """Lease-Expiry (#B2): nach dem SSE-Stale-Bail des Hold-Loops
+        bleibt auf einer Box mit stickigem Mode-Select (go-e) der
+        zuletzt geschriebene Modus stehen — ein latchendes power/lock
+        für die gesamte Cloud-Outage (Restlücke der Worker-Stall-
+        Incidents 2026-07-19/20: „ganzer Prozess tot ⇒ nur ein
+        Connector-seitiges Command-TTL hilft"). Dieser One-shot wartet,
+        bis seit dem letzten SSE-Event COMMAND_LEASE_TTL_S verstrichen
+        sind, und schreibt dann EINMAL den Safe-Default:
+
+          * wallbox  → Solar-Modus, NUR wenn gemappt (NIE lock/power
+            auf toter Cloud schreiben — ohne Solar-Modus bleibt die Box
+            dem User überlassen).
+          * battery  → passive (WR folgt nativ PV/Hauslast; nie eine
+            unbeaufsichtigte Netz-Ladung stehen lassen).
+
+        Kommt SSE vorher zurück → Abbruch ohne Write (der nächste
+        MPC-Tick re-etabliert den Zustand ohnehin). Consent-Gate läuft
+        in den `_apply_*`-Methoden (CN-1)."""
+        try:
+            while True:
+                staleness = time.time() - self.state.last_sse_event_at
+                if staleness <= SSE_STALE_THRESHOLD_S:
+                    _LOGGER.debug(
+                        "charge_mode lease: SSE recovered for %s — "
+                        "expiry aborted", device_id,
+                    )
+                    return
+                if staleness >= COMMAND_LEASE_TTL_S:
+                    break
+                await asyncio.sleep(
+                    min(30.0, COMMAND_LEASE_TTL_S - staleness)
+                )
+
+            dev = next(
+                (d for d in self.devices
+                 if d.get(CONF_DEVICE_ID) == device_id),
+                None,
+            )
+            if dev is None:
+                return
+            dev_type = dev.get(CONF_DEVICE_TYPE, "")
+            if dev_type == "battery":
+                _LOGGER.warning(
+                    "charge_mode lease expired for %s — Crowdergy silent "
+                    "for %ds, battery falls back to passive.",
+                    device_id, COMMAND_LEASE_TTL_S,
+                )
+                await self._apply_battery_setpoint(device_id, "passive", 0.0)
+            elif dev_type == "wallbox":
+                solar_value = (
+                    dev.get(CONF_CHARGE_MODE_VALUE_SOLAR, "") or ""
+                )
+                if not solar_value:
+                    _LOGGER.warning(
+                        "charge_mode lease expired for %s — no solar "
+                        "mode mapped, leaving the box to the user "
+                        "(never writing lock/power on a dead cloud).",
+                        device_id,
+                    )
+                    return
+                _LOGGER.warning(
+                    "charge_mode lease expired for %s — Crowdergy silent "
+                    "for %ds, wallbox falls back to solar mode.",
+                    device_id, COMMAND_LEASE_TTL_S,
+                )
+                await self._apply_charge_mode(
+                    device_id, solar_value, schedule_hold=False,
+                )
+        except asyncio.CancelledError:
+            raise
+        except Exception:  # noqa: BLE001
+            _LOGGER.exception(
+                "charge_mode lease expiry for %s crashed", device_id
+            )
+        finally:
+            self.state.charge_mode_lease_tasks.pop(device_id, None)
 
     async def _charge_mode_hold_loop(self, device_id: str) -> None:
         """Re-write the last commanded charge_mode every
@@ -761,6 +867,14 @@ class CommandDispatcherMixin:
                     self.state.held_charge_mode.pop(device_id, None)
                     self.state.held_charge_current.pop(device_id, None)
                     self.state.held_charge_phases.pop(device_id, None)
+                    # #B2 (2026-08-12): der Bail stoppt nur das RE-WRITE —
+                    # auf einem stickigen Mode-Select (go-e) bleibt der
+                    # zuletzt geschriebene Modus trotzdem stehen. Ein
+                    # One-shot-Lease-Expiry-Task schreibt nach
+                    # COMMAND_LEASE_TTL_S ohne SSE-Event EINMAL den
+                    # per-Typ-Safe-Default (deckt „ganzer Backend-Prozess
+                    # tot", die Restlücke des Dispatch-Failsafe).
+                    self._start_charge_mode_lease_expiry(device_id)
                     return
                 held_current = self.state.held_charge_current.get(device_id)
                 held_phases = self.state.held_charge_phases.get(device_id)

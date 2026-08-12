@@ -730,6 +730,9 @@ class CrowdergyCoordinator(
         for task in list(self.state.charge_mode_hold_tasks.values()):
             task.cancel()
         self.state.charge_mode_hold_tasks.clear()
+        for task in list(self.state.charge_mode_lease_tasks.values()):
+            task.cancel()
+        self.state.charge_mode_lease_tasks.clear()
         self.state.held_charge_mode.clear()
         self.state.held_charge_current.clear()
         self.state.held_charge_phases.clear()

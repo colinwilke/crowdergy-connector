@@ -72,6 +72,15 @@ class DeviceStateMirror:
     # re. Nur gesetzt für Boxen mit gemappter Phasen-Entity.
     held_charge_phases: dict[str, int] = field(default_factory=dict)
 
+    # Lease-Expiry-Tracker (#B2, 2026-08-12) — pro Device ein One-shot-
+    # Task, gestartet vom SSE-Stale-Bail des charge_mode_hold_loop:
+    # nach COMMAND_LEASE_TTL_S ohne SSE-Event schreibt er EINMAL den
+    # per-Typ-Safe-Default (Wallbox → Solar wenn gemappt, Batterie →
+    # Passiv), damit ein stickiger Mode-Select nicht die ganze Outage
+    # auf dem letzten Cloud-Kommando latcht. Frisches Kommando /
+    # AI-off / Removal canceln ihn.
+    charge_mode_lease_tasks: dict[str, asyncio.Task] = field(default_factory=dict)
+
     # Wall-Clock des letzten SSE-Events (any Type). Hold-Loops gaten
     # darauf via SSE_STALE_THRESHOLD_S damit ein Backend-Outage die
     # periodische Re-Write-Logik pausiert.
