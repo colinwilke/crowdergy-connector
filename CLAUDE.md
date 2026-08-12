@@ -9,6 +9,39 @@ dort: Cluster C (#16–#22).
 
 ## Repo-Regeln & getroffene Entscheidungen
 
+- **Command-TTL / Lease-Expiry nach SSE-Stale (User colin 2026-08-11
+  Stellplatz-Diagnose „Alle drei … merge & deploy to PROD freigabe";
+  Branch `claude/kostenberechnung-schema-check-mfe3w7`, PR connector#46
+  Squash `7b29b76` → `main`, **RELEASED v3.45.0** via `tag-release.yml`;
+  Backend-Hälfte B1 = backend#133 Release-on-skip, prod-deployed Run
+  #114):** Der SSE-Stale-Bail des `_charge_mode_hold_loop` stoppt nur
+  das RE-WRITE — auf einer Box mit stickigem Mode-Select (go-e) bleibt
+  der zuletzt geschriebene Modus die ganze Cloud-Outage stehen
+  (latchendes power/lock; die dokumentierte Restlücke der Worker-Stall-
+  Incidents 2026-07-19/20 „ganzer Prozess tot ⇒ nur ein Connector-
+  seitiges Command-TTL hilft"). **Neu:** der Bail startet einen
+  One-shot-**Lease-Expiry-Task** (`_charge_mode_lease_expiry`,
+  Task-Dict `state.charge_mode_lease_tasks`): nach `COMMAND_LEASE_TTL_S`
+  (900 s, `const.py`) ohne SSE-Event schreibt er EINMAL den per-Typ-
+  Safe-Default — **wallbox → Solar-Modus NUR wenn gemappt (NIE
+  lock/power auf toter Cloud — ohne Solar-Modus bleibt die Box dem User
+  überlassen); battery → passive** (`_apply_battery_setpoint`). Kommt
+  SSE vorher zurück → Abbruch ohne Write (nächster MPC-Tick
+  re-etabliert ohnehin). Frisches Kommando (`_start_charge_mode_hold`)
+  + Cancel-Pfade (`_cancel_charge_mode_hold`: passive/AI-off/Removal)
+  räumen einen wartenden Lease-Task ab; Coordinator-Shutdown cancelt
+  ihn wie die Hold-Tasks. Consent läuft in den `_apply_*` (CN-1).
+  **Thermal-`_hold_loop` bewusst NICHT im Scope** — dessen Stale-Bail
+  gibt das Gerät korrekt an den User zurück, ein Write wäre dort
+  riskanter als nichts. **Regeln: (1) jedes Cloud-Kommando ist eine
+  Lease — ein Stale-Bail, der nur zu schreiben aufhört, released auf
+  stickigen Selects NICHTS; (2) auf toter Cloud nie einen
+  einschränkenden/teuren Modus (lock/power) schreiben, nur den
+  autonomen Safe-Default.** Tests `test_hold_loops_and_eviction.py`
+  (+6 Lease-Sektion; der Stale-Bail-Test pinnt den Lease-Start).
+  Full-Suite 263 grün (+2 bekannte SSE-Flakes deselektiert).
+  HACS zieht v3.45.0 automatisch; kein Re-Provisionieren nötig.
+
 - **Region-Dropdown (Bundesland) im Location-Flow (User colin 2026-07-24
   „unterschiedliche Schreibarten verhindern", Branch `claude/connector-
   location-sync-equjpu`, RELEASED v3.44.0):** Der Standort-Step
