@@ -62,7 +62,11 @@ Version: `manifest.json`.
 - **Hold-Loops:** als `hass.async_create_background_task` (sauberes
   HA-Shutdown). `entity_control` 30-s-, `entity_charge_mode`
   15-s-Cadence; beide bailen bei SSE-Stale (>60 s). Self-Heal respektiert
-  SSE-Stale. Climate-Guard liest das `temperature`-Attribut.
+  SSE-Stale. Climate-Guard liest das `temperature`-Attribut. Der
+  charge_mode-Stale-Bail startet seit v3.45.0 einen One-shot-**Lease-
+  Expiry-Task** (`_charge_mode_lease_expiry`, `COMMAND_LEASE_TTL_S`
+  900 s): nach 15 min ohne SSE-Event EIN Safe-Default-Write (wallbox →
+  Solar wenn gemappt, battery → passive) gegen stickige Mode-Selects.
 - **Resync-Backstop:** periodisches `GET /devices` erkennt Drift nach
   SSE-Drop und re-applied (consent-gated).
 - **Heartbeat:** leichter `POST /me/heartbeat` für den
