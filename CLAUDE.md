@@ -5,7 +5,8 @@
 
 Detaillierter Stand: `CONTEXT.md`. Multi-Repo-Index, Vereinbarungen und der
 **projektweite Backlog (SSOT)**: `crowdergy-ios/CLAUDE.md`. Connector-Items
-dort: Cluster C (#16–#22).
+dort: Abschnitt „4 — Connector (HACS)" (der Backlog listet seit
+2026-08-18 NUR offene Punkte, thematisch gruppiert).
 
 ## Repo-Regeln & getroffene Entscheidungen
 
