@@ -240,11 +240,15 @@ async def test_hold_loop_auto_skips_when_temperature_matches(hass: HomeAssistant
 
 
 async def test_hold_loop_auto_repairs_temperature_drift(hass: HomeAssistant):
-    """WP/Anderer Client setzt eine fremde Ziel-Temperatur → AUTO-Hold
-    schreibt die kommandierte Temperatur nach (set_temperature, nie Modus)."""
+    """WP setzt die Ziel-Temperatur kurz nach unserem eigenen Write
+    zurück (Echo/Revert im #140-Grace-Fenster) → AUTO-Hold schreibt die
+    kommandierte Temperatur nach (set_temperature, nie Modus). Fremder
+    Drift OHNE eigenen Write im Fenster ist seit #140 ein
+    Nutzer-Eingriff und pausiert stattdessen (test_safety_bundle.py)."""
     coord = make_coordinator(hass, [_wp_device(hold=ENTITY_CONTROL_HOLD_AUTO)])
     coord.state.active_state["d1"] = True
     coord.state.last_sse_event_at = time.time()
+    coord.state.last_own_write_at["climate.wp"] = time.time()
     hass.states.async_set("climate.wp", "heat", {"temperature": 42.0})
     temp_calls = async_mock_service(hass, "climate", "set_temperature")
     mode_calls = async_mock_service(hass, "climate", "set_hvac_mode")

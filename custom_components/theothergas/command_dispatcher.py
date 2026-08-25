@@ -49,7 +49,10 @@ from .const import (
     CHARGE_MODE_HOLD_INTERVAL,
     COMMAND_LEASE_TTL_S,
     CONF_CHARGE_MODE_VALUE_SOLAR,
+    LOCAL_OVERRIDE_GRACE_S,
+    LOCAL_OVERRIDE_HOLD_S,
     SSE_STALE_THRESHOLD_S,
+    WRITE_BREAKER_MAX_PER_HOUR,
     is_temperature_control,
 )
 from .preset_spec import PRESET_VALUE_SLOTS
@@ -563,6 +566,11 @@ class CommandDispatcherMixin:
             )
             return
         domain = entity_id.split(".", 1)[0]
+        # (#136) Schreib-Circuit-Breaker — EIN Zähl-Tick je Apply
+        # (Phase/Strom/Modus zählen als ein Kommando; sie feuern nur
+        # gemeinsam). Getrippt → gar nichts schreiben.
+        if not self._write_allowed(device_id, entity_id):
+            return
         # First write (fresh SSE command) keeps the WARNING so the
         # user sees Crowdergy acting; the hold-loop rewrites drop to
         # DEBUG so a healthy 15-s cadence doesn't flood the HA log.
@@ -644,7 +652,12 @@ class CommandDispatcherMixin:
                         cur_domain, "set_value",
                         {
                             "entity_id": current_entity,
-                            "value": int(charge_current_a),
+                            # (#135) Ampere gegen die Grenzen der
+                            # Number-Entity klemmen (Box-Rating).
+                            "value": int(self._clamp_write_value(
+                                current_entity, cur_domain,
+                                float(charge_current_a),
+                            )),
                         },
                         blocking=True,
                     )
@@ -910,6 +923,119 @@ class CommandDispatcherMixin:
         new_data[device_id] = new_bucket
         self.async_set_updated_data(new_data)
 
+    # ── Sicherheitsbündel #135/#136/#140 (2026-08-25) ────────────────────
+
+    def _write_allowed(self, device_id: str, entity_id: str) -> bool:
+        """(#136) Schreib-Circuit-Breaker: harter Zähler je
+        (Entity, Stunde). Jeder beabsichtigte Write läuft hier durch —
+        über WRITE_BREAKER_MAX_PER_HOUR wird für den Rest der Stunde
+        NICHTS mehr auf diese Entity geschrieben, und das Gerät trägt
+        den Zustand ans Backend (`write_breaker`-Telemetrie-Flag).
+        Ein getrippter Breaker ist IMMER ein Fehlerbild (Mapping/
+        Regression), nie Normalbetrieb — der legitime Worst Case
+        (ALWAYS-Hold, 15-s-Cadence) liegt bei ~240/h.
+
+        Stempelt zugleich `last_own_write_at[entity_id]` — die
+        Referenz, mit der der AUTO-Hold (#140) eigenen Drift von einem
+        Nutzer-Eingriff trennt."""
+        now = time.time()
+        window_start, count = self.state.entity_write_counts.get(
+            entity_id, (now, 0)
+        )
+        if now - window_start >= 3600.0:
+            window_start, count = now, 0
+        count += 1
+        self.state.entity_write_counts[entity_id] = (window_start, count)
+        if count > WRITE_BREAKER_MAX_PER_HOUR:
+            if count == WRITE_BREAKER_MAX_PER_HOUR + 1:
+                _LOGGER.warning(
+                    "write breaker TRIPPED for %s (device %s): more than "
+                    "%d writes in one hour — pausing all writes to this "
+                    "entity until the window rolls over. This is always "
+                    "a mapping/regression problem, never normal "
+                    "operation.",
+                    entity_id, device_id, WRITE_BREAKER_MAX_PER_HOUR,
+                )
+            self.state.write_breaker_devices[device_id] = now
+            return False
+        # Write geht durch → ein früher getrippter Breaker dieses
+        # Geräts ist erholt (Fenster-Rollover).
+        self.state.write_breaker_devices.pop(device_id, None)
+        self.state.last_own_write_at[entity_id] = now
+        return True
+
+    def _local_override_active(self, device_id: str) -> bool:
+        """(#140) True solange die Steuerung dieses Geräts wegen einer
+        erkannten manuellen Übersteuerung pausiert ist. Nach Ablauf
+        übernimmt der Self-Heal-Loop / der nächste MPC-Tick von
+        selbst."""
+        until = self.state.local_override_until.get(device_id, 0.0)
+        if time.time() < until:
+            _LOGGER.debug(
+                "local override active for %s (until %.0f) — skipping "
+                "write", device_id, until,
+            )
+            return True
+        return False
+
+    def _mark_local_override(
+        self, device_id: str, entity_id: str, actual: Any, expected: Any
+    ) -> None:
+        """(#140) Fremd-Drift im AUTO-Hold = absichtlicher
+        Nutzer-Eingriff: Gerät für LOCAL_OVERRIDE_HOLD_S pausieren
+        statt den Menschen binnen Sekunden zu überstimmen. Der Zustand
+        geht über das `local_override`-Telemetrie-Flag ans Backend
+        (/me/health: „Manuelle Bedienung erkannt")."""
+        self.state.local_override_until[device_id] = (
+            time.time() + LOCAL_OVERRIDE_HOLD_S
+        )
+        _LOGGER.warning(
+            "manual override detected on %s (device %s): state %r "
+            "differs from commanded %r and Crowdergy did not write "
+            "within the last %ds — pausing control of this device for "
+            "%d min, then resuming automatically.",
+            entity_id, device_id, actual, expected,
+            LOCAL_OVERRIDE_GRACE_S, LOCAL_OVERRIDE_HOLD_S // 60,
+        )
+
+    def _clamp_write_value(
+        self, entity_id: str, domain: str, value: float
+    ) -> float:
+        """(#135) Defense-in-depth: JEDER numerische Write wird gegen
+        die Grenzen der ZIEL-Entity geklemmt (climate/water_heater:
+        `min_temp`/`max_temp`; number/input_number: `min`/`max`). Der
+        Config-Flow begrenzt nur, was der Nutzer EINTRÄGT — nicht, was
+        der Solver BERECHNET; beide Wege brauchen denselben Clamp.
+        Ein Clamp ist immer ein Mapping-/Grenzen-Fehler und loggt
+        deshalb WARNING (nie Normalfall)."""
+        state = self.hass.states.get(entity_id)
+        if state is None:
+            return value
+        if domain in ("climate", "water_heater"):
+            lo_raw = state.attributes.get("min_temp")
+            hi_raw = state.attributes.get("max_temp")
+        elif domain in ("number", "input_number"):
+            lo_raw = state.attributes.get("min")
+            hi_raw = state.attributes.get("max")
+        else:
+            return value
+        clamped = value
+        try:
+            if hi_raw is not None and clamped > float(hi_raw):
+                clamped = float(hi_raw)
+            if lo_raw is not None and clamped < float(lo_raw):
+                clamped = float(lo_raw)
+        except (TypeError, ValueError):
+            return value
+        if clamped != value:
+            _LOGGER.warning(
+                "write clamp: %s commanded %.1f but entity limits are "
+                "[%s, %s] — writing %.1f instead. A clamp is always a "
+                "mapping/limit mismatch, check the device mapping.",
+                entity_id, value, lo_raw, hi_raw, clamped,
+            )
+        return clamped
+
     async def _apply_device_state(self, device_id: str, on: bool) -> None:
         """Write the user-configured entity_control to value_on / value_off.
 
@@ -925,6 +1051,10 @@ class CommandDispatcherMixin:
         Hold-Self-Heal) — siehe `_remote_control_allowed`-Docstring.
         """
         if not self._remote_control_allowed("_apply_device_state"):
+            return
+        # (#140) Pausiert nach erkanntem Nutzer-Eingriff — kein Write,
+        # kein neuer Hold, bis die Pause abläuft.
+        if self._local_override_active(device_id):
             return
         dev = next(
             (d for d in self.devices if d.get(CONF_DEVICE_ID) == device_id),
@@ -974,6 +1104,7 @@ class CommandDispatcherMixin:
 
         await self._write_entity_control(
             entity_id, domain, raw_value, on, verbose=True,
+            device_id=device_id,
         )
 
         # After the initial write, kick off (or replace) the hold loop
@@ -1001,6 +1132,8 @@ class CommandDispatcherMixin:
         """
         if not self._remote_control_allowed("_apply_cool_state"):
             return
+        if self._local_override_active(device_id):  # (#140)
+            return
         dev = next(
             (d for d in self.devices if d.get(CONF_DEVICE_ID) == device_id),
             None,
@@ -1015,6 +1148,7 @@ class CommandDispatcherMixin:
             )
             await self._write_entity_control(
                 cool_entity, domain, raw_value, cool_on, verbose=True,
+                device_id=device_id,
             )
             return
         # Climate-domain single-entity fallback: heating and cooling
@@ -1061,6 +1195,8 @@ class CommandDispatcherMixin:
             # backend-decision, nicht von redundanten Re-Asserts hier.
             actual = self._read_current_state(heat_entity)
             if actual == mode:
+                return
+            if not self._write_allowed(device_id, heat_entity):  # (#136)
                 return
             try:
                 await self.hass.services.async_call(
@@ -1126,6 +1262,9 @@ class CommandDispatcherMixin:
             )
             return
 
+        if not self._write_allowed(device_id, mode_entity):  # (#136)
+            return
+
         if mode == "passive":
             current_mode = self._read_current_state(mode_entity)
             if current_mode != passive_val:
@@ -1150,6 +1289,13 @@ class CommandDispatcherMixin:
         target_w = float(setpoint_kw) * 1000.0
         if invert:
             target_w = -target_w
+        if setpoint_entity:
+            # (#135) Setpoint gegen die Grenzen der Number-Entity
+            # klemmen — der Solver kennt das WR-Rating nur als
+            # gelernten Wert, das Datenblatt der Entity gewinnt.
+            target_w = self._clamp_write_value(
+                setpoint_entity, setpoint_entity.split(".", 1)[0], target_w,
+            )
         if setpoint_entity:
             actual_raw = self._read_current_state(setpoint_entity)
             should_write = True
@@ -1224,6 +1370,8 @@ class CommandDispatcherMixin:
         Dispatch (cloud-getrieben) — siehe `_remote_control_allowed`."""
         if not self._remote_control_allowed("_apply_vorlauf_setpoint"):
             return
+        if self._local_override_active(device_id):  # (#140)
+            return
         dev = next(
             (d for d in self.devices if d.get(CONF_DEVICE_ID) == device_id),
             None,
@@ -1257,12 +1405,21 @@ class CommandDispatcherMixin:
             )
         else:
             actual_raw = self._read_current_state(entity_id)
+        # (#135, 2026-08-25) Solver-berechnete °C gegen die Grenzen der
+        # ZIEL-Entity klemmen (climate: min_temp/max_temp; number:
+        # min/max) — die globale Solver-Obergrenze VL_MAX_PHYS kennt
+        # die Auslegung des Geräts nicht (Fußboden 35 vs. Radiator 55).
+        temperature_c = self._clamp_write_value(
+            entity_id, domain, float(temperature_c)
+        )
         if actual_raw is not None:
             try:
                 if abs(float(actual_raw) - temperature_c) <= 0.05:
                     return
             except (ValueError, TypeError):
                 pass
+        if not self._write_allowed(device_id, entity_id):  # (#136)
+            return
         _LOGGER.debug(
             "set_vorlauf_setpoint: %s → %.1f °C", entity_id, temperature_c,
         )
@@ -1299,6 +1456,7 @@ class CommandDispatcherMixin:
         on: bool,
         *,
         verbose: bool,
+        device_id: str | None = None,
     ) -> None:
         """Single domain-dispatched write to a HA entity_control entity.
         Shared by the apply-on-transition path (`_apply_device_state`,
@@ -1309,7 +1467,16 @@ class CommandDispatcherMixin:
         config / unsupported domains so the user notices a misconfig
         on first toggle. The hold path stays quiet — the same issue
         would otherwise log every HOLD_POLL_INTERVAL.
+
+        `device_id` (#136, 2026-08-25): schaltet den Schreib-Circuit-
+        Breaker scharf (Zähler je Entity/Stunde) und stempelt den
+        eigenen Write für die #140-Übersteuerungs-Erkennung. Alle
+        Produktions-Caller reichen ihn durch.
         """
+        if device_id is not None and not self._write_allowed(
+            device_id, entity_id
+        ):
+            return
         try:
             if domain in ("switch", "input_boolean", "light", "fan"):
                 # Bool-style entities: on/off is implicit (turn_on /
@@ -1338,7 +1505,13 @@ class CommandDispatcherMixin:
             if domain in ("number", "input_number"):
                 await self.hass.services.async_call(
                     domain, "set_value",
-                    {"entity_id": entity_id, "value": float(raw_value)},
+                    {"entity_id": entity_id,
+                     # (#135) gegen die Entity-Grenzen klemmen — der
+                     # Config-Flow begrenzt nur die EINGABE, nicht was
+                     # berechnet/konfiguriert ankommt.
+                     "value": self._clamp_write_value(
+                         entity_id, domain, float(raw_value)
+                     )},
                     blocking=True,
                 )
             elif domain in ("select", "input_select"):
@@ -1358,7 +1531,11 @@ class CommandDispatcherMixin:
                     await self.hass.services.async_call(
                         domain, "set_temperature",
                         {"entity_id": entity_id,
-                         "temperature": float(raw_value)},
+                         # (#135) min_temp/max_temp der Entity gewinnen
+                         # über den konfigurierten Zielwert.
+                         "temperature": self._clamp_write_value(
+                             entity_id, domain, float(raw_value)
+                         )},
                         blocking=True,
                     )
                 elif domain == "climate":
@@ -1476,6 +1653,10 @@ class CommandDispatcherMixin:
             self.state.on_state,
             # P3 (2026-06-11): cool_state fehlte im Pruning.
             self.state.cool_state,
+            # Sicherheitsbündel (2026-08-25): Breaker-/Override-Zustand
+            # eines entfernten Geräts nicht weiterschleppen.
+            self.state.write_breaker_devices,
+            self.state.local_override_until,
             self._prev_energy_kwh,
             self._prev_energy_kwh_discharged,
             self._last_sent_payload,
@@ -1551,12 +1732,35 @@ class CommandDispatcherMixin:
                     and expected is not None
                     and not self._states_match(actual, expected, domain)
                 ):
+                    # (#140, 2026-08-25) Fremd-Drift im AUTO-Modus =
+                    # Nutzer-Eingriff: stammt die Abweichung nicht von
+                    # einem EIGENEN Write der letzten
+                    # LOCAL_OVERRIDE_GRACE_S, wird der Mensch NICHT
+                    # binnen Sekunden überstimmt — Gerät pausieren,
+                    # Hold beenden. NUR im AUTO-Modus scharf: ALWAYS
+                    # existiert genau für Geräte, deren HA-State die
+                    # Realität nicht abbildet (Auto-Reset-Register) —
+                    # dort ist eine Abweichung kein Nutzereingriff.
+                    if (
+                        hold_mode == ENTITY_CONTROL_HOLD_AUTO
+                        and (
+                            time.time()
+                            - self.state.last_own_write_at.get(
+                                entity_id, 0.0
+                            )
+                        ) > LOCAL_OVERRIDE_GRACE_S
+                    ):
+                        self._mark_local_override(
+                            device_id, entity_id, actual, expected
+                        )
+                        return
                     _LOGGER.info(
                         "hold: %s reverted (%r → %r), re-writing",
                         entity_id, expected, actual,
                     )
                 await self._write_entity_control(
                     entity_id, domain, raw_value, on, verbose=False,
+                    device_id=device_id,
                 )
                 await asyncio.sleep(HOLD_POLL_INTERVAL)
         except asyncio.CancelledError:

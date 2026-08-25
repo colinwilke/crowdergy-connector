@@ -217,10 +217,14 @@ async def test_hold_loop_auto_skips_rewrite_when_state_matches(hass: HomeAssista
 
 async def test_hold_loop_auto_rewrites_on_drift(hass: HomeAssistant):
     """AUTO + State driftet (off statt on) → Drift-Repair feuert genau
-    einen turn_on."""
+    einen turn_on. Seit #140 gilt das nur noch für Drift kurz nach
+    einem EIGENEN Write (Echo/Revert-Fenster LOCAL_OVERRIDE_GRACE_S) —
+    ohne eigenen Write in dem Fenster ist der Drift ein Nutzer-Eingriff
+    (s. test_safety_bundle.py)."""
     coord = make_coordinator(hass, [_heating_switch_device(ENTITY_CONTROL_HOLD_AUTO)])
     coord.state.active_state["d1"] = True
     coord.state.last_sse_event_at = time.time()
+    coord.state.last_own_write_at["switch.kessel"] = time.time()
     hass.states.async_set("switch.kessel", "off")  # driftet von expected("on")
     calls = async_mock_service(hass, "switch", "turn_on")
 

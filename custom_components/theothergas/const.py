@@ -424,6 +424,34 @@ SSE_STALE_THRESHOLD_S = 60
 # normalen Reconnect-Blip, ≪ einer Nacht am falschen Modus.
 COMMAND_LEASE_TTL_S = 900
 
+# (#136, 2026-08-25) Schreib-Circuit-Breaker: harter Zähler je
+# (Entity, Stunde). Über der Schwelle stoppt der Connector JEDEN
+# weiteren Write auf diese Entity bis zur nächsten Stunde und meldet
+# den Zustand ans Backend (`write_breaker`-Telemetrie-Flag →
+# /me/health). Ein Guard, dessen Korrektheit die einzige Verteidigung
+# ist (Idempotenz-Vergleich, Hold-Modus), ist keine Verteidigung —
+# der Breaker fängt JEDE künftige Write-Storm-Regression, egal wo der
+# Bug sitzt. Schwelle bewusst DEUTLICH über der legitimen Obergrenze:
+# der ALWAYS-Hold schreibt blind alle 15 s (Charge-Mode) bzw. 30 s
+# (entity_control) = max ~240 Writes/h je Entity; 500 lässt Retries/
+# Selbst-Heilung Luft und trippt trotzdem auf jeden echten Storm
+# (der 2026-06-Piep-Storm lag bei >1000/h).
+WRITE_BREAKER_MAX_PER_HOUR = 500
+
+# (#140, 2026-08-25) Manuelle Übersteuerung: erkennt der AUTO-Hold
+# einen Drift, der NICHT von uns stammt (kein eigener Service-Call auf
+# der Entity in den letzten LOCAL_OVERRIDE_GRACE_S), gilt das als
+# absichtlicher Nutzer-Eingriff → das Gerät wird für
+# LOCAL_OVERRIDE_HOLD_S pausiert (Hold beendet, keine neuen Writes)
+# und der Zustand ans Backend gemeldet (`local_override`-Flag →
+# /me/health). Danach übernimmt Crowdergy automatisch wieder
+# (Self-Heal-Loop / nächster MPC-Tick). NUR im AUTO-Hold scharf — der
+# ALWAYS-Modus existiert genau für Geräte, deren HA-State die Realität
+# NICHT abbildet (Kostal-Register mit Auto-Reset): dort ist eine
+# Abweichung kein Nutzereingriff.
+LOCAL_OVERRIDE_HOLD_S = 7200
+LOCAL_OVERRIDE_GRACE_S = 30
+
 # CN (2026-07-03): der eigene `sensor`-Platform-Mirror
 # (Crowdergy_Current Power / State of Charge) wurde entfernt — er
 # doppelte nur die schon vorhandenen Integrations-Entities des Users

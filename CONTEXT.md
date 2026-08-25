@@ -12,7 +12,7 @@ Version: `manifest.json`.
 |---|---|
 | `coordinator.py` | Hot-Path: Auth/Refresh, `DataUpdateCoordinator`-Loop, Entity-Reader, Frame-Dispatch (`_handle_ws_message`), Apply-Handler (`_apply_device_state`, `_apply_cool_state`, `_apply_battery_setpoint`), Hold-Loop-Spawning |
 | `sse_client.py` | Reconnecting SSE-Listener auf `/api/v1/stream`, Bearer-Header (kein `?token=`), Queue (maxsize 512), Auth-Refresh-Callback, Half-Open-Detection (60-s-Read-Timeout), 401-Backoff + Reauth-Flow nach 5 Zyklen |
-| `state_mirror.py` | `DeviceStateMirror`: active/on/cool-State + Hold-Tasks + `last_sse_event_at` |
+| `state_mirror.py` | `DeviceStateMirror`: active/on/cool-State + Hold-Tasks + `last_sse_event_at`; seit dem Sicherheitsbündel (2026-08-25) auch `entity_write_counts`/`write_breaker_devices` (#136), `local_override_until`/`last_own_write_at` (#140) |
 | `telemetry_composer.py` | Background-Loops (Heartbeat, Device-Mirror mit eigenem `_last_mirror_at`, State-Resync), `bootstrap_active_state()`, `push_outdoor_temp()`; Mirror ist auf Telemetrie-Consent gegated. **Der Mirror strippt JEDES Energie-Δ-Feld (`_DELTA_FIELDS` = signed `energy_kwh_delta` + unsigned `energy_kwh_in/out_delta`-Paar) — der Re-Send refresht nur die Freshness-Clock, doppelte Δ-kWh würden vom Backend ein zweites Mal gezählt (#62).** |
 | `device_field_spec.py` | SSOT für Device-Felder im create/update-Roundtrip (`build_payload(mode, …)`) |
 | `preset_spec.py` | Slot-Schema für Crowd-Presets (public Teil des Store-Vertrags, SSOT): `PRESET_SLOT_SPEC` je Typ (solar/grid/battery/wallbox + heating/warmwater/aircon seit #68; Slot-Arten entity/value/flag + `required`), `PRESET_VALUE_SLOTS` (box_add_device-Allowlist), `extract_preset_maps()` + `missing_required_labels()` für den Contribute-Pfad |
@@ -36,6 +36,16 @@ Version: `manifest.json`.
   `value_map` in die Device-Config mergen, entkoppelter Reload);
   `ping` → noop. Ohne Remote-Control-Consent werden Steuer-Frames
   ignoriert; das Gate sitzt zentral in allen `_apply_*`.
+- **Sicherheitsbündel (2026-08-25, Branch `claude/sicherheitsbuendel-…`,
+  nicht released):** `command_dispatcher._clamp_write_value` klemmt
+  jeden numerischen Write gegen die Entity-Grenzen (#135);
+  `_write_allowed` = Schreib-Circuit-Breaker je Entity/Stunde (#136,
+  `WRITE_BREAKER_MAX_PER_HOUR`); der AUTO-`_hold_loop` erkennt
+  Fremd-Drift ohne eigenen Write in `LOCAL_OVERRIDE_GRACE_S` als
+  Nutzer-Eingriff und pausiert das Gerät `LOCAL_OVERRIDE_HOLD_S`
+  (#140). Beide Zustände gehen als `write_breaker`/`local_override`
+  in die Telemetrie (Backend `/me/health`; Backend MUSS zuerst
+  deployed sein — `extra="forbid"`).
 - **WP-Temperatur-Modus** (heating/warmwater, 2026-07-02): sind
   value_on/value_off NUMERISCH und `entity_control` climate/
   water_heater, schreibt `_apply_device_state` via `set_temperature`

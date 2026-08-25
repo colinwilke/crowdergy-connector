@@ -10,6 +10,63 @@ dort: Abschnitt „4 — Connector (HACS)" (der Backlog listet seit
 
 ## Repo-Regeln & getroffene Entscheidungen
 
+- **[GEBAUT 2026-08-25, Branch
+  `claude/sicherheitsbuendel-135-140-136-141-dsl6bg` (Backend-Hälfte
+  gleiche Branch-Namen), Draft-PR — NICHT gemerged/released.
+  Full-Suite 277 grün (+15 `test_safety_bundle.py`, 2 bekannte
+  SSE-Flakes deselektiert). Deploy-Reihenfolge: Backend ZUERST — die
+  neuen Telemetrie-Flags 422en auf einem Alt-Backend die GANZE Payload
+  (`extra="forbid"`).]
+  Sicherheitsbündel #135/#136/#140 — Connector-Hälften
+  (`command_dispatcher.py` + `state_mirror.py` + `const.py` +
+  Telemetrie-Payload in `coordinator.py`).**
+  **(#135) Write-Clamp:** `_clamp_write_value(entity, domain, value)` —
+  JEDER numerische Write wird gegen die Grenzen der ZIEL-Entity
+  geklemmt (climate/water_heater `min_temp`/`max_temp`,
+  number/input_number `min`/`max`); angewandt in
+  `_write_entity_control` (number-Branch + Temperatur-Modus),
+  `_apply_vorlauf_setpoint`, `_apply_battery_setpoint` (Setpoint-W)
+  und dem Wallbox-Ladestrom-Write. Ein Clamp loggt WARNING (immer ein
+  Mapping-/Grenzen-Fehler, nie Normalfall). **Regel: der Config-Flow
+  begrenzt, was der Nutzer EINTRÄGT — er begrenzt nicht, was der
+  Solver BERECHNET; beide Wege brauchen denselben Clamp.**
+  **(#136) Schreib-Circuit-Breaker:** `_write_allowed(device_id,
+  entity_id)` zählt je (Entity, Stunde); über
+  `WRITE_BREAKER_MAX_PER_HOUR` (500 — deutlich über den ~240/h des
+  ALWAYS-Holds) wird bis zum Fenster-Rollover NICHTS mehr geschrieben
+  und das Gerät trägt `write_breaker=True` in der Telemetrie (Backend
+  → `/me/health`). Fängt JEDE künftige Write-Storm-Regression, egal wo
+  der Bug sitzt — ein Guard, dessen Korrektheit die einzige
+  Verteidigung ist (Idempotenz-Vergleich), ist keine Verteidigung.
+  Gate sitzt in `_write_entity_control` (neuer `device_id`-Kwarg, alle
+  Produktions-Caller reichen ihn durch), `_apply_charge_mode` (EIN
+  Zähl-Tick je Apply — Phase/Strom/Modus feuern nur gemeinsam),
+  `_apply_battery_setpoint`, `_apply_vorlauf_setpoint` und dem
+  `set_hvac_mode`-Fallback.
+  **(#140) Manuelle Übersteuerung:** der AUTO-`_hold_loop` behandelt
+  Drift, der NICHT von einem EIGENEN Write der letzten
+  `LOCAL_OVERRIDE_GRACE_S` (30 s; `_write_allowed` stempelt
+  `state.last_own_write_at`) stammt, als Nutzer-Eingriff: Gerät für
+  `LOCAL_OVERRIDE_HOLD_S` (2 h) pausiert (`state.local_override_until`,
+  Gate in `_apply_device_state`/`_apply_cool_state`/
+  `_apply_vorlauf_setpoint`), Hold beendet, WARNING,
+  `local_override=True` in der Telemetrie. Nach Ablauf übernimmt der
+  Self-Heal-Loop/nächste MPC-Tick automatisch. **NUR im AUTO-Modus
+  scharf — ALWAYS existiert genau für Geräte, deren HA-State die
+  Realität nicht abbildet (Auto-Reset-Register): dort ist Drift kein
+  Nutzereingriff.** Bewusste Konsequenz (test-gepinnt): ein
+  AUTO-Gerät, das WIEDERHOLT gegen unseren Write zurückspringt, gilt
+  nach dem zweiten Zyklus als Übersteuerung — Dauer-Gegenschreiben ist
+  genau das Verhalten, das #140 abschafft; legitime
+  Auto-Reset-Register gehören in ALWAYS.
+  **Telemetrie:** `coordinator._async_update_data` sendet für
+  CONTROLLABLE_TYPES immer `write_breaker`/`local_override` (auch
+  False — das Backend cleart die `*_since`-Uhr daraus).
+  `forget_device` pruned die neuen per-Device-Dicts.
+  Tests `test_safety_bundle.py` (15); zwei bestehende
+  AUTO-Drift-Repair-Tests pinnen jetzt explizit den Fall „Drift kurz
+  nach eigenem Write" (Echo-Fenster).
+
 - **Command-TTL / Lease-Expiry nach SSE-Stale (User colin 2026-08-11
   Stellplatz-Diagnose „Alle drei … merge & deploy to PROD freigabe";
   Branch `claude/kostenberechnung-schema-check-mfe3w7`, PR connector#46
