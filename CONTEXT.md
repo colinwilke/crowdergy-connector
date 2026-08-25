@@ -36,8 +36,7 @@ Version: `manifest.json`.
   `value_map` in die Device-Config mergen, entkoppelter Reload);
   `ping` → noop. Ohne Remote-Control-Consent werden Steuer-Frames
   ignoriert; das Gate sitzt zentral in allen `_apply_*`.
-- **Sicherheitsbündel (2026-08-25, Branch `claude/sicherheitsbuendel-…`,
-  nicht released):** `command_dispatcher._clamp_write_value` klemmt
+- **Sicherheitsbündel (2026-08-25, RELEASED v3.46.0):** `command_dispatcher._clamp_write_value` klemmt
   jeden numerischen Write gegen die Entity-Grenzen (#135);
   `_write_allowed` = Schreib-Circuit-Breaker je Entity/Stunde (#136,
   `WRITE_BREAKER_MAX_PER_HOUR`); der AUTO-`_hold_loop` erkennt

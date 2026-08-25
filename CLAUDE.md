@@ -10,13 +10,18 @@ dort: Abschnitt „4 — Connector (HACS)" (der Backlog listet seit
 
 ## Repo-Regeln & getroffene Entscheidungen
 
-- **[GEBAUT 2026-08-25, Branch
-  `claude/sicherheitsbuendel-135-140-136-141-dsl6bg` (Backend-Hälfte
-  gleiche Branch-Namen), Draft-PR — NICHT gemerged/released.
+- **[GEMERGED + RELEASED v3.46.0 2026-08-25 (User „merge & deploy
+  freigegeben für alle drei"): PR connector#47 Squash `497f16d` →
+  `main`, CI grün; Release-Bump `f9348dc` + Tag/Release via
+  `tag-release.yml` (workflow_dispatch — der Session-Git-Proxy blockt
+  Tag-Pushes still mit „Everything up-to-date"/exit 1, genau dafür
+  existiert der Workflow; Release-Notes `docs/releases/v3.46.0.md`).
   Full-Suite 277 grün (+15 `test_safety_bundle.py`, 2 bekannte
-  SSE-Flakes deselektiert). Deploy-Reihenfolge: Backend ZUERST — die
-  neuen Telemetrie-Flags 422en auf einem Alt-Backend die GANZE Payload
-  (`extra="forbid"`).]
+  SSE-Flakes deselektiert). Deploy-Reihenfolge eingehalten: Backend
+  (backend#154, Run #129 health-grün) ZUERST — die neuen
+  Telemetrie-Flags 422en auf einem Alt-Backend die GANZE Payload
+  (`extra="forbid"`). HACS zieht v3.46.0 automatisch; kein
+  Re-Provisionieren nötig. Box-Pin unverändert (SSOT #126).]
   Sicherheitsbündel #135/#136/#140 — Connector-Hälften
   (`command_dispatcher.py` + `state_mirror.py` + `const.py` +
   Telemetrie-Payload in `coordinator.py`).**
