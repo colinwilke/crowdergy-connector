@@ -85,3 +85,27 @@ class DeviceStateMirror:
     # darauf via SSE_STALE_THRESHOLD_S damit ein Backend-Outage die
     # periodische Re-Write-Logik pausiert.
     last_sse_event_at: float = 0.0
+
+    # (#136, 2026-08-25) Schreib-Circuit-Breaker: je Entity das
+    # laufende Stunden-Fenster als (window_start, count). Über
+    # WRITE_BREAKER_MAX_PER_HOUR blockt `_write_allowed` jeden
+    # weiteren Write bis zur nächsten Stunde.
+    entity_write_counts: dict[str, tuple[float, int]] = field(
+        default_factory=dict
+    )
+
+    # (#136) Geräte, deren Breaker gerade getrippt ist (device_id →
+    # Trip-Zeit). Speist das `write_breaker`-Telemetrie-Flag; gecleart,
+    # sobald ein Write nach dem Fenster-Rollover wieder durchgeht.
+    write_breaker_devices: dict[str, float] = field(default_factory=dict)
+
+    # (#140) Manuelle Übersteuerung: device_id → Wall-Clock, bis zu der
+    # die Steuerung dieses Geräts pausiert ist. Speist das
+    # `local_override`-Telemetrie-Flag; nach Ablauf übernimmt der
+    # Self-Heal-Loop / der nächste MPC-Tick automatisch wieder.
+    local_override_until: dict[str, float] = field(default_factory=dict)
+
+    # (#140) Wall-Clock des letzten EIGENEN Service-Calls je Entity —
+    # die Referenz, gegen die der AUTO-Hold „Drift von uns" von
+    # „Nutzer-Eingriff" trennt (LOCAL_OVERRIDE_GRACE_S).
+    last_own_write_at: dict[str, float] = field(default_factory=dict)

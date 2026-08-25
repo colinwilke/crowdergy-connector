@@ -52,6 +52,7 @@ from .const import (
     CONF_VEHICLE_STATUS_VALUE_ERROR,
     CONF_VEHICLE_STATUS_VALUE_PLUGGED,
     CONF_VEHICLE_STATUS_VALUE_UNPLUGGED,
+    CONTROLLABLE_TYPES,
     DOMAIN,
 )
 
@@ -1027,6 +1028,23 @@ class CrowdergyCoordinator(
                 payload["is_on"] = is_on
             if cool_on is not None:
                 payload["cool_on"] = cool_on
+            # (#136/#140, 2026-08-25) Zustands-Flags ans Backend: der
+            # Schreib-Circuit-Breaker und die erkannte manuelle
+            # Übersteuerung sind ZUSTÄNDE (gelten gerade) — das Backend
+            # stempelt daraus `write_breaker_since` /
+            # `local_override_since` (nur beim Eintritt) und rendert
+            # sie in /me/health. Immer mitsenden (auch False), damit
+            # das Backend den Zustand von selbst clearen kann.
+            # `extra="forbid"` am Backend ⇒ Deploy-Reihenfolge Backend
+            # VOR Connector-Release (SSOT-Regel).
+            if dev.get(CONF_DEVICE_TYPE) in CONTROLLABLE_TYPES:
+                payload["write_breaker"] = (
+                    device_id in self.state.write_breaker_devices
+                )
+                payload["local_override"] = (
+                    time.time()
+                    < self.state.local_override_until.get(device_id, 0.0)
+                )
 
             # Solver-only + Chart-only extras (Vorlauf-Temp, HC-Flow-
             # Sensoren #42, …). JSONB-Bag im Backend; UI bekommt davon
