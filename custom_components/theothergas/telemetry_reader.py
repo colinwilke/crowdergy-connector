@@ -149,6 +149,23 @@ _PREFETCH_SLOT_KEYS: tuple[str, ...] = (
     CONF_ENTITY_COOL_CONTROL,
 )
 
+# Die TEILMENGE davon, die eine MESSUNG ist (#151). Steuer-Slots
+# (`entity_control`, `entity_charge_mode`, `entity_cool_control`) stehen
+# bewusst NICHT drin: sie sagen etwas über die Steuerbarkeit, nichts
+# darüber ob das Gerät noch misst — ein Schalter in HA bleibt verfügbar,
+# während der Wechselrichter dahinter weg ist. `entity_climate` fehlt aus
+# demselben Grund; die aircon-Temperatur, die daraus gelesen wird, reicht
+# der Coordinator als aufgelöste `current_temp_entity` durch.
+_MEASUREMENT_SLOT_KEYS: tuple[str, ...] = (
+    CONF_ENTITY_POWER,
+    CONF_ENTITY_POWER_2,
+    CONF_ENTITY_SOC,
+    CONF_ENTITY_VEHICLE_STATUS,
+    CONF_ENTITY_CURRENT_TEMP,
+    CONF_ENTITY_ENERGY_TOTAL,
+    CONF_ENTITY_ENERGY_DISCHARGED_TOTAL,
+)
+
 
 class TelemetryReaderMixin:
     """Per-tick HA-state readers + payload compose/decide for
@@ -188,6 +205,65 @@ class TelemetryReaderMixin:
             if eid:
                 ids.add(eid)
         return {eid: self.hass.states.get(eid) for eid in ids}
+
+    def _measurement_liveness(
+        self, dev: dict[str, Any], *, current_temp_entity: str = "",
+    ) -> bool | None:
+        """Misst dieses Gerät noch — oder ist seine Datenquelle weg? (#151)
+
+        Fällt der Wechselrichter aus (Modbus-Abbruch, Hersteller-Cloud
+        offline, WLAN weg am Gerät), bleiben Home Assistant und der
+        Connector gesund: der Heartbeat tickt weiter, nur die Entities
+        des Wechselrichters stehen auf ``unavailable``. Vor diesem
+        Helfer ging genau das verloren — jeder Reader gab ``None``
+        zurück, und ``_async_update_data`` schrieb daraus ein
+        ``power_kw = 0.0`` mit ``is_online = True``. Das Backend konnte
+        „keine Daten" damit nicht mehr von „Anlage produziert nichts"
+        unterscheiden, und die App zeigte eine grüne Kachel mit 0 kW.
+
+        Rückgabe:
+
+        * ``None``  — kein Mess-Slot gemappt. Keine Aussage möglich; der
+          Aufrufer verhält sich wie bisher (ein Gerät ohne Leistungs-
+          messer ist nicht kaputt, es misst nur nichts).
+        * ``True``  — mindestens ein gemappter Mess-Slot liefert einen
+          Wert.
+        * ``False`` — es sind Mess-Slots gemappt und **keiner** davon
+          liefert etwas.
+
+        Bewusst ALLE-oder-keiner: ein einzelner zickender Sensor neben
+        vier gesunden ist kein Datenausfall, und ein Fehlalarm kostet
+        hier mehr Vertrauen als eine verpasste Teilstörung. Der Fall,
+        um den es geht, nimmt ohnehin alle Entities derselben
+        Integration gleichzeitig mit.
+        """
+        # Der Coordinator hat den Temperatur-Slot für den Tick schon
+        # aufgelöst (aircon fällt auf `entity_climate` zurück) und reicht
+        # ihn durch. Ohne Durchreichung nehmen wir den rohen Slot aus
+        # `dev` — sonst wäre ein Gerät, dessen einzige Messung eine
+        # Temperatur ist, hier still ohne Mess-Slots und könnte NIE einen
+        # Datenausfall melden.
+        temp_entity = current_temp_entity or dev.get(CONF_ENTITY_CURRENT_TEMP, "")
+        entity_ids: list[str] = []
+        for key in _MEASUREMENT_SLOT_KEYS:
+            eid = temp_entity if key == CONF_ENTITY_CURRENT_TEMP else dev.get(key, "")
+            if eid:
+                entity_ids.append(eid)
+        # Solver-/Chart-Extras zählen mit: ein Solar-Gerät, dessen
+        # HC-Flow-Sensoren noch liefern, ist nicht datenlos.
+        for _payload_key, conf_key, _reader in _SOLVER_EXTRA_FIELDS.get(
+            dev.get(CONF_DEVICE_TYPE, ""), []
+        ):
+            eid = dev.get(conf_key, "")
+            if eid:
+                entity_ids.append(eid)
+        if not entity_ids:
+            return None
+        for entity_id in entity_ids:
+            state = self._get_state(entity_id)
+            if state is not None and state.state not in ("unknown", "unavailable"):
+                return True
+        return False
 
     def _read_entity_state(self, entity_id: str) -> Any:
         if not entity_id:
@@ -272,7 +348,12 @@ class TelemetryReaderMixin:
                 return True   # presence flipped
             if abs(cur - old) >= threshold:
                 return True
-        for key in ("vehicle_status", "charge_mode", "is_on", "cool_on"):
+        # `is_online` gehört hier her (#151): der Flip auf "keine Daten"
+        # und zurück ist immer eine Row wert — er ist die Aussage, an
+        # der die App entscheidet, ob sie eine Zahl noch zeigen darf.
+        for key in (
+            "vehicle_status", "charge_mode", "is_on", "cool_on", "is_online",
+        ):
             if payload.get(key) != prev.get(key):
                 return True
         # Soft heartbeat NUR wenn der payload-Hash sich vom letzten

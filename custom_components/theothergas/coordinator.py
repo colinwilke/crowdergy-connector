@@ -999,10 +999,29 @@ class CrowdergyCoordinator(
             # not include it in the telemetry payload anymore (the backend
             # would ignore it anyway since 2026-05-16, but keeping it out
             # also keeps the payload honest).
-            payload: dict[str, Any] = {
-                "power_kw": current_power if current_power is not None else 0.0,
-                "is_online": True,
-            }
+            # (#151) Liefert dieses Gerät überhaupt noch Messwerte?
+            # Sind Mess-Slots gemappt und steht KEINER davon auf einem
+            # Wert, ist die Datenquelle weg (Wechselrichter nicht
+            # erreichbar, Integration neu ladend, Hersteller-Cloud
+            # offline) — HA und wir sind dabei kerngesund, der Heartbeat
+            # tickt weiter. Bis hierher wurde daraus ein `power_kw = 0.0`
+            # mit `is_online = True`: eine erfundene Messung, die das
+            # Backend nicht von echten 0 kW unterscheiden konnte und die
+            # in der App als grüne Kachel mit 0 kW ankam. Jetzt sagen wir
+            # stattdessen, was wahr ist — `is_online = False`, und
+            # `power_kw` bleibt WEG statt genullt. Das Weglassen ist die
+            # Hälfte, die im Backend trägt: die Historien-Aggregate dort
+            # filtern durchweg auf `power_kw IS NOT NULL`, eine 0 hätte
+            # sich in Tageschart, Autarkie und den RLS-Fit gerechnet.
+            measurements_live = self._measurement_liveness(
+                dev, current_temp_entity=entity_current_temp,
+            )
+            data_missing = measurements_live is False
+            payload: dict[str, Any] = {"is_online": not data_missing}
+            if not data_missing:
+                payload["power_kw"] = (
+                    current_power if current_power is not None else 0.0
+                )
             if soc_percent is not None:
                 payload["soc_percent"] = soc_percent
             if vehicle_status is not None:
@@ -1115,12 +1134,16 @@ class CrowdergyCoordinator(
                     _LOGGER.error("Cannot reach backend for device %s: %s", device_id, err)
 
             result[device_id] = {
-                "current_power_kw": payload["power_kw"],
+                # (#151) `.get`, nicht `[...]`: bei fehlender Datenquelle
+                # trägt das Payload gar kein `power_kw` mehr. Die HA-
+                # Sensoren dieser Integration zeigen dann `None` statt
+                # einer erfundenen 0 — dieselbe Ehrlichkeit wie im PATCH.
+                "current_power_kw": payload.get("power_kw"),
                 "soc_percent": payload.get("soc_percent"),
                 "vehicle_status": vehicle_status,
                 "is_active": self.state.active_state.get(device_id, False),
                 "is_on": self.state.on_state.get(device_id, False),
-                "is_online": True,
+                "is_online": not data_missing,
             }
 
         await self._self_heal_holds(list(result.keys()))
