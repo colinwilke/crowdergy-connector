@@ -10,6 +10,48 @@ dort: Abschnitt „4 — Connector (HACS)" (der Backlog listet seit
 
 ## Repo-Regeln & getroffene Entscheidungen
 
+- **[#151 GEBAUT + GEMERGED + RELEASED v3.47.0 am 2026-08-28 (User:
+  „Udo hat gerade keinen Zugriff auf seinen Wechselrichter … können wir
+  das irgendwie anzeigen, damit man nicht denkt crowdergy wäre kaputt?",
+  Merge-/Deploy-Freigabe; PR connector#48 Squash `15359ec` → `main`,
+  Release-Commit `3901284` (#49), Tag+Release via `tag-release.yml`
+  Run 33176553782. Suite 284 grün.)]
+  Der Connector hat „keine Daten" nicht gemeldet, sondern ERFUNDEN.**
+  Fällt die Quelle hinter HA aus (Wechselrichter nicht erreichbar,
+  Hersteller-Cloud offline, Integration im Reload), stehen deren
+  Entities auf `unavailable` und jeder `_read_*` gibt `None` zurück —
+  `_async_update_data` schrieb daraus `{"power_kw": 0.0, "is_online":
+  True}`. `is_online: True` stand an BEIDEN Sendestellen als Literal;
+  kein Codepfad im Repo hat je `False` gesendet, obwohl Backend und iOS
+  das Flag seit jeher auswerten (`docs/house-consumption-chart.md`
+  schrieb es sogar vor: „a dead connector must not pin a stale
+  number"). Neu: `_measurement_liveness(dev)` in `telemetry_reader.py`
+  → `is_online: false` **und `power_kw` WEGGELASSEN statt genullt**.
+  **Das Weglassen ist die Hälfte, die trägt** — die Backend-Aggregate
+  filtern durchweg auf `power_kw IS NOT NULL`, eine erfundene 0 hätte
+  sich in Tageschart/Autarkie/PV-Peak/RLS gerechnet und wäre nicht
+  rückwirkend korrigierbar; der Unresponsive-Detektor sieht dadurch ein
+  leeres `MAX(power_kw)` und wertet es korrekt als „absence of
+  evidence" statt „Gerät reagiert nicht" zu melden.
+  **Entscheidungsregel ALLE-oder-keiner:** `is_online: false` verlangt,
+  dass JEDER gemappte Mess-Slot tot ist (`_MEASUREMENT_SLOT_KEYS` +
+  die `_SOLVER_EXTRA_FIELDS` des Typs). Ein einzelner zickender Sensor
+  neben vier gesunden ist kein Datenausfall — ein Fehlalarm kostet hier
+  mehr Vertrauen als eine verpasste Teilstörung, und der Zielfall nimmt
+  ohnehin alle Entities derselben Integration gleichzeitig mit.
+  **STEUER-Slots zählen NICHT mit** (`entity_control`,
+  `entity_charge_mode`, `entity_cool_control`): ein Schalter in HA
+  bleibt verfügbar, während der Wechselrichter dahinter weg ist — sie
+  werden unverändert weitergemeldet, manuelles Ein/Aus propagiert also
+  auch im Ausfall. Ein Gerät GANZ OHNE Mess-Slot bleibt `is_online:
+  true` (Konfiguration, kein Fehler). `is_online` steht seit #151 in
+  der kategorischen Liste von `_should_send` — sonst könnte ein Gerät,
+  dessen Leistung bei der Rückkehr zufällig 0 kW ist (Solar nachts),
+  bis zum 10-min-Hard-Ceiling weiter als „keine Daten" in der App
+  stehen. Backend-Hälfte (Zustand `device_data_missing`, nennt jedes
+  betroffene Gerät beim Namen) war VOR diesem Release deployed —
+  backend#165, mig `20260828_0001`.
+
 - **[GEMERGED + RELEASED v3.46.0 2026-08-25 (User „merge & deploy
   freigegeben für alle drei"): PR connector#47 Squash `497f16d` →
   `main`, CI grün; Release-Bump `f9348dc` + Tag/Release via
