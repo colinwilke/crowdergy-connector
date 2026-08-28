@@ -225,3 +225,150 @@ async def test_telemetry_consent_off_sends_nothing(hass: HomeAssistant):
 
     coord._patch_telemetry_with_retry.assert_not_awaited()
     coord._push_outdoor_temp.assert_not_awaited()
+
+
+# ── Datenquelle weg: is_online=False statt erfundener 0 kW (#151) ────────
+
+
+async def test_dead_measurement_source_reports_offline_without_power(
+    hass: HomeAssistant,
+):
+    """Der Wechselrichter ist weg — HA und der Connector sind gesund.
+
+    Alle gemappten Mess-Entities stehen auf `unavailable`. Vor #151 wurde
+    daraus `power_kw = 0.0` mit `is_online = True`: eine erfundene Messung,
+    die das Backend nicht von echten 0 kW unterscheiden konnte. Jetzt trägt
+    das Payload `is_online = False` und GAR KEIN `power_kw` — das Weglassen
+    ist der Teil, der backend-seitig trägt (die Historien-Aggregate filtern
+    auf `power_kw IS NOT NULL`).
+    """
+    dev = {
+        CONF_DEVICE_ID: "dev-1",
+        CONF_DEVICE_TYPE: "solar",
+        CONF_ENTITY_POWER: "sensor.pv_power",
+        CONF_ENTITY_ENERGY_TOTAL: "sensor.pv_energy",
+    }
+    coord = _make_coord(hass, [dev])
+    hass.states.async_set("sensor.pv_power", "unavailable", {})
+    hass.states.async_set("sensor.pv_energy", "unavailable", {})
+
+    result = await coord._async_update_data()
+
+    payload = _sent_payload(coord)
+    assert payload["is_online"] is False
+    assert "power_kw" not in payload
+    # Kein kWh-Δ ohne Zählerstand — und die Baseline bleibt ungesetzt, damit
+    # der Zähler nach der Rückkehr korrekt gegen den letzten GUTEN Wert
+    # rechnet statt gegen eine Lücke.
+    assert "energy_kwh_delta" not in payload
+    assert "dev-1" not in coord._prev_energy_kwh
+    # Die HA-Sensoren der Integration zeigen dieselbe Ehrlichkeit.
+    assert result["dev-1"]["current_power_kw"] is None
+    assert result["dev-1"]["is_online"] is False
+
+
+async def test_unmapped_power_still_reports_online(hass: HomeAssistant):
+    """Ein Gerät OHNE jeden Mess-Slot ist nicht kaputt — es misst nur nichts.
+
+    Die Abgrenzung, an der #151 hängt: „gemappt aber tot" ist ein
+    Datenausfall, „nie gemappt" ist eine Konfiguration. Nur der erste Fall
+    darf `is_online = False` auslösen, sonst meldete jede Heizung ohne
+    Leistungszähler dauerhaft eine Störung.
+    """
+    dev = {
+        CONF_DEVICE_ID: "dev-1",
+        CONF_DEVICE_TYPE: "heating",
+        CONF_ENTITY_CONTROL: "switch.wp",
+        CONF_VALUE_ON: "on",
+        CONF_VALUE_OFF: "off",
+    }
+    coord = _make_coord(hass, [dev])
+    hass.states.async_set("switch.wp", "on", {})
+
+    await coord._async_update_data()
+
+    payload = _sent_payload(coord)
+    assert payload["is_online"] is True
+    assert payload["power_kw"] == 0.0
+
+
+async def test_one_live_sensor_keeps_device_online(hass: HomeAssistant):
+    """Alle-oder-keiner: ein zickender Sensor neben einem gesunden ist KEIN
+    Datenausfall. Der Leistungssensor ist weg, der Zähler liefert weiter —
+    das Gerät bleibt online (und `power_kw` fällt auf die ehrliche 0, weil
+    genau dieser eine Wert fehlt, nicht die Quelle)."""
+    dev = {
+        CONF_DEVICE_ID: "dev-1",
+        CONF_DEVICE_TYPE: "solar",
+        CONF_ENTITY_POWER: "sensor.pv_power",
+        CONF_ENTITY_ENERGY_TOTAL: "sensor.pv_energy",
+    }
+    coord = _make_coord(hass, [dev])
+    hass.states.async_set("sensor.pv_power", "unavailable", {})
+    hass.states.async_set(
+        "sensor.pv_energy", "100.0", {"unit_of_measurement": "kWh"}
+    )
+
+    await coord._async_update_data()
+
+    payload = _sent_payload(coord)
+    assert payload["is_online"] is True
+    assert payload["power_kw"] == 0.0
+    assert payload["energy_kwh_total"] == 100.0
+
+
+async def test_control_entity_alone_does_not_prove_measurement(
+    hass: HomeAssistant,
+):
+    """Ein lebender SCHALTER heilt keinen toten Messwert.
+
+    Der Steuer-Slot bleibt in HA verfügbar, während der Wechselrichter
+    dahinter weg ist — genau deshalb steht `entity_control` nicht in
+    `_MEASUREMENT_SLOT_KEYS`. Zählte er mit, bliebe jedes steuerbare Gerät
+    im Ausfall stumm „online"."""
+    dev = {
+        CONF_DEVICE_ID: "dev-1",
+        CONF_DEVICE_TYPE: "heating",
+        CONF_ENTITY_POWER: "sensor.wp_power",
+        CONF_ENTITY_CONTROL: "switch.wp",
+        CONF_VALUE_ON: "on",
+        CONF_VALUE_OFF: "off",
+    }
+    coord = _make_coord(hass, [dev])
+    hass.states.async_set("sensor.wp_power", "unavailable", {})
+    hass.states.async_set("switch.wp", "on", {})
+
+    await coord._async_update_data()
+
+    payload = _sent_payload(coord)
+    assert payload["is_online"] is False
+    assert "power_kw" not in payload
+    # Die Steuer-Aussage bleibt trotzdem gültig und wird weiter gemeldet.
+    assert payload["is_on"] is True
+
+
+async def test_recovery_flips_back_online_and_sends(hass: HomeAssistant):
+    """Rückkehr der Datenquelle landet garantiert als eigener PATCH.
+
+    `is_online` steht seit #151 in der kategorischen Liste von
+    `_should_send` — sonst könnte ein Gerät, dessen Leistung bei der
+    Rückkehr zufällig wieder 0 kW ist (Solar nachts), bis zum
+    10-min-Hard-Ceiling weiter als „keine Daten" in der App stehen."""
+    dev = {
+        CONF_DEVICE_ID: "dev-1",
+        CONF_DEVICE_TYPE: "solar",
+        CONF_ENTITY_POWER: "sensor.pv_power",
+    }
+    coord = _make_coord(hass, [dev])
+    hass.states.async_set("sensor.pv_power", "unavailable", {})
+    await coord._async_update_data()
+    assert _sent_payload(coord)["is_online"] is False
+
+    # Wechselrichter wieder da — und liefert exakt 0 kW (Nacht).
+    hass.states.async_set("sensor.pv_power", "0.0", {"unit_of_measurement": "kW"})
+    await coord._async_update_data()
+
+    assert coord._patch_telemetry_with_retry.await_count == 2
+    payload = _sent_payload(coord)
+    assert payload["is_online"] is True
+    assert payload["power_kw"] == 0.0
