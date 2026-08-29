@@ -10,6 +10,58 @@ dort: Abschnitt „4 — Connector (HACS)" (der Backlog listet seit
 
 ## Repo-Regeln & getroffene Entscheidungen
 
+- **[GEBAUT 2026-08-29 (User colin, Stiebel-WP: „die im Connector
+  gesetzten 35 Grad AUS-Temperatur haelt die WP nicht"); Branch
+  `claude/wp-aus-ww-temperatur-override-zndgj2`, PR connector#50 (Draft),
+  Suite 298 gruen. Deploy-Reihenfolge: Backend (backend#168) ZUERST —
+  `TelemetryPatch` ist `extra="forbid"`.]
+  #152 Wirkungs-Kontrolle. Durable Regel: der Connector prueft, ob sein
+  Wert IN DER ENTITY STEHT — das ist NICHT dasselbe wie „der Befehl
+  wirkt". Beides muss getrennt geprueft und getrennt gemeldet werden.**
+  Zwei Feldfaelle, beide vorher komplett stumm:
+  **(1) Konfigurierter Wert ausserhalb des Entity-Bereichs.** Heizung
+  `value_off = 35` gegen eine Entity mit `max 30`. Der #135-Clamp
+  schreibt 30, `_expected_state_value` erwartete aber weiter 35 → eine
+  Dauer-Scheindrift, die per Konstruktion nie aufloesbar ist. Folge:
+  der AUTO-Hold wertete die EIGENE Klemmung als Nutzer-Eingriff (#140)
+  und legte das Geraet 2 h still (Prod-Beleg
+  `devices.local_override_since 08-29 21:45`). **Regel: wer einen Wert
+  vor dem Schreiben veraendert, MUSS gegen den veraenderten Wert
+  vergleichen — Clamp und Vergleich sind eine Einheit.** Betrifft
+  `_expected_state_value` (Idempotenz-Guard + Hold-Loop) UND den
+  `is_on`/`cool_on`-Readback in `telemetry_reader`.
+  **Kollaps-Sonderfall (vom eigenen Test aufgedeckt):** klemmen An- und
+  Aus-Wert auf DIESELBE Zahl (beide ueber `max`), sind die Zustaende am
+  Geraet nicht mehr unterscheidbar → `_read_is_on_state` gibt `None`
+  zurueck, nicht den erstbesten Treffer. Das WARUM liefert separat
+  `control_value_rejected`.
+  **(2) Geraet faehrt einen anderen Sollwert.** Die Stiebel haelt im
+  Programmbetrieb je nach Zeitfenster ihr Komfort- ODER ihr
+  ECO-Register und ignoriert das jeweils andere; Crowdergy schrieb
+  `number.<wp>_comfort_water_temperature_target = 35`, die WP fuhr
+  durchgehend `..._eco_water_temperature_target = 49,5`
+  (`sensor.<wp>_target_temperature_water` bestaetigt es). Dafuer der
+  neue OPTIONALE Lese-Slot `entity_effective_setpoint`: nicht gemappt =
+  kein Vergleichspunkt = keine Aussage, nie geraten. Gemeldet wird erst,
+  was `CONTROL_EFFECT_MIN_MISMATCH_S` (15 min) ANHAELT — ein Geraet darf
+  rampen und verzoegert uebernehmen; ein unlesbarer Sensor loescht die
+  Uhr, statt einen Steuerfehler zu behaupten.
+  **Uniform ueber alle Typen, und zwar strukturell:** der Slot wird in
+  `_with_effect_slot()` an JEDEN Steuer-Abschnitt gehaengt statt in den
+  Typ-Zweigen wiederholt — sonst faellt er beim naechsten neuen
+  Geraetetyp hinten runter. Bei Modus-Geraeten (Wallbox/Batterie) ist
+  der Vergleich ein String-Vergleich, sonst numerisch mit
+  `CONTROL_EFFECT_TOLERANCE`.
+  **Bezugsgroesse ist `state.last_written_value[device_id]`** — was wir
+  WIRKLICH kommandiert haben (nach Clamp), gesetzt in
+  `_write_entity_control` UND `_apply_charge_mode`. Ein neuer
+  Schreib-Pfad, der einen kommandierten Zustand setzt, muss ihn
+  mitpflegen, sonst ist die Wirkungs-Kontrolle dort blind.
+  Neue Telemetrie-Flags `control_value_rejected` / `control_ineffective`
+  (kategorisch in `_should_send`: Eintritt UND Aufloesung sind je eine
+  Row wert). Vertrag: `docs/crowd-preset-store.md` (Slot),
+  `crowdergy-backend/docs/health.md` (Zustaende).
+
 - **[#151 GEBAUT + GEMERGED + RELEASED v3.47.0 am 2026-08-28 (User:
   „Udo hat gerade keinen Zugriff auf seinen Wechselrichter … können wir
   das irgendwie anzeigen, damit man nicht denkt crowdergy wäre kaputt?",
