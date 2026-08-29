@@ -161,7 +161,8 @@
               "entity_charge_mode": "Charge mode",
               "entity_wallbox_charge_current_a": "Charging current (optional)",
               "entity_wallbox_phase_mode": "Phase switch (optional)",
-              "entity_water_heater": "Water-heater entity (optional)"
+              "entity_water_heater": "Water-heater entity (optional)",
+              "entity_effective_setpoint": "Setpoint the device actually runs (optional)"
             },
             "data_description": {
               "entity_climate": "The climate (thermostat) entity of your heat pump (prefixed climate.) — control and modes are derived from it. For heating, its temperature is treated as the flow temperature; map the room temperature separately as current temperature.",
@@ -172,7 +173,8 @@
               "entity_charge_mode": "Wallbox: charge-mode select (lock/charge/solar). Battery: operating-mode entity.",
               "entity_wallbox_charge_current_a": "Sets the charging current in amps (typically 6–16 A). Lets Crowdergy match the charging power to the solar surplus instead of always charging at full power.",
               "entity_wallbox_phase_mode": "Select entity that switches the wallbox between 1-phase and 3-phase charging (e.g. go-e). With it mapped, Crowdergy can charge single-phase from ~1.4 kW solar surplus instead of needing ~4 kW. The \"auto\" option is never used — Crowdergy always sets the phase explicitly.",
-              "entity_water_heater": "Optional: the water_heater entity of your DHW heat pump (prefixed water_heater.). Control, modes and tank temperature are derived from it. If you don't have one, leave this empty and map a control entity instead."
+              "entity_water_heater": "Optional: the water_heater entity of your DHW heat pump (prefixed water_heater.). Control, modes and tank temperature are derived from it. If you don't have one, leave this empty and map a control entity instead.",
+              "entity_effective_setpoint": "Read-only. The entity that shows which setpoint the DEVICE is really running — not the one we wrote. Heat pumps in programme mode often keep two setpoints (comfort and eco) and follow only one of them, so a written value can sit correctly in its entity and still have no effect. With this mapped, Crowdergy notices and tells you instead of silently steering into the void. Stiebel ISG example: sensor.<hp>_target_temperature_water."
             }
           }
         },
@@ -439,7 +441,8 @@
               "entity_charge_mode": "Charge mode",
               "entity_wallbox_charge_current_a": "Charging current (optional)",
               "entity_wallbox_phase_mode": "Phase switch (optional)",
-              "entity_water_heater": "Water-heater entity (optional)"
+              "entity_water_heater": "Water-heater entity (optional)",
+              "entity_effective_setpoint": "Setpoint the device actually runs (optional)"
             },
             "data_description": {
               "entity_climate": "The climate (thermostat) entity of your heat pump (prefixed climate.) — control and modes are derived from it. For heating, its temperature is treated as the flow temperature; map the room temperature separately as current temperature.",
@@ -450,7 +453,8 @@
               "entity_charge_mode": "Wallbox: charge-mode select (lock/charge/solar). Battery: operating-mode entity.",
               "entity_wallbox_charge_current_a": "Sets the charging current in amps (typically 6–16 A). Lets Crowdergy match the charging power to the solar surplus instead of always charging at full power.",
               "entity_wallbox_phase_mode": "Select entity that switches the wallbox between 1-phase and 3-phase charging (e.g. go-e). With it mapped, Crowdergy can charge single-phase from ~1.4 kW solar surplus instead of needing ~4 kW. The \"auto\" option is never used — Crowdergy always sets the phase explicitly.",
-              "entity_water_heater": "Optional: the water_heater entity of your DHW heat pump (prefixed water_heater.). Control, modes and tank temperature are derived from it. If you don't have one, leave this empty and map a control entity instead."
+              "entity_water_heater": "Optional: the water_heater entity of your DHW heat pump (prefixed water_heater.). Control, modes and tank temperature are derived from it. If you don't have one, leave this empty and map a control entity instead.",
+              "entity_effective_setpoint": "Read-only. The entity that shows which setpoint the DEVICE is really running — not the one we wrote. Heat pumps in programme mode often keep two setpoints (comfort and eco) and follow only one of them, so a written value can sit correctly in its entity and still have no effect. With this mapped, Crowdergy notices and tells you instead of silently steering into the void. Stiebel ISG example: sensor.<hp>_target_temperature_water."
             }
           }
         },
@@ -610,7 +614,8 @@
               "entity_charge_mode": "Charge mode",
               "entity_wallbox_charge_current_a": "Charging current (optional)",
               "entity_wallbox_phase_mode": "Phase switch (optional)",
-              "entity_water_heater": "Water-heater entity (optional)"
+              "entity_water_heater": "Water-heater entity (optional)",
+              "entity_effective_setpoint": "Setpoint the device actually runs (optional)"
             },
             "data_description": {
               "entity_climate": "The climate (thermostat) entity of your heat pump (prefixed climate.) — control and modes are derived from it. For heating, its temperature is treated as the flow temperature; map the room temperature separately as current temperature.",
@@ -621,7 +626,8 @@
               "entity_charge_mode": "Wallbox: charge-mode select. Battery: operating-mode entity.",
               "entity_wallbox_charge_current_a": "Sets the charging current in amps (typically 6–16 A). Lets Crowdergy match the charging power to the solar surplus instead of always charging at full power.",
               "entity_wallbox_phase_mode": "Select entity that switches the wallbox between 1-phase and 3-phase charging (e.g. go-e). With it mapped, Crowdergy can charge single-phase from ~1.4 kW solar surplus instead of needing ~4 kW. The \"auto\" option is never used — Crowdergy always sets the phase explicitly.",
-              "entity_water_heater": "Optional: the water_heater entity of your DHW heat pump (prefixed water_heater.). Control, modes and tank temperature are derived from it. If you don't have one, leave this empty and map a control entity instead."
+              "entity_water_heater": "Optional: the water_heater entity of your DHW heat pump (prefixed water_heater.). Control, modes and tank temperature are derived from it. If you don't have one, leave this empty and map a control entity instead.",
+              "entity_effective_setpoint": "Read-only. The entity that shows which setpoint the DEVICE is really running — not the one we wrote. Heat pumps in programme mode often keep two setpoints (comfort and eco) and follow only one of them, so a written value can sit correctly in its entity and still have no effect. With this mapped, Crowdergy notices and tells you instead of silently steering into the void. Stiebel ISG example: sensor.<hp>_target_temperature_water."
             }
           }
         }

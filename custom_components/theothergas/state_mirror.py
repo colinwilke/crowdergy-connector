@@ -109,3 +109,22 @@ class DeviceStateMirror:
     # die Referenz, gegen die der AUTO-Hold „Drift von uns" von
     # „Nutzer-Eingriff" trennt (LOCAL_OVERRIDE_GRACE_S).
     last_own_write_at: dict[str, float] = field(default_factory=dict)
+
+    # (#152) Der Wert, den wir zuletzt WIRKLICH auf die Steuer-Entity
+    # eines Geräts geschrieben haben — nach dem #135-Clamp, also das,
+    # was am Gerät ankommen konnte, nicht was konfiguriert ist. Quelle
+    # für den Wirkungs-Vergleich gegen den gefahrenen Sollwert.
+    last_written_value: dict[str, object] = field(default_factory=dict)
+
+    # (#152) Geräte, deren konfigurierter Schaltwert ausserhalb des von
+    # der Steuer-Entity akzeptierten Bereichs liegt (device_id →
+    # Zeitpunkt der Feststellung). Der Wert kann das Gerät damit nie
+    # erreichen; speist das `control_value_rejected`-Telemetrie-Flag
+    # und wird gecleart, sobald ein Write ungeklemmt durchgeht.
+    value_rejected_devices: dict[str, float] = field(default_factory=dict)
+
+    # (#152) Beginn einer anhaltenden Abweichung zwischen geschriebenem
+    # und gefahrenem Sollwert (device_id → Wall-Clock). Erst nach
+    # CONTROL_EFFECT_MIN_MISMATCH_S wird daraus ein Befund — ein Gerät
+    # darf rampen und verzögert übernehmen.
+    effective_mismatch_since: dict[str, float] = field(default_factory=dict)

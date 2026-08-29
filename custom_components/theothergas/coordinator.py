@@ -1064,6 +1064,20 @@ class CrowdergyCoordinator(
                     time.time()
                     < self.state.local_override_until.get(device_id, 0.0)
                 )
+                # (#152) Wirkungs-Kontrolle, uniform fuer ALLE
+                # steuerbaren Typen: (1) der konfigurierte Schaltwert
+                # passt nicht in den Bereich der Steuer-Entity — das
+                # Geraet kann ihn nie erreichen; (2) das Geraet faehrt
+                # dauerhaft einen anderen Sollwert als den, den wir
+                # geschrieben haben. Beides war bisher unsichtbar: der
+                # Connector prueft, ob SEIN Wert in der Entity steht,
+                # nicht ob er WIRKT.
+                payload["control_value_rejected"] = (
+                    device_id in self.state.value_rejected_devices
+                )
+                payload["control_ineffective"] = (
+                    self._effective_setpoint_mismatch(dev)
+                )
 
             # Solver-only + Chart-only extras (Vorlauf-Temp, HC-Flow-
             # Sensoren #42, …). JSONB-Bag im Backend; UI bekommt davon

@@ -61,6 +61,7 @@ from .const import (
     CONF_ENTITY_SOC,
     CONF_ENTITY_VEHICLE_STATUS,
     CONF_ENTITY_VORLAUF_SETPOINT,
+    CONF_ENTITY_EFFECTIVE_SETPOINT,
     CONF_ENTITY_VORLAUF_TEMP,
     CONF_INVERT_POWER_SIGN,
     CONF_VALUE_BATTERY_MODE_ACTIVE,
@@ -139,6 +140,13 @@ PRESET_SLOT_SPEC: dict[str, tuple[PresetSlot, ...]] = {
             "flag", False, "Setpoint-Vorzeichen umkehren",
         ),
         PresetSlot(CONF_INVERT_POWER_SIGN, "flag", False, "Leistungs-Vorzeichen umkehren"),
+        # (#152) Wirkungs-Kontrolle — optional, aber vendor-typisch
+        # (Stiebel ISG exponiert den gefahrenen Sollwert als Sensor).
+        # Genau derselbe Slot bei JEDEM steuerbaren Typ.
+        PresetSlot(
+            CONF_ENTITY_EFFECTIVE_SETPOINT,
+            "entity", False, "Gefahrener Sollwert (Wirkungs-Kontrolle)",
+        ),
         PresetSlot(CONF_ENTITY_CONTROL_HOLD, "value", False, "Hold-Modus"),
     ),
     "wallbox": (
@@ -175,6 +183,13 @@ PRESET_SLOT_SPEC: dict[str, tuple[PresetSlot, ...]] = {
             "value", False, "Fahrzeugstatus-Wert „Fehler“",
         ),
         PresetSlot(CONF_INVERT_POWER_SIGN, "flag", False, "Leistungs-Vorzeichen umkehren"),
+        # (#152) Wirkungs-Kontrolle — optional, aber vendor-typisch
+        # (Stiebel ISG exponiert den gefahrenen Sollwert als Sensor).
+        # Genau derselbe Slot bei JEDEM steuerbaren Typ.
+        PresetSlot(
+            CONF_ENTITY_EFFECTIVE_SETPOINT,
+            "entity", False, "Gefahrener Sollwert (Wirkungs-Kontrolle)",
+        ),
         PresetSlot(CONF_ENTITY_CONTROL_HOLD, "value", False, "Hold-Modus"),
     ),
     # ── Steuerbare thermische Lasten (#68, 2026-06-18) ──────────────────
@@ -207,6 +222,13 @@ PRESET_SLOT_SPEC: dict[str, tuple[PresetSlot, ...]] = {
         PresetSlot(CONF_VALUE_COOL_ON, "value", False, "Kühlmodus-Wert „An“"),
         PresetSlot(CONF_VALUE_COOL_OFF, "value", False, "Kühlmodus-Wert „Aus“"),
         PresetSlot(CONF_INVERT_POWER_SIGN, "flag", False, "Leistungs-Vorzeichen umkehren"),
+        # (#152) Wirkungs-Kontrolle — optional, aber vendor-typisch
+        # (Stiebel ISG exponiert den gefahrenen Sollwert als Sensor).
+        # Genau derselbe Slot bei JEDEM steuerbaren Typ.
+        PresetSlot(
+            CONF_ENTITY_EFFECTIVE_SETPOINT,
+            "entity", False, "Gefahrener Sollwert (Wirkungs-Kontrolle)",
+        ),
         PresetSlot(CONF_ENTITY_CONTROL_HOLD, "value", False, "Hold-Modus"),
     ),
     "warmwater": (
@@ -217,6 +239,13 @@ PRESET_SLOT_SPEC: dict[str, tuple[PresetSlot, ...]] = {
         PresetSlot(CONF_ENTITY_CURRENT_TEMP, "entity", False, "Speicher-Temperatur (°C)"),
         PresetSlot(CONF_ENTITY_ENERGY_TOTAL, "entity", False, "Energiezähler (kWh)"),
         PresetSlot(CONF_INVERT_POWER_SIGN, "flag", False, "Leistungs-Vorzeichen umkehren"),
+        # (#152) Wirkungs-Kontrolle — optional, aber vendor-typisch
+        # (Stiebel ISG exponiert den gefahrenen Sollwert als Sensor).
+        # Genau derselbe Slot bei JEDEM steuerbaren Typ.
+        PresetSlot(
+            CONF_ENTITY_EFFECTIVE_SETPOINT,
+            "entity", False, "Gefahrener Sollwert (Wirkungs-Kontrolle)",
+        ),
         PresetSlot(CONF_ENTITY_CONTROL_HOLD, "value", False, "Hold-Modus"),
     ),
     "aircon": (
@@ -233,6 +262,13 @@ PRESET_SLOT_SPEC: dict[str, tuple[PresetSlot, ...]] = {
         PresetSlot(CONF_ENTITY_CURRENT_TEMP, "entity", False, "Raumtemperatur (°C)"),
         PresetSlot(CONF_ENTITY_ENERGY_TOTAL, "entity", False, "Energiezähler (kWh)"),
         PresetSlot(CONF_INVERT_POWER_SIGN, "flag", False, "Leistungs-Vorzeichen umkehren"),
+        # (#152) Wirkungs-Kontrolle — optional, aber vendor-typisch
+        # (Stiebel ISG exponiert den gefahrenen Sollwert als Sensor).
+        # Genau derselbe Slot bei JEDEM steuerbaren Typ.
+        PresetSlot(
+            CONF_ENTITY_EFFECTIVE_SETPOINT,
+            "entity", False, "Gefahrener Sollwert (Wirkungs-Kontrolle)",
+        ),
         PresetSlot(CONF_ENTITY_CONTROL_HOLD, "value", False, "Hold-Modus"),
     ),
 }

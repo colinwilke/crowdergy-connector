@@ -31,6 +31,7 @@ from .const import (
     CONF_ENTITY_SOC,
     CONF_ENTITY_VEHICLE_STATUS,
     CONF_ENTITY_CURRENT_TEMP,
+    CONF_ENTITY_EFFECTIVE_SETPOINT,
     CONF_ENTITY_VORLAUF_SETPOINT,
     CONF_ENTITY_VORLAUF_TEMP,
     CONF_ENTITY_ENERGY_TOTAL,
@@ -193,6 +194,20 @@ _ENTITY_SELECTORS: dict[str, selector.EntitySelector] = {
     CONF_ENTITY_VORLAUF_TEMP: selector.EntitySelector(
         selector.EntitySelectorConfig(
             domain="sensor", device_class="temperature"
+        )
+    ),
+    # (#152) Wirkungs-Kontrolle: die Entity, an der abzulesen ist,
+    # welchen Sollwert das GERAET faehrt — im Unterschied zu dem, den
+    # wir in die Steuer-Entity geschrieben haben. Reiner Lese-Slot,
+    # deshalb bewusst OHNE device_class-Filter: der gefahrene Sollwert
+    # kann eine Temperatur sein (Stiebel ISG:
+    # sensor.<wp>_target_temperature_water), aber genauso ein Modus
+    # (Select) oder eine Leistung — ein Temperatur-Filter wuerde die
+    # Nicht-Thermik-Typen aussperren.
+    CONF_ENTITY_EFFECTIVE_SETPOINT: selector.EntitySelector(
+        selector.EntitySelectorConfig(
+            domain=["sensor", "number", "input_number",
+                    "select", "input_select"]
         )
     ),
     # Phase 2b (2026-06-02): Write-Side Vorlauf-Setpoint. Bei
@@ -465,6 +480,22 @@ def _entity_field(key: str, defaults: dict[str, Any]) -> Any:
     return vol.Optional(key)
 
 
+def _with_effect_slot(control_schema, defaults: dict[str, Any]):
+    """(#152) Haengt den optionalen Wirkungs-Kontroll-Slot an JEDEN
+    Steuer-Abschnitt.
+
+    Bewusst hier und nicht in den Typ-Zweigen: die Frage „faehrt das
+    Geraet wirklich, was wir geschrieben haben" ist fuer alle
+    steuerbaren Typen dieselbe, also darf der Slot nicht davon abhaengen,
+    welcher Zweig den Abschnitt gebaut hat.
+    """
+    fields = dict(control_schema.schema)
+    fields[_entity_field(CONF_ENTITY_EFFECTIVE_SETPOINT, defaults)] = (
+        _ENTITY_SELECTORS[CONF_ENTITY_EFFECTIVE_SETPOINT]
+    )
+    return vol.Schema(fields)
+
+
 def _entities_schema(
     device_type: str,
     defaults: dict[str, Any] | None = None,
@@ -554,7 +585,7 @@ def _entities_schema(
                 _ENTITY_SELECTORS[CONF_ENTITY_WALLBOX_PHASE_MODE],
         })
         schema_dict[vol.Required("control_section")] = section(
-            control_schema, {"collapsed": False}
+            _with_effect_slot(control_schema, d), {"collapsed": False}
         )
     elif device_type == "battery":
         # Battery uses the 4-mode dispatch entity (typically a
@@ -568,7 +599,7 @@ def _entities_schema(
                 _ENTITY_SELECTORS[CONF_ENTITY_CHARGE_MODE],
         })
         schema_dict[vol.Required("control_section")] = section(
-            control_schema, {"collapsed": False}
+            _with_effect_slot(control_schema, d), {"collapsed": False}
         )
     elif device_type in {"heating", "warmwater", "aircon"}:
         # v3.0: Branch nach KonfigMode aus Step 1b.
@@ -662,7 +693,7 @@ def _entities_schema(
                 ] = _ENTITY_SELECTORS[CONF_ENTITY_VORLAUF_SETPOINT]
             control_schema = vol.Schema(control_fields)
         schema_dict[vol.Required("control_section")] = section(
-            control_schema, {"collapsed": False}
+            _with_effect_slot(control_schema, d), {"collapsed": False}
         )
     elif device_type in _CONTROLLABLE_TYPES:
         # generic: universeller entity_control. value_on/off im
@@ -671,7 +702,7 @@ def _entities_schema(
             _entity_field(CONF_ENTITY_CONTROL, d): _ENTITY_SELECTORS[CONF_ENTITY_CONTROL],
         })
         schema_dict[vol.Required("control_section")] = section(
-            control_schema, {"collapsed": False}
+            _with_effect_slot(control_schema, d), {"collapsed": False}
         )
 
     return vol.Schema(schema_dict)
