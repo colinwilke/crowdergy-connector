@@ -10,11 +10,14 @@ dort: Abschnitt „4 — Connector (HACS)" (der Backlog listet seit
 
 ## Repo-Regeln & getroffene Entscheidungen
 
-- **[GEBAUT 2026-08-29 (User colin, Stiebel-WP: „die im Connector
-  gesetzten 35 Grad AUS-Temperatur haelt die WP nicht"); Branch
-  `claude/wp-aus-ww-temperatur-override-zndgj2`, PR connector#50 (Draft),
-  Suite 298 gruen. Deploy-Reihenfolge: Backend (backend#168) ZUERST —
-  `TelemetryPatch` ist `extra="forbid"`.]
+- **[GEBAUT + GEMERGED + RELEASED v3.48.0 am 2026-08-29 (User colin,
+  Stiebel-WP: „die im Connector gesetzten 35 Grad AUS-Temperatur haelt
+  die WP nicht", Merge-/Deploy-Freigabe); PR connector#50 Squash
+  `cc6c9a6` → `main`, CI Run #160 gruen, Suite 298 gruen.
+  Deploy-Reihenfolge EINGEHALTEN: Backend (backend#167 Squash `e589a54`,
+  `deploy.yml` Run #137 health-gruen, mig `20260829_0001` applied) lief
+  ZUERST — `TelemetryPatch` ist `extra="forbid"`, ein Alt-Backend haette
+  die GANZE Payload 422t.]
   #152 Wirkungs-Kontrolle. Durable Regel: der Connector prueft, ob sein
   Wert IN DER ENTITY STEHT — das ist NICHT dasselbe wie „der Befehl
   wirkt". Beides muss getrennt geprueft und getrennt gemeldet werden.**
