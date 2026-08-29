@@ -90,6 +90,19 @@ Contribute-Flow; das Backend prüft das bewusst NICHT, s.u.):
   (modulierende WP). Pflicht ist also nur Leistung + Steuer-Entity
   (analog wallbox = kW + Lademodus).
 
+**Bei JEDEM steuerbaren Typ zusätzlich optional:
+`entity_effective_setpoint` (#152, 2026-08-29)** — die Entity, an der
+abzulesen ist, welchen Sollwert das GERÄT wirklich fährt. Der Connector
+prüft damit, ob sein Befehl überhaupt WIRKT: der geschriebene Wert kann
+korrekt in seiner Steuer-Entity stehen und trotzdem folgenlos bleiben,
+wenn das Gerät ein zweites Register führt (Wärmepumpe im
+Programmbetrieb: Komfort- vs. ECO-Sollwert, je nach Zeitfenster). Der
+Slot ist vendor-typisch und deshalb gut teilbar — Stiebel ISG exponiert
+ihn als `sensor.<wp>_target_temperature_water` bzw.
+`..._target_temperature_hk_1`. Nicht gemappt = kein Vergleich und keine
+Aussage; Geräte, die ihren gefahrenen Sollwert nicht exponieren, lassen
+ihn leer.
+
 kWh-Zähler bei battery/grid sind bewusst optional (nicht jede
 Integration exposed getrennte Lade-/Entlade-Zähler); Capabilities
 werden in Box-GUI/Picker angezeigt. Härter gaten = `required=True` in

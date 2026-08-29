@@ -54,6 +54,7 @@ from .const import (
     SSE_STALE_THRESHOLD_S,
     WRITE_BREAKER_MAX_PER_HOUR,
     is_temperature_control,
+    temperature_control_value,
 )
 from .preset_spec import PRESET_VALUE_SLOTS
 
@@ -666,6 +667,10 @@ class CommandDispatcherMixin:
                         "set_charge_mode: charge-current write FAILED "
                         "for %s: %s", current_entity, err,
                     )
+        # (#152) Auch der Lademodus ist ein kommandierter Zustand —
+        # gleiche Bezugsgroesse wie beim entity_control, damit die
+        # Wirkungs-Kontrolle fuer ALLE Geraetetypen dieselbe ist.
+        self.state.last_written_value[device_id] = str(mode)
         try:
             if domain in ("select", "input_select"):
                 await self.hass.services.async_call(
@@ -999,7 +1004,13 @@ class CommandDispatcherMixin:
         )
 
     def _clamp_write_value(
-        self, entity_id: str, domain: str, value: float
+        self,
+        entity_id: str,
+        domain: str,
+        value: float,
+        *,
+        warn: bool = True,
+        device_id: str | None = None,
     ) -> float:
         """(#135) Defense-in-depth: JEDER numerische Write wird gegen
         die Grenzen der ZIEL-Entity geklemmt (climate/water_heater:
@@ -1028,12 +1039,21 @@ class CommandDispatcherMixin:
         except (TypeError, ValueError):
             return value
         if clamped != value:
-            _LOGGER.warning(
-                "write clamp: %s commanded %.1f but entity limits are "
-                "[%s, %s] — writing %.1f instead. A clamp is always a "
-                "mapping/limit mismatch, check the device mapping.",
-                entity_id, value, lo_raw, hi_raw, clamped,
-            )
+            if warn:
+                _LOGGER.warning(
+                    "write clamp: %s commanded %.1f but entity limits are "
+                    "[%s, %s] — writing %.1f instead. A clamp is always a "
+                    "mapping/limit mismatch, check the device mapping.",
+                    entity_id, value, lo_raw, hi_raw, clamped,
+                )
+            # (#152) Ein Clamp ist ein KONFIGURATIONSFEHLER, kein
+            # Betriebszustand: der kommandierte Wert kann das Geraet nie
+            # erreichen. Bisher stand das nur in einer Log-Zeile, die
+            # niemand liest — jetzt geht es als Zustand ans Backend.
+            if device_id is not None:
+                self.state.value_rejected_devices[device_id] = time.time()
+        elif device_id is not None:
+            self.state.value_rejected_devices.pop(device_id, None)
         return clamped
 
     async def _apply_device_state(self, device_id: str, on: bool) -> None:
@@ -1096,7 +1116,9 @@ class CommandDispatcherMixin:
         # redundante Service-Calls, aber Split-AC's piepen bei jedem
         # set_hvac_mode-Call. Drift-Repair übernimmt der Hold-Loop nach
         # HOLD_INITIAL_DELAY falls actual doch noch != expected ist.
-        expected = self._expected_state_value(raw_value, on, domain)
+        expected = self._expected_state_value(
+            raw_value, on, domain, entity_id,
+        )
         actual = self._control_actual_state(entity_id, domain, raw_value)
         if expected is not None and self._states_match(actual, expected, domain):
             self._start_hold(device_id, entity_id, raw_value, domain, on)
@@ -1477,6 +1499,13 @@ class CommandDispatcherMixin:
             device_id, entity_id
         ):
             return
+        if device_id is not None:
+            # (#152) Merken, was wir WIRKLICH kommandiert haben (nach
+            # Clamp) — Bezugsgroesse fuer den Wirkungs-Vergleich gegen
+            # den vom Geraet gefahrenen Sollwert.
+            self.state.last_written_value[device_id] = (
+                self._expected_state_value(raw_value, on, domain, entity_id)
+            )
         try:
             if domain in ("switch", "input_boolean", "light", "fan"):
                 # Bool-style entities: on/off is implicit (turn_on /
@@ -1510,7 +1539,8 @@ class CommandDispatcherMixin:
                      # Config-Flow begrenzt nur die EINGABE, nicht was
                      # berechnet/konfiguriert ankommt.
                      "value": self._clamp_write_value(
-                         entity_id, domain, float(raw_value)
+                         entity_id, domain, float(raw_value),
+                         device_id=device_id,
                      )},
                     blocking=True,
                 )
@@ -1534,7 +1564,8 @@ class CommandDispatcherMixin:
                          # (#135) min_temp/max_temp der Entity gewinnen
                          # über den konfigurierten Zielwert.
                          "temperature": self._clamp_write_value(
-                             entity_id, domain, float(raw_value)
+                             entity_id, domain, float(raw_value),
+                             device_id=device_id,
                          )},
                         blocking=True,
                     )
@@ -1657,6 +1688,10 @@ class CommandDispatcherMixin:
             # eines entfernten Geräts nicht weiterschleppen.
             self.state.write_breaker_devices,
             self.state.local_override_until,
+            # (#152) Wirkungs-Kontrolle
+            self.state.last_written_value,
+            self.state.value_rejected_devices,
+            self.state.effective_mismatch_since,
             self._prev_energy_kwh,
             self._prev_energy_kwh_discharged,
             self._last_sent_payload,
@@ -1716,7 +1751,9 @@ class CommandDispatcherMixin:
                         device_id, staleness, SSE_STALE_THRESHOLD_S,
                     )
                     return
-                expected = self._expected_state_value(raw_value, on, domain)
+                expected = self._expected_state_value(
+                    raw_value, on, domain, entity_id,
+                )
                 actual = self._control_actual_state(entity_id, domain, raw_value)
                 if (
                     hold_mode == ENTITY_CONTROL_HOLD_AUTO
@@ -1793,7 +1830,11 @@ class CommandDispatcherMixin:
         return str(actual) == str(expected)
 
     def _expected_state_value(
-        self, raw_value: Any, on: bool, domain: str
+        self,
+        raw_value: Any,
+        on: bool,
+        domain: str,
+        entity_id: str | None = None,
     ) -> str | None:
         """Normalise the value we'd compare an entity's current state
         against. Returns a string (HA states are strings), or None when we
@@ -1804,6 +1845,27 @@ class CommandDispatcherMixin:
             return "on" if on else "off"
         if raw_value in ("", None):
             return None
+        # (#152) Verglichen wird gegen den Wert, den wir WIRKLICH
+        # schreiben — der #135-Clamp zieht ihn ggf. an die Grenzen der
+        # Entity. Ohne das ist ein konfigurierter Wert ausserhalb des
+        # Bereichs eine Dauer-Scheindrift: die Entity haelt korrekt den
+        # geklemmten Wert, der Vergleich erwartet den konfigurierten,
+        # und der AUTO-Hold deutet die EIGENE Klemmung als
+        # Nutzer-Eingriff (#140) und legt das Geraet 2 h still.
+        # (Feld colin 2026-08-29: Heizung value 35 gegen Entity-max 30.)
+        if entity_id:
+            numeric = None
+            if domain in ("number", "input_number"):
+                try:
+                    numeric = float(raw_value)
+                except (TypeError, ValueError):
+                    numeric = None
+            elif is_temperature_control(domain, raw_value):
+                numeric = temperature_control_value(raw_value)
+            if numeric is not None:
+                return str(self._clamp_write_value(
+                    entity_id, domain, numeric, warn=False,
+                ))
         return str(raw_value)
 
     def _read_current_state(self, entity_id: str) -> str | None:

@@ -365,6 +365,36 @@ CONF_ENTITY_VORLAUF_TEMP = "entity_vorlauf_temp_c"
 # stillschweigend ignoriert (User kann später nachpflegen).
 CONF_ENTITY_VORLAUF_SETPOINT = "entity_vorlauf_setpoint_c"
 
+# ── Wirkungs-Kontrolle (#152, 2026-08-29) ────────────────────────────
+# Optionaler Read-Slot für ALLE steuerbaren Typen: die Entity, an der
+# abzulesen ist, welchen Sollwert das GERÄT tatsächlich fährt — im
+# Unterschied zu dem Wert, den wir in die Steuer-Entity geschrieben
+# haben. Die beiden sind nicht dasselbe: eine Stiebel-WP im
+# Programmbetrieb hält je nach Zeitfenster den Komfort- ODER den
+# ECO-Sollwert und ignoriert den jeweils anderen; Crowdergy schreibt
+# aber nur den einen. Der geschriebene Wert steht dann brav in seiner
+# Entity, das Gerät fährt einen anderen — und ohne diesen Slot merkt
+# das niemand (Feld colin 2026-08-29: Komfort-WW 35 geschrieben, WP
+# fuhr durchgehend ECO 49,5).
+#
+# Beispiele Stiebel ISG: sensor.<wp>_target_temperature_water (WW),
+# sensor.<wp>_target_temperature_hk_1 (Heizkreis). Leer = kein
+# Vergleich, kein Zustand — das ist der Normalfall bei Geräten, die
+# ihren gefahrenen Sollwert nicht exponieren.
+CONF_ENTITY_EFFECTIVE_SETPOINT = "entity_effective_setpoint"
+
+# Toleranz des Vergleichs (K bzw. Einheit der Entity). Deckt Rundung
+# (0,5-K-Raster) und Anzeige-Quantisierung ab, ohne einen echten
+# Registerwechsel zu verschlucken.
+CONTROL_EFFECT_TOLERANCE = 0.6
+# Erst nach dieser Zeit gilt eine Abweichung als Befund. Ein Gerät darf
+# rampen, nachlaufen und seinen Wert verzögert übernehmen — gemeldet
+# wird nur, was sich NICHT von selbst auflöst.
+CONTROL_EFFECT_MIN_MISMATCH_S = 900.0
+# Karenz nach einem eigenen Write: davor wird gar nicht verglichen
+# (die Übernahme durch Integration + Gerät braucht ein paar Sekunden).
+CONTROL_EFFECT_SETTLE_S = 120.0
+
 # ── Hausverbrauchs-Flow-Sensoren (CN-#42, 2026-06-15) ─────────────────
 # „House Consumption decomposed by source" — drei optionale Live-Power-
 # Sensoren (W ≥0), die der Vendor (Kostal/Fronius/SMA-Hybrid) direkt
@@ -536,6 +566,12 @@ _SETPOINT_DOMAINS = frozenset({"climate", "number", "input_number"})
 _SELECT_DOMAINS = frozenset({"select", "input_select"})
 # Battery-Power-Setpoint: Number-artig.
 _NUMBER_DOMAINS = frozenset({"number", "input_number"})
+# (#152) Wirkungs-Kontrolle: der gefahrene Sollwert kann als Sensor
+# (Stiebel ISG), als Number oder als Select (Modus-artige Geraete)
+# vorliegen. Reiner Lese-Slot.
+_EFFECTIVE_DOMAINS = frozenset({
+    "sensor", "number", "input_number", "select", "input_select",
+})
 
 # Slot-Key → erlaubte HA-Domains. Default-DENY: ein Slot, der hier nicht
 # steht, wird im box_add_device abgelehnt (kein stilles Durchwinken
@@ -571,6 +607,9 @@ MAPPABLE_ENTITY_DOMAINS: dict[str, frozenset[str]] = {
     CONF_ENTITY_BATTERY_MODE: _SELECT_DOMAINS,
     CONF_ENTITY_BATTERY_POWER_SETPOINT: _NUMBER_DOMAINS,
     CONF_ENTITY_VORLAUF_SETPOINT: _SETPOINT_DOMAINS,
+    # (#152) Wirkungs-Kontrolle: reiner LESE-Slot — der gefahrene
+    # Sollwert wird nur verglichen, nie geschrieben.
+    CONF_ENTITY_EFFECTIVE_SETPOINT: _EFFECTIVE_DOMAINS,
     # Climate-first Form-Felder: collapsen beim Speichern auf
     # entity_control, dürfen aber als Roh-Mapping-Ziel rein.
     CONF_ENTITY_CLIMATE: frozenset({"climate"}),

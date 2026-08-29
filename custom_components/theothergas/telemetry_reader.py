@@ -22,12 +22,14 @@ import time
 from typing import Any
 
 from .const import (
+    CONF_DEVICE_ID,
     CONF_DEVICE_TYPE,
     CONF_ENTITY_CLIMATE,
     CONF_ENTITY_CHARGE_MODE,
     CONF_ENTITY_CONTROL,
     CONF_ENTITY_COOL_CONTROL,
     CONF_ENTITY_CURRENT_TEMP,
+    CONF_ENTITY_EFFECTIVE_SETPOINT,
     CONF_ENTITY_ENERGY_DISCHARGED_TOTAL,
     CONF_ENTITY_ENERGY_TOTAL,
     CONF_ENTITY_HC_BATTERY_POWER,
@@ -47,6 +49,9 @@ from .const import (
     CONF_VEHICLE_STATUS_VALUE_ERROR,
     CONF_VEHICLE_STATUS_VALUE_PLUGGED,
     CONF_VEHICLE_STATUS_VALUE_UNPLUGGED,
+    CONTROL_EFFECT_MIN_MISMATCH_S,
+    CONTROL_EFFECT_TOLERANCE,
+    CONTROLLABLE_TYPES,
     is_temperature_control,
     temperature_control_value,
 )
@@ -147,6 +152,11 @@ _PREFETCH_SLOT_KEYS: tuple[str, ...] = (
     CONF_ENTITY_ENERGY_DISCHARGED_TOTAL,
     CONF_ENTITY_CONTROL,
     CONF_ENTITY_COOL_CONTROL,
+    # (#152) Wirkungs-Kontrolle: der gefahrene Sollwert wird je Tick
+    # einmal gelesen. Bewusst NICHT in _MEASUREMENT_SLOT_KEYS — er
+    # sagt etwas ueber die Steuerung, nichts darueber, ob das Geraet
+    # noch misst (gleiche Trennung wie bei den Steuer-Slots, #151).
+    CONF_ENTITY_EFFECTIVE_SETPOINT,
 )
 
 # Die TEILMENGE davon, die eine MESSUNG ist (#151). Steuer-Slots
@@ -306,6 +316,71 @@ class TelemetryReaderMixin:
         keine kryptografische Eigenschaft."""
         return hash(json.dumps(payload, sort_keys=True, default=str))
 
+    def _clamped_target(
+        self, entity_id: str, domain: str, raw_value: Any
+    ) -> float | None:
+        """(#152) Konfigurierter Schaltwert als Zahl, geklemmt an die
+        Grenzen der Ziel-Entity — also der Wert, der dort wirklich
+        ankommen kann. None fuer nicht-numerische Werte (Modus-Strings,
+        die laufen unveraendert in den String-Vergleich). Spiegelt
+        `_write_entity_control`: die beiden MUESSEN dieselbe Zahl
+        liefern, sonst liest der Ist-Zustand dauerhaft falsch."""
+        numeric = temperature_control_value(raw_value)
+        if numeric is None:
+            return None
+        return self._clamp_write_value(entity_id, domain, numeric, warn=False)
+
+    def _effective_setpoint_mismatch(self, dev: dict[str, Any]) -> bool:
+        """(#152) Faehrt das Geraet den Wert, den wir geschrieben haben?
+
+        Der Connector prueft bisher nur, ob sein Wert IN DER ENTITY
+        steht — nicht, ob das Geraet ihn auch FAEHRT. Das sind zwei
+        verschiedene Dinge: eine Stiebel-WP im Programmbetrieb haelt je
+        nach Zeitfenster den Komfort- ODER den ECO-Sollwert und
+        ignoriert den jeweils anderen. Crowdergy schreibt nur den einen;
+        er steht brav in seiner Entity und ist trotzdem wirkungslos
+        (Feld colin 2026-08-29: Komfort-WW auf 35 geschrieben, die WP
+        fuhr durchgehend ECO 49,5, der Tank wurde nie abgesenkt).
+
+        Vergleicht `last_written_value` (was wir zuletzt kommandiert
+        haben, nach Clamp) gegen die optionale
+        `entity_effective_setpoint` (was das Geraet fuehrt). Kein
+        gemappter Slot / noch nie kommandiert / Entity unlesbar =>
+        keine Aussage, nie geraten.
+
+        True erst, wenn die Abweichung CONTROL_EFFECT_MIN_MISMATCH_S
+        ANHAELT — ein Geraet darf rampen und verzoegert uebernehmen;
+        gemeldet wird nur, was sich nicht von selbst aufloest.
+        """
+        device_id = dev.get(CONF_DEVICE_ID, "")
+        if not device_id or dev.get(CONF_DEVICE_TYPE) not in CONTROLLABLE_TYPES:
+            return False
+        entity_id = dev.get(CONF_ENTITY_EFFECTIVE_SETPOINT, "") or ""
+        written = self.state.last_written_value.get(device_id)
+        if not entity_id or written is None:
+            self.state.effective_mismatch_since.pop(device_id, None)
+            return False
+        state = self._get_state(entity_id)
+        if state is None or state.state in ("unknown", "unavailable"):
+            # Kein Messwert = keine Aussage. Die Uhr NICHT weiterlaufen
+            # lassen — sonst meldet ein toter Sensor einen Steuerfehler.
+            self.state.effective_mismatch_since.pop(device_id, None)
+            return False
+
+        actual_num = temperature_control_value(state.state)
+        written_num = temperature_control_value(written)
+        if actual_num is not None and written_num is not None:
+            differs = abs(actual_num - written_num) > CONTROL_EFFECT_TOLERANCE
+        else:
+            differs = str(state.state).strip() != str(written).strip()
+
+        now = time.time()
+        if not differs:
+            self.state.effective_mismatch_since.pop(device_id, None)
+            return False
+        since = self.state.effective_mismatch_since.setdefault(device_id, now)
+        return (now - since) >= CONTROL_EFFECT_MIN_MISMATCH_S
+
     def _should_send(self, device_id: str, payload: dict[str, Any]) -> bool:
         """Decide whether the just-computed payload differs enough
         from the last sent one to be worth a new telemetry row.
@@ -351,8 +426,12 @@ class TelemetryReaderMixin:
         # `is_online` gehört hier her (#151): der Flip auf "keine Daten"
         # und zurück ist immer eine Row wert — er ist die Aussage, an
         # der die App entscheidet, ob sie eine Zahl noch zeigen darf.
+        # (#152) Die Wirkungs-Flags sind ebenfalls Zustands-Flips:
+        # Eintreten und Aufloesen sind je eine Row wert, sonst haengt
+        # die Meldung in der App bis zum 10-min-Hard-Ceiling.
         for key in (
             "vehicle_status", "charge_mode", "is_on", "cool_on", "is_online",
+            "control_value_rejected", "control_ineffective",
         ):
             if payload.get(key) != prev.get(key):
                 return True
@@ -551,8 +630,20 @@ class TelemetryReaderMixin:
             )
             if target is None:
                 return None
-            t_on = temperature_control_value(value_on)
-            t_off = temperature_control_value(value_off)
+            # (#152) Gegen den geklemmten Wert vergleichen — das ist
+            # der, den die Entity annehmen KONNTE. Sonst liest ein
+            # konfigurierter Wert ausserhalb des Entity-Bereichs
+            # dauerhaft als "dritter Wert", und wir melden is_on=None,
+            # obwohl wir sehr wohl in dem Zustand sind, den wir
+            # kommandieren konnten.
+            t_on = self._clamped_target(entity_id, domain, value_on)
+            t_off = self._clamped_target(entity_id, domain, value_off)
+            if t_on is not None and t_off is not None and t_on == t_off:
+                # (#152) Beide Werte klemmen auf dieselbe Zahl (beide
+                # ausserhalb des Entity-Bereichs, gleiche Seite) — AN
+                # und AUS sind dann nicht mehr unterscheidbar. Keine
+                # Aussage; WARUM, sagt `control_value_rejected`.
+                return None
             if t_on is not None and target == t_on:
                 return True
             if t_off is not None and target == t_off:
@@ -563,12 +654,26 @@ class TelemetryReaderMixin:
             if target in ("", None):
                 return False
             if domain in ("number", "input_number"):
+                # (#152) wie oben: verglichen wird gegen den geklemmten
+                # Wert, den die Entity annehmen konnte.
+                clamped = self._clamped_target(entity_id, domain, target)
                 try:
-                    return float(raw_state) == float(target)
+                    return float(raw_state) == (
+                        clamped if clamped is not None else float(target)
+                    )
                 except (TypeError, ValueError):
                     return False
             return raw_state == str(target)
 
+        # (#152) Kollaps-Guard, siehe Temperatur-Zweig oben.
+        on_clamped = self._clamped_target(entity_id, domain, value_on)
+        off_clamped = self._clamped_target(entity_id, domain, value_off)
+        if (
+            on_clamped is not None
+            and off_clamped is not None
+            and on_clamped == off_clamped
+        ):
+            return None
         if _matches(value_on):
             return True
         if _matches(value_off):
@@ -619,8 +724,13 @@ class TelemetryReaderMixin:
             if target in ("", None):
                 return False
             if domain in ("number", "input_number"):
+                # (#152) wie oben: verglichen wird gegen den geklemmten
+                # Wert, den die Entity annehmen konnte.
+                clamped = self._clamped_target(entity_id, domain, target)
                 try:
-                    return float(raw_state) == float(target)
+                    return float(raw_state) == (
+                        clamped if clamped is not None else float(target)
+                    )
                 except (TypeError, ValueError):
                     return False
             return raw_state == str(target)

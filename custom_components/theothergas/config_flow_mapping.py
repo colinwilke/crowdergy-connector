@@ -28,6 +28,7 @@ from .const import (
     CONF_ENTITY_SOC,
     CONF_ENTITY_VEHICLE_STATUS,
     CONF_ENTITY_CURRENT_TEMP,
+    CONF_ENTITY_EFFECTIVE_SETPOINT,
     CONF_ENTITY_VORLAUF_SETPOINT,
     CONF_ENTITY_VORLAUF_TEMP,
     CONF_ENTITY_ENERGY_TOTAL,
@@ -195,6 +196,12 @@ def _build_device_record(
         CONF_ENTITY_VORLAUF_TEMP: entity_input.get(CONF_ENTITY_VORLAUF_TEMP, ""),
         CONF_ENTITY_VORLAUF_SETPOINT: entity_input.get(
             CONF_ENTITY_VORLAUF_SETPOINT, ""
+        ),
+        # (#152) Wirkungs-Kontroll-Slot. Ohne diesen Eintrag wuerde das
+        # Feld beim Submit STILL verworfen — genau die v3.28.0/v3.33.x-
+        # Falle ("Schema ergaenzt, Persistenz vergessen").
+        CONF_ENTITY_EFFECTIVE_SETPOINT: entity_input.get(
+            CONF_ENTITY_EFFECTIVE_SETPOINT, ""
         ),
         CONF_ENTITY_ENERGY_TOTAL: entity_input.get(CONF_ENTITY_ENERGY_TOTAL, ""),
         CONF_ENTITY_ENERGY_DISCHARGED_TOTAL: entity_input.get(
