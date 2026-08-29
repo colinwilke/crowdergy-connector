@@ -643,7 +643,15 @@ dort: Abschnitt „4 — Connector (HACS)" (der Backlog listet seit
   Feature-Branches (sonst Versions-Kollision: mehrere Branches belegen
   dieselbe Nummer für verschiedene Arbeit). GitHub-Release via
   `tag-release.yml` bzw. User; vor dem Taggen prüfen, ob der Tag auf
-  origin schon belegt ist. Aktuelle Version: `manifest.json`; Release-
+  origin schon belegt ist.
+  **⚠️ `tag-release.yml` braucht den VOLLEN 40-Zeichen-SHA im
+  `sha`-Input (oder gar keinen — dann nimmt es HEAD des Refs).** Mit
+  einer abgekürzten SHA scheitert schon `actions/checkout`: es
+  behandelt den Wert als REF-Namen und fetcht `refs/heads/<sha>*` /
+  `refs/tags/<sha>*`, findet nichts, und der Tag-Schritt wird
+  **still geskippt** — der Run ist rot, aber es entsteht weder Tag
+  noch Release, also auch nichts aufzuräumen. Zuletzt Run #41
+  (v3.48.0); dieselbe Signatur trägt die Run-Historie bei #35 und #39. Aktuelle Version: `manifest.json`; Release-
   „Stand": SSOT `crowdergy-ios/CLAUDE.md`.
 - **Public-Repo-Disziplin:** Dieses Repo ist public (HACS =
   Contribute-Kanal für den Crowd-Preset-Store). Hier liegt nur das
