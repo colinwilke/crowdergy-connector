@@ -8,6 +8,7 @@ laden wir hier jede ausgelieferte JSON-Datei und parsen sie hart.
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 
 import pytest
@@ -74,3 +75,36 @@ def test_translation_keys_cover_strings(lang: str) -> None:
     target = _flatten(json.loads((TRANSLATIONS_DIR / f"{lang}.json").read_text("utf-8")))
     missing = sorted(set(source) - set(target))
     assert not missing, f"{lang}.json fehlen {len(missing)} Keys aus strings.json: {missing[:15]}"
+
+
+_ANGLE_PLACEHOLDER = re.compile(r"<[A-Za-z][A-Za-z0-9_-]*>")
+
+_UI_STRING_FILES = [INTEGRATION_DIR / "strings.json"] + sorted(
+    TRANSLATIONS_DIR.glob("*.json")
+)
+
+
+@pytest.mark.parametrize(
+    "path", _UI_STRING_FILES, ids=lambda p: str(p.relative_to(INTEGRATION_DIR))
+)
+def test_no_angle_bracket_placeholders(path: Path) -> None:
+    """Kein UI-Text darf einen `<platzhalter>` enthalten.
+
+    HA rendert Step-Beschreibungen und Feld-Hilfetexte als Markdown, also
+    als HTML: der Browser liest `sensor.<wp>_target_temperature_water` als
+    unbekanntes Tag `<wp>` und der Sanitizer wirft es weg — übrig bleibt
+    `sensor._target_temperature_water`, ein Beispiel, das niemandem hilft.
+    Das ist in v3.48.0 genau so ausgeliefert worden (#152).
+
+    Platzhalter deshalb ausschreiben (`sensor.warmepumpe_…`) und dazusagen,
+    dass vorn der eigene Gerätename steht — nie in spitzen Klammern.
+    """
+    offenders = [
+        f"{key}: {value}"
+        for key, value in _flatten(json.loads(path.read_text("utf-8"))).items()
+        if isinstance(value, str) and _ANGLE_PLACEHOLDER.search(value)
+    ]
+    assert not offenders, (
+        f"{path.relative_to(INTEGRATION_DIR)}: spitze Klammern werden beim "
+        f"Markdown-Rendern verschluckt — {offenders}"
+    )
