@@ -10,7 +10,11 @@ dort: Abschnitt „4 — Connector (HACS)" (der Backlog listet seit
 
 ## Repo-Regeln & getroffene Entscheidungen
 
-- **[GEBAUT + GEMERGED + RELEASED v3.48.0 am 2026-08-29 (User colin,
+- **[GEBAUT + GEMERGED + RELEASED v3.48.0 am 2026-08-29, Text-Nachzug
+  v3.48.1 am 2026-08-30 (PR connector#51 Squash `0d62be1`, Release-Commit
+  `be9a45c`, Tag+Release via `tag-release.yml`; der Platzhalter im
+  Hilfetext stand in spitzen Klammern und wurde von HAs Markdown-Rendering
+  verschluckt — Regel + Guard im Test-Abschnitt) (User colin,
   Stiebel-WP: „die im Connector gesetzten 35 Grad AUS-Temperatur haelt
   die WP nicht", Merge-/Deploy-Freigabe); PR connector#50 Squash
   `cc6c9a6` → `main`, CI Run #160 gruen, Suite 298 gruen.
@@ -700,6 +704,21 @@ gleich zu `strings.json`. `tests/test_json_assets.py` erzwingt jetzt:
 `en.json` existiert + `en`/`de` decken die `strings.json`-Keys VOLL.
 **Regel: `strings.json`-Touch ⇒ IMMER `translations/en.json` UND `de.json`
 mitziehen (der Guard fängt es, aber vor dem Push dran denken).**
+
+**Keine spitzen Klammern in UI-Texten (Lektion v3.48.0 → v3.48.1):** HA
+rendert Step-Beschreibungen UND Feld-Hilfetexte als Markdown, also als
+HTML. Ein Platzhalter wie `sensor.<wp>_target_temperature_water` wird vom
+Browser als unbekanntes Tag `<wp>` gelesen und vom Sanitizer entfernt —
+im Feld steht dann `sensor._target_temperature_water`, ein Beispiel, das
+niemandem hilft. In v3.48.0 waren das die einzigen drei Platzhalter dieser
+Form im ganzen ausgelieferten Textbestand, und alle drei kamen aus
+demselben Feature. **Regel: Platzhalter ausschreiben (`sensor.warmepumpe_…`)
+und dazusagen, dass vorn der eigene Gerätename steht.** Guard:
+`test_json_assets.test_no_angle_bracket_placeholders` verbietet
+`<irgendwas>` in JEDEM ausgelieferten UI-String. _Nebenbefund mit
+Beleg-Charakter: dieselbe Sanitisierung frisst die Klammern auch in einer
+PR-Beschreibung auf GitHub — wer den Fehler dort beschreibt, muss
+`&lt;wp&gt;` schreiben._
 
 ## Agent-Ownership (Interferenz-Schutz, User-Vorgabe 2026-06-10)
 
