@@ -2,9 +2,10 @@
 
 HACS Custom-Component (Domain `theothergas`, Legacy-Name) für Home
 Assistant: spiegelt Backend-Dispatch in HA-Entities und pusht
-Telemetrie zurück. Regeln/Stolpersteine: `CLAUDE.md` hier; Backlog,
-Versions-/Release-„Stand": `crowdergy-ios/CLAUDE.md` (SSOT). Aktuelle
-Version: `manifest.json`.
+Telemetrie zurück. Regeln/Stolpersteine: `CLAUDE.md`; offene Punkte:
+GitHub Issues in `colinwilke/crowdergy-backend` (Label `04 Connector`).
+Aktuelle Version: `manifest.json`, Historie: `docs/releases/`. Diese
+Datei ist Ist-Zustand, kein Changelog.
 
 ## Modul-Struktur (`custom_components/theothergas/`)
 
@@ -196,8 +197,8 @@ Token-Ablauf UND reaktiv bei 401 (retry einmal).
 
 ## Tests (`tests/`)
 
-pytest, Python ≥ 3.12. **CI `test.yml` läuft auf push→main + PRs**
-(`cache-dependency-path: requirements-test.txt`); die zwei
+pytest, Python ≥ 3.12. **CI `test.yml` läuft auf PRs + nächtlichem
+Backstop** (`cache-dependency-path: requirements-test.txt`); die zwei
 aiodns-Drift-Tests `test_sse_client::test_start_is_idempotent` +
 `test_stop_cancels_running_task` werden in CI deterministisch
 deselektiert (siehe `CLAUDE.md`). Pure-Logic-Unit-Tests:
@@ -207,13 +208,15 @@ deselektiert (siehe `CLAUDE.md`). Pure-Logic-Unit-Tests:
 `test_connector_pairing_alias` (/connector/* = /box/*-Alias),
 `test_json_assets` (hard-parst jede ausgelieferte `*.json` —
 Regressions-Guard nach dem v3.33.1-`de.json`-Crash, s.u.).
-Coordinator-/Full-Flow-Integration offen (Backlog Cluster C).
+Full-Flow-Integration: `test_async_update_data_roundtrip.py`,
+`test_hold_loops_and_eviction.py`, `test_safety_bundle.py`.
 
 ## Offene Punkte
 
-→ Backlog Cluster C in `crowdergy-ios/CLAUDE.md` (SSOT; hier bewusst nicht
-re-listet). Bekannte Architektur-Eigenschaft (kein Backlog-Item):
-Refresh-Tokens liegen im Klartext in `config_entries` (HA-Standard).
+→ GitHub Issues in `colinwilke/crowdergy-backend`, Label `04 Connector`
+(Epic #190 Launch-Reife, #173 Geräte-Abdeckung). Bekannte
+Architektur-Eigenschaft (kein Issue): Refresh-Tokens liegen im Klartext in
+`config_entries` (HA-Standard).
 
 ## Abhängigkeiten / Plattform
 
