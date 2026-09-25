@@ -79,8 +79,9 @@ cost_eur = Σ_grid (import_kWh × slot_tariff(grid))
   bucket. **Export is not credited** in v1 — a pure-export slot costs 0
   (it still renders, with the grid's tariff as a continuous price line).
 - **slot_tariff(grid)** reuses the same sources the solver bills against:
-  - `tibber_realized` — the grid is in Tibber mode → the realized hourly
-    Tibber price for that slot (`get_tibber_today_prices`, the elapsed
+  - `tibber_realized` — the grid is in Tibber mode → the realized
+    quarter-hour Tibber price for that slot (an `hourly` slot gets the
+    mean of its four quarters) (`get_tibber_today_prices`, the elapsed
     half of today's curve, not the forward solver curve).
   - `flat` — the grid's `import_tariff_fixed_eur_per_kwh` (or the BDEW
     default 0.30 €/kWh when unset).
