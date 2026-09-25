@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "hass": {
+      "type": "stdio",
+      "command": "bash",
+      "args": ["scripts/hass-mcp.sh"]
+    }
+  }
+}

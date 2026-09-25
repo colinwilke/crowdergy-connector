@@ -85,6 +85,12 @@ Kuration bleiben im Backend, Box-Know-how im privaten Box-Repo.
   curl -H "Authorization: Bearer $HA_TOKEN" "$HA_URL/api/states/sensor.X"`.
   Der User betreibt `modbus.write_register` selbst (Hub `KWR`); der
   Connector schreibt nur in HA-Helper/Entities.
+- **HA per MCP (nur Mac/LAN):** `.mcp.json` startet `scripts/hass-mcp.sh`
+  (`uvx hass-mcp`, Pin `HASS_MCP_VERSION`, liest dieselbe `ha.env`) —
+  Zustände, Service-Calls, Automationen, Dashboards, History, Fehler-Log;
+  keine Config-Flows/Helfer-Anlage. Für alle Repos:
+  `scripts/hass-mcp.sh --register-user`. Remote-Sessions sehen kein LAN
+  und starten keine stdio-Server. Token nie ins Repo.
 
 ## Harte Regeln
 
