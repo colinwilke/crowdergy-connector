@@ -363,6 +363,20 @@ class TelemetryComposer:
             self.coord.state.cool_state[device_id] = bk_cool
 
             if not bk_active:
+                if local_active is True:
+                    # Der `is_active=False`-Frame ist nie angekommen
+                    # (Not-Aus / AI-aus bei getrennter SSE): die
+                    # Übergabe hier nachholen — sonst schriebe der
+                    # Charge-Mode-Hold den letzten AI-Befehl weiter.
+                    _LOGGER.warning(
+                        "state-resync: %s is_active drifted True→False "
+                        "(missed frame) — running AI-off handover",
+                        device_id,
+                    )
+                    self.coord._sync_field_into_data(
+                        device_id, "is_active", False,
+                    )
+                    await self.coord._handover_ai_off(device_id)
                 continue
             if local_on is not None and local_on != bk_on:
                 _LOGGER.warning(

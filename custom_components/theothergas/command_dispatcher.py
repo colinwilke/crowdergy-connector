@@ -256,61 +256,7 @@ class CommandDispatcherMixin:
                         desired_on = bool(self.state.on_state.get(device_id, False))
                         await self._apply_device_state(device_id, desired_on)
                     else:
-                        # Crowdergize off → schreibe einen sicheren
-                        # Default-State, statt den letzten AI-Zustand
-                        # hängen zu lassen. User-Erwartung 2026-05-30:
-                        # SG-Ready bleibt nicht auf „Erhöht", Batterie
-                        # nicht auf force-charge. Wallbox-Spezialpfad
-                        # (snapshot/restore) lief schon oben.
-                        dev = next(
-                            (d for d in self.devices
-                             if d.get(CONF_DEVICE_ID) == device_id),
-                            None,
-                        )
-                        dev_type = (dev or {}).get(CONF_DEVICE_TYPE, "")
-                        if dev_type == "battery":
-                            # v3.8.0 (2026-06-02) AI-off Battery-Übergabe:
-                            # Lademodus auf "Passiv" schreiben → HA-
-                            # Automation lässt den Setpoint los, WR
-                            # übernimmt PV-Native-Priority.
-                            self._cancel_charge_mode_hold(device_id)
-                            await self._apply_battery_setpoint(
-                                device_id, "passive", 0.0,
-                            )
-                        elif dev_type == "wallbox":
-                            # AI-OFF-Cleanup für die Wallbox: nur den
-                            # Charge-Mode-Hold-Loop abräumen, damit der
-                            # User die Wallbox manuell übernehmen kann.
-                            # Der Solver-Lademodus wird NICHT auf einen
-                            # früheren Wert zurückgesetzt (E-2 / XR-1,
-                            # 2026-06-11: der Restore-Pfad ist tot —
-                            # Backend sendet `charge_mode_value_crowdergy`
-                            # seit 2026-06-03 nicht mehr).
-                            self._cancel_charge_mode_hold(device_id)
-                        elif dev_type in ("heating", "warmwater", "aircon", "generic"):
-                            # entity_control auf value_off — sorgt
-                            # dafür dass das Gerät definitiv stoppt.
-                            # _apply_device_state startet danach den
-                            # hold-loop; den wollen wir hier NICHT
-                            # → direkt nach dem write die hold-loop
-                            # canceln (siehe unten).
-                            await self._apply_device_state(device_id, False)
-                            # Cooling-side auf off bringen falls cool_on
-                            # war (SG-Ready / climate / dedizierter
-                            # Kühl-Switch — alle drei Pfade über
-                            # _apply_cool_state).
-                            try:
-                                await self._apply_cool_state(device_id, False)
-                            except Exception:
-                                # Cool-state ist optional; nicht
-                                # blockieren wenn Helper bei diesem
-                                # device nichts schreiben kann.
-                                pass
-                        # Cancel hold-loop NACH dem explicit write,
-                        # sodass der letzte write das Letzte ist was
-                        # wir auf das entity_control schreiben — danach
-                        # ist das Gerät dem User überlassen.
-                        self._cancel_hold(device_id)
+                        await self._handover_ai_off(device_id)
             # v3.6.4: cool_on VOR is_on verarbeiten — `_cool_state`
             # muss gesetzt sein bevor `_apply_device_state(False)` läuft,
             # sonst sieht der Skip-Guard auf der heat-side `_cool_state`
@@ -733,6 +679,68 @@ class CommandDispatcherMixin:
             self._charge_mode_hold_loop(device_id),
             name=f"theothergas_charge_mode_hold_{device_id}",
         )
+
+    async def _handover_ai_off(self, device_id: str) -> None:
+        """AI-Off-Übergabe (Crowdergize an → aus): sicheren Default
+        schreiben und alle Holds abräumen, danach gehört das Gerät dem
+        User. Gerufen vom `is_active=False`-Frame UND vom State-Resync,
+        wenn der Frame verloren ging (Not-Aus bei getrennter SSE) —
+        sonst schriebe der Charge-Mode-Hold den letzten AI-Befehl weiter."""
+        # Crowdergize off → schreibe einen sicheren
+        # Default-State, statt den letzten AI-Zustand
+        # hängen zu lassen. User-Erwartung 2026-05-30:
+        # SG-Ready bleibt nicht auf „Erhöht", Batterie
+        # nicht auf force-charge. Wallbox-Spezialpfad
+        # (snapshot/restore) lief schon oben.
+        dev = next(
+            (d for d in self.devices
+             if d.get(CONF_DEVICE_ID) == device_id),
+            None,
+        )
+        dev_type = (dev or {}).get(CONF_DEVICE_TYPE, "")
+        if dev_type == "battery":
+            # v3.8.0 (2026-06-02) AI-off Battery-Übergabe:
+            # Lademodus auf "Passiv" schreiben → HA-
+            # Automation lässt den Setpoint los, WR
+            # übernimmt PV-Native-Priority.
+            self._cancel_charge_mode_hold(device_id)
+            await self._apply_battery_setpoint(
+                device_id, "passive", 0.0,
+            )
+        elif dev_type == "wallbox":
+            # AI-OFF-Cleanup für die Wallbox: nur den
+            # Charge-Mode-Hold-Loop abräumen, damit der
+            # User die Wallbox manuell übernehmen kann.
+            # Der Solver-Lademodus wird NICHT auf einen
+            # früheren Wert zurückgesetzt (E-2 / XR-1,
+            # 2026-06-11: der Restore-Pfad ist tot —
+            # Backend sendet `charge_mode_value_crowdergy`
+            # seit 2026-06-03 nicht mehr).
+            self._cancel_charge_mode_hold(device_id)
+        elif dev_type in ("heating", "warmwater", "aircon", "generic"):
+            # entity_control auf value_off — sorgt
+            # dafür dass das Gerät definitiv stoppt.
+            # _apply_device_state startet danach den
+            # hold-loop; den wollen wir hier NICHT
+            # → direkt nach dem write die hold-loop
+            # canceln (siehe unten).
+            await self._apply_device_state(device_id, False)
+            # Cooling-side auf off bringen falls cool_on
+            # war (SG-Ready / climate / dedizierter
+            # Kühl-Switch — alle drei Pfade über
+            # _apply_cool_state).
+            try:
+                await self._apply_cool_state(device_id, False)
+            except Exception:
+                # Cool-state ist optional; nicht
+                # blockieren wenn Helper bei diesem
+                # device nichts schreiben kann.
+                pass
+        # Cancel hold-loop NACH dem explicit write,
+        # sodass der letzte write das Letzte ist was
+        # wir auf das entity_control schreiben — danach
+        # ist das Gerät dem User überlassen.
+        self._cancel_hold(device_id)
 
     def _cancel_charge_mode_hold(self, device_id: str) -> None:
         """Stop the per-device charge_mode hold and drop the cached
