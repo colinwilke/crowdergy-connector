@@ -36,6 +36,8 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers import device_registry as dr, entity_registry as er
 
 from .const import (
+    CONF_ENTITY_BATTERY_MODE,
+    CONF_ENTITY_BATTERY_POWER_SETPOINT,
     CONF_ENTITY_CHARGE_MODE,
     CONF_ENTITY_CLIMATE,
     CONF_ENTITY_CONTROL,
@@ -47,6 +49,9 @@ from .const import (
     CONF_ENTITY_POWER_2,
     CONF_ENTITY_SOC,
     CONF_ENTITY_VEHICLE_STATUS,
+    CONF_ENTITY_VORLAUF_SETPOINT,
+    CONF_ENTITY_WALLBOX_CHARGE_CURRENT,
+    CONF_ENTITY_WALLBOX_PHASE_MODE,
     CONF_ENTITY_WATER_HEATER,
     HEURISTIC_ACCEPT,
     HEURISTIC_REJECT,
@@ -1080,48 +1085,112 @@ def _suffix_match(preset_entity_id: str, available: list[str]) -> str | None:
     return None
 
 
+# (#300) Steuer-Slots schalten reale Hardware: hier rät der Prefill nie.
+# Spiegel des „Control-Slots"-Blocks in `const.MAPPABLE_ENTITY_DOMAINS`
+# (ohne den reinen Lese-Slot `entity_effective_setpoint`); climate/
+# water_heater collapsen beim Speichern auf `entity_control`.
+CONTROL_SLOT_KEYS: frozenset[str] = frozenset({
+    CONF_ENTITY_CONTROL,
+    CONF_ENTITY_COOL_CONTROL,
+    CONF_ENTITY_CHARGE_MODE,
+    CONF_ENTITY_WALLBOX_CHARGE_CURRENT,
+    CONF_ENTITY_WALLBOX_PHASE_MODE,
+    CONF_ENTITY_BATTERY_MODE,
+    CONF_ENTITY_BATTERY_POWER_SETPOINT,
+    CONF_ENTITY_VORLAUF_SETPOINT,
+    CONF_ENTITY_CLIMATE,
+    CONF_ENTITY_WATER_HEATER,
+})
+_HELPER_DOMAINS = frozenset({"input_select", "input_number", "input_boolean"})
+
+
+def mapped_control_entities(devices: list[dict[str, Any]]) -> set[str]:
+    """Entity-IDs, die ein bestehendes Crowdergy-Gerät dieser Installation
+    bereits in einem Steuer-Slot trägt (#300). Ein Preset-Prefill für ein
+    ANDERES Gerät darf nie darauf zeigen — sonst schaltet der Dispatch
+    des neuen Geräts die Hardware des alten."""
+    taken: set[str] = set()
+    for dev in devices or []:
+        if not isinstance(dev, dict):
+            continue
+        for slot in CONTROL_SLOT_KEYS:
+            value = dev.get(slot)
+            if isinstance(value, str) and "." in value:
+                taken.add(value)
+    return taken
+
+
 def resolve_preset_entities(
     hass: HomeAssistant,
     entity_map: dict[str, str],
     identity_map: dict[str, dict] | None = None,
+    taken: set[str] | None = None,
 ) -> dict[str, str]:
     """Contributed Entity-IDs gegen DIESE Installation auflösen (Prefill
     beim Profil-Pick). Leiter je Slot, fail-safe eskalierend:
 
     1. exakte ID existiert hier (Registry ODER States) → behalten;
     2. Registry-Identität (`_identity_candidates`) → GENAU EIN Treffer
-       ersetzt die ID; mehrere (Multi-Inverter) → verbatim, der Mensch
-       entscheidet im Picker;
+       ersetzt die ID; mehrere (Multi-Inverter) → kein Vorschlag, der
+       Mensch entscheidet im Picker;
     3. Entity-ID-Suffix-Match (`_suffix_match`) für Alt-Presets ohne
-       Identität bzw. Registry-Lücken.
+       Identität bzw. Registry-Lücken — NUR für Lese-Slots.
 
-    Unauflösbare Slots behalten die Contributor-ID verbatim — das ist
-    das heutige Verhalten und für `input_*`-Helfer-Slots sogar
-    erwünscht (die ID ist die Anlege-Anleitung, required_helpers)."""
+    (#300) Sicherheitsregeln, weil Steuer-Slots reale Hardware schalten:
+
+    - Steuer-Slots (`CONTROL_SLOT_KEYS`) und HA-Helfer (`input_*`, die
+      keine Registry-Identität haben) lösen nie per Suffix auf — der
+      Suffix eines Contributor-Helfers (`…_lademodus`) traf beim
+      Empfänger den Lademodus-Helfer der Wallbox.
+    - Kein Steuer-Slot zeigt auf eine Entity aus `taken` (bereits von
+      einem anderen Crowdergy-Gerät gesteuert) — auch nicht bei exakter
+      ID-Gleichheit.
+    - Unauflösbare Slots bleiben leer statt mit einer toten
+      Contributor-ID vorbefüllt. Einzige Ausnahme: ein noch nicht
+      existierender `input_*`-Helfer bleibt verbatim — die ID ist die
+      Anlege-Anleitung (required_helpers)."""
     ent_reg = er.async_get(hass)
     entries = list(ent_reg.entities.values())
     identity_map = identity_map or {}
+    taken = taken or set()
     resolved: dict[str, str] = {}
     for slot, entity_id in entity_map.items():
         if not isinstance(entity_id, str) or "." not in entity_id:
             resolved[slot] = entity_id
             continue
-        if (
+        is_control = slot in CONTROL_SLOT_KEYS
+        domain = entity_id.split(".", 1)[0]
+
+        def _accept(candidate: str) -> bool:
+            if is_control and candidate in taken:
+                return False
+            resolved[slot] = candidate
+            return True
+
+        exists = (
             hass.states.get(entity_id) is not None
             or ent_reg.async_get(entity_id) is not None
-        ):
-            resolved[slot] = entity_id
+        )
+        if exists:
+            _accept(entity_id)
             continue
-        domain = entity_id.split(".", 1)[0]
+        if domain in _HELPER_DOMAINS:
+            # Noch anzulegender Helfer: ID als Anlege-Anleitung behalten,
+            # aber nie per Suffix auf einen fremden Helfer umbiegen.
+            if not (is_control and entity_id in taken):
+                resolved[slot] = entity_id
+            continue
         identity = identity_map.get(slot)
         if isinstance(identity, dict):
             hits = _identity_candidates(entries, domain, identity)
             if len(hits) == 1:
-                resolved[slot] = hits[0].entity_id
+                _accept(hits[0].entity_id)
                 continue
             if len(hits) > 1:
-                resolved[slot] = entity_id
                 continue
+        if is_control:
+            continue
         match = _suffix_match(entity_id, hass.states.async_entity_ids(domain))
-        resolved[slot] = match or entity_id
+        if match:
+            resolved[slot] = match
     return resolved
