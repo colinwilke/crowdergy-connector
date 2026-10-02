@@ -52,7 +52,7 @@ PARAMS = PvFollowParams.from_frame(FRAME)
 
 
 def test_surplus_counts_filling_passive_battery():
-    """Feldfall Udo 2026-09-27: Export 3,6 kW, Akku lädt 2,8 kW bei 92 %."""
+    """Feldfall 2026-09-27: Export 3,6 kW, Akku lädt 2,8 kW bei 92 %."""
     kw = dict(grid_kw=-3.6, box_kw=0.0, running=False)
     assert surplus_kw(PARAMS, batteries=[(-2.8, 92.0)], **kw) == 6.4
     # Akku noch nicht voll genug → Akku-Vorrang, nur der Export zählt
