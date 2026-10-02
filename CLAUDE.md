@@ -139,7 +139,9 @@ Kuration bleiben im Backend, Box-Know-how im privaten Box-Repo.
 - **Jedes Cloud-Kommando ist eine Lease:** der SSE-Stale-Bail des
   charge_mode-Holds startet den Lease-Expiry (`COMMAND_LEASE_TTL_S`) →
   einmal Safe-Default (wallbox → Solar nur wenn gemappt, battery →
-  passive). Auf toter Cloud nie `lock`/`power` schreiben. Thermal-Hold
+  passive). Auf toter Cloud nie `lock`/`power` schreiben — einzige
+  Ausnahme: der lokale PV-Regler (`pv_follow.py`, #292) lädt weiter, aber
+  nur aus gemessenem Überschuss. Thermal-Hold
   bewusst ohne Lease.
 - Wallbox-Dispatch: Phase **vor** Strom **vor** Modus; „Auto" nie
   schreiben; Solar/Lock tragen keinen Strom. Batterie: Setpoint vor Modus,

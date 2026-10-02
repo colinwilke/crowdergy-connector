@@ -57,6 +57,15 @@ from .const import (
 )
 
 from .command_dispatcher import CommandDispatcherMixin
+from .pv_follow import (  # noqa: F401 — re-export für Tests (coordinator.<NAME>)
+    PV_FOLLOW_INTERVAL_S,
+    PV_FOLLOW_MIN_OFF_S,
+    PV_FOLLOW_MIN_ON_S,
+    PV_FOLLOW_REFRESH_TIMEOUT_S,
+    PV_FOLLOW_START_DELAY_S,
+    PV_FOLLOW_STOP_DELAY_S,
+    PvFollowMixin,
+)
 # #21 Phase-C: read/compose/decide helpers live in telemetry_reader now.
 # Re-export the module-level constants so existing `coordinator.<NAME>`
 # imports (tests, vendoring) keep resolving.
@@ -212,6 +221,7 @@ def _jwt_exp(token: str) -> float | None:
 
 
 class CrowdergyCoordinator(
+    PvFollowMixin,
     CommandDispatcherMixin,
     TelemetryReaderMixin,
     DataUpdateCoordinator[dict[str, dict[str, Any]]],
@@ -731,6 +741,8 @@ class CrowdergyCoordinator(
         for task in list(self.state.charge_mode_hold_tasks.values()):
             task.cancel()
         self.state.charge_mode_hold_tasks.clear()
+        # #292: lokale PV-Regler.
+        self._cancel_pv_follow_all()
         for task in list(self.state.charge_mode_lease_tasks.values()):
             task.cancel()
         self.state.charge_mode_lease_tasks.clear()
