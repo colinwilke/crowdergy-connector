@@ -92,6 +92,57 @@ async def test_resync_reapplies_drift_with_consent(hass: HomeAssistant):
     assert coord.state.on_state["d1"] is True
 
 
+async def test_resync_runs_ai_off_handover_on_missed_frame(hass: HomeAssistant):
+    """Not-Aus bei getrennter SSE: der `is_active=False`-Frame kam nie an.
+    Der Resync sieht Backend=aus, Cache=an → holt die AI-Off-Übergabe
+    nach (sonst schriebe der Charge-Mode-Hold den letzten AI-Befehl
+    weiter). Kein Drift-Reapply für das inaktive Gerät."""
+    coord = make_coordinator(hass)
+    coord._authenticated_request = AsyncMock(
+        return_value=_response(
+            200,
+            [{"id": "d1", "is_active": False, "is_on": True, "cool_on": False}],
+        )
+    )
+    coord._apply_device_state = AsyncMock()
+    coord._apply_cool_state = AsyncMock()
+    coord._handover_ai_off = AsyncMock()
+    coord._sync_field_into_data = lambda *a, **k: None
+    coord.state.active_state["d1"] = True
+    composer = TelemetryComposer(coord)
+
+    await composer.resync_once()
+
+    coord._handover_ai_off.assert_awaited_once_with("d1")
+    coord._apply_device_state.assert_not_awaited()
+    assert coord.state.active_state["d1"] is False
+
+
+async def test_resync_no_handover_for_device_that_was_never_active(
+    hass: HomeAssistant,
+):
+    """Bootstrap / schon aus: keine Übergabe — sonst schriebe jeder
+    HA-Neustart value_off auf Geräte, die nie unter AI standen."""
+    coord = make_coordinator(hass)
+    coord._authenticated_request = AsyncMock(
+        return_value=_response(
+            200,
+            [
+                {"id": "d1", "is_active": False, "is_on": False, "cool_on": False},
+                {"id": "d2", "is_active": False, "is_on": False, "cool_on": False},
+            ],
+        )
+    )
+    coord._apply_device_state = AsyncMock()
+    coord._handover_ai_off = AsyncMock()
+    coord.state.active_state["d2"] = False  # d1: unbekannt (Bootstrap)
+    composer = TelemetryComposer(coord)
+
+    await composer.resync_once()
+
+    coord._handover_ai_off.assert_not_awaited()
+
+
 # ── CN-5: Mirror auf eigenem Timestamp ───────────────────────────────
 
 
