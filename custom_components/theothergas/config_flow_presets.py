@@ -78,5 +78,11 @@ def _preset_suggests_battery_control(flow: Any) -> bool:
     `entity_charge_mode` erreicht — ein Preset mit Mode-Select +
     Setpoint (Pflicht-Slots im Mapping-Dictionary) soll den Step auch
     ohne Lademodus-Select öffnen, damit die Steuerung nicht stumm
-    unkonfiguriert bleibt."""
+    unkonfiguriert bleibt. (#300) Gefragt wird das ROH-Preset: der
+    Prefill lässt einen unauflösbaren Steuer-Slot leer, der Vorschlag
+    bleibt trotzdem bestehen."""
+    if CONF_ENTITY_BATTERY_MODE in (
+        getattr(flow, "_pending_preset_slots", None) or ()
+    ):
+        return True
     return bool(_preset_step_defaults(flow).get(CONF_ENTITY_BATTERY_MODE))

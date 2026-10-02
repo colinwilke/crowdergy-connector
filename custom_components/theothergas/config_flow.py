@@ -486,6 +486,10 @@ class CrowdergyConfigFlow(ConfigFlow, domain=DOMAIN):
         # integrationsspezifische Werte (Select-Optionen, Flags) als
         # Defaults für die nachgelagerten Werte-Steps.
         self._pending_preset_value_map: dict[str, str] | None = None
+        # (#300) Slot-Keys des gewählten Roh-Presets — der Prefill lässt
+        # unauflösbare Steuer-Slots leer, die Step-Wahl braucht trotzdem,
+        # was das Preset VORSCHLÄGT.
+        self._pending_preset_slots: frozenset[str] = frozenset()
         # Backend-Response-Cache zwischen Picker-Render und Submit,
         # damit der Submit nicht erneut zum Backend gehen muss.
         self._pending_lookup_cache: list[dict[str, Any]] = []
@@ -994,6 +998,7 @@ class CrowdergyConfigFlow(ConfigFlow, domain=DOMAIN):
             # mehrere Geräte hintereinander anlegt).
             self._pending_preset_entity_map = None
             self._pending_preset_value_map = None
+            self._pending_preset_slots = frozenset()
             # v3.0: WP-Typen (heating, warmwater) bekommen einen
             # KonfigMode-Step danach. Andere Typen skippen direkt zu
             # device_entities mit implizitem config_mode = manual.
@@ -1029,13 +1034,20 @@ class CrowdergyConfigFlow(ConfigFlow, domain=DOMAIN):
                     # Contributed Entity-IDs gegen DIESE Installation
                     # auflösen (Registry-Identität → Suffix-Match) — die
                     # rohen IDs tragen den Gerätenamen des Contributors
-                    # und existieren hier i. d. R. nicht.
-                    from .entity_mapper import resolve_preset_entities
+                    # und existieren hier i. d. R. nicht. Steuer-Slots
+                    # raten nie und greifen nie auf ein bereits
+                    # gesteuertes Gerät (#300).
+                    from .entity_mapper import (
+                        mapped_control_entities,
+                        resolve_preset_entities,
+                    )
 
                     self._pending_preset_entity_map = resolve_preset_entities(
-                        self.hass, maps[0], maps[2]
+                        self.hass, maps[0], maps[2],
+                        taken=mapped_control_entities(self._devices),
                     )
                     self._pending_preset_value_map = maps[1]
+                    self._pending_preset_slots = frozenset(maps[0])
             return await self.async_step_device_entities()
 
         api_url = self._data.get(CONF_API_URL, "")
@@ -1507,6 +1519,10 @@ class CrowdergyOptionsFlow(OptionsFlow):
         # value_map des Presets als Defaults der Werte-Steps (Mapping-
         # Store 2026-06-11) — Spiegel des Initial-Flow-Attributs.
         self._pending_preset_value_map: dict[str, str] | None = None
+        # (#300) Slot-Keys des gewählten Roh-Presets — der Prefill lässt
+        # unauflösbare Steuer-Slots leer, die Step-Wahl braucht trotzdem,
+        # was das Preset VORSCHLÄGT.
+        self._pending_preset_slots: frozenset[str] = frozenset()
         self._pending_lookup_cache: list[dict[str, Any]] = []
 
     async def async_step_init(
@@ -1798,6 +1814,7 @@ class CrowdergyOptionsFlow(OptionsFlow):
             # nacheinander an).
             self._pending_preset_entity_map = None
             self._pending_preset_value_map = None
+            self._pending_preset_slots = frozenset()
             if self._pending_type in {"heating", "warmwater", "aircon"}:
                 return await self.async_step_add_device_config_mode()
             self._pending_config_mode = CONFIG_MODE_MANUAL
@@ -1824,14 +1841,22 @@ class CrowdergyOptionsFlow(OptionsFlow):
                 maps = _picked_preset_maps(self._pending_lookup_cache, choice)
                 if maps is not None:
                     # Identische Auflösung wie im Initial-Flow-Picker:
-                    # Registry-Identität → Suffix-Match, unauflösbar →
-                    # verbatim (Mensch wählt im Entity-Step).
-                    from .entity_mapper import resolve_preset_entities
+                    # Registry-Identität → Suffix-Match (nur Lese-Slots),
+                    # unauflösbar → leer (Mensch wählt im Entity-Step);
+                    # nie auf den Steuer-Slot eines anderen Geräts (#300).
+                    from .entity_mapper import (
+                        mapped_control_entities,
+                        resolve_preset_entities,
+                    )
 
                     self._pending_preset_entity_map = resolve_preset_entities(
-                        self.hass, maps[0], maps[2]
+                        self.hass, maps[0], maps[2],
+                        taken=mapped_control_entities(
+                            self._entry.data.get(CONF_DEVICES, [])
+                        ),
                     )
                     self._pending_preset_value_map = maps[1]
+                    self._pending_preset_slots = frozenset(maps[0])
             return await self.async_step_add_device_entities()
 
         presets: list[dict[str, Any]] = []

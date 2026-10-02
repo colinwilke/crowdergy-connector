@@ -585,7 +585,8 @@ async def test_resolve_preset_entities_exact_and_ambiguous(
     hass: HomeAssistant,
 ):
     """Exakte ID gewinnt unverändert; mehrere Identity-Treffer
-    (Multi-Inverter) → verbatim, nie raten."""
+    (Multi-Inverter) → kein Vorschlag, nie raten (#300: auch keine tote
+    Contributor-ID als Prefill)."""
     from custom_components.theothergas.entity_mapper import (
         resolve_preset_entities,
     )
@@ -614,15 +615,15 @@ async def test_resolve_preset_entities_exact_and_ambiguous(
         {"entity_current_power_kw": "sensor.fremd_battery_power"},
         {"entity_current_power_kw": ident},
     )
-    assert resolved["entity_current_power_kw"] == "sensor.fremd_battery_power"
+    assert "entity_current_power_kw" not in resolved
 
 
 async def test_resolve_preset_entities_suffix_fallback_without_identity(
     hass: HomeAssistant,
 ):
     """Alt-Preset ohne entity_identity_map → Suffix-Match (Box-Heuristik):
-    eindeutiger same-domain-Suffix löst auf, unauflösbar bleibt verbatim
-    (input_*-Helfer-Slots behalten so ihre Anlege-Anleitung)."""
+    eindeutiger same-domain-Suffix löst auf; ein noch nicht existierender
+    input_*-Helfer bleibt verbatim (Anlege-Anleitung)."""
     from custom_components.theothergas.entity_mapper import (
         resolve_preset_entities,
     )
@@ -640,6 +641,106 @@ async def test_resolve_preset_entities_suffix_fallback_without_identity(
         "entity_current_power_kw": "sensor.wechselrichter_battery_power",
         "entity_battery_mode": "input_select.hausbatterie_lademodus",
     }
+
+
+async def test_resolve_preset_entities_control_slot_never_suffix_matches(
+    hass: HomeAssistant,
+):
+    """#300 (Feld 2026-09-27): das Kostal-Batterie-Preset trägt den
+    Contributor-Helfer `input_select.hausbatterie_lademodus`. Beim
+    Empfänger existiert nur der Lademodus-Helfer der WALLBOX — der
+    Suffix `_lademodus` darf den Akku-Steuer-Slot nie darauf biegen.
+    Lese-Slots, die nicht auflösen, bleiben leer statt mit einer toten
+    Contributor-ID vorbefüllt."""
+    from custom_components.theothergas.entity_mapper import (
+        resolve_preset_entities,
+    )
+
+    hass.states.async_set("input_select.wallbox_lademodus", "Laden")
+    hass.states.async_set("select.wr_battery_charging_usage_mode", "x")
+    resolved = resolve_preset_entities(
+        hass,
+        {
+            "entity_charge_mode": "input_select.hausbatterie_lademodus",
+            "entity_battery_mode": "select.solar_battery_charging_usage_mode",
+            "entity_energy_discharged_total": "sensor.battery_charge_total",
+        },
+        None,
+    )
+    # Helfer bleibt Anlege-Anleitung, Steuer-Select rät nicht per Suffix,
+    # toter Lese-Slot fehlt.
+    assert resolved == {
+        "entity_charge_mode": "input_select.hausbatterie_lademodus",
+    }
+
+
+async def test_resolve_preset_entities_never_hijacks_mapped_control(
+    hass: HomeAssistant,
+):
+    """#300: ein Steuer-Slot zeigt nie auf eine Entity, die schon ein
+    anderes Crowdergy-Gerät steuert — auch nicht bei exakter ID oder
+    eindeutiger Registry-Identität. Lese-Slots dürfen geteilt sein."""
+    from custom_components.theothergas.entity_mapper import (
+        mapped_control_entities,
+        resolve_preset_entities,
+    )
+
+    hass.states.async_set("input_select.wallbox_lademodus", "Laden")
+    hass.states.async_set("sensor.netz_leistung", "1.0")
+    _register(
+        hass, "select", "wb_modus", "ocpp", "WB_mode",
+        translation_key="charge_mode",
+    )
+    taken = mapped_control_entities([
+        {
+            "entity_charge_mode": "input_select.wallbox_lademodus",
+            "entity_battery_mode": "select.wb_modus",
+            "entity_current_power_kw": "sensor.netz_leistung",
+        },
+    ])
+    assert taken == {"input_select.wallbox_lademodus", "select.wb_modus"}
+    resolved = resolve_preset_entities(
+        hass,
+        {
+            "entity_charge_mode": "input_select.wallbox_lademodus",
+            "entity_battery_mode": "select.fremd_modus",
+            "entity_current_power_kw": "sensor.netz_leistung",
+        },
+        {"entity_battery_mode": {
+            "platform": "ocpp", "translation_key": "charge_mode",
+        }},
+        taken=taken,
+    )
+    assert resolved == {"entity_current_power_kw": "sensor.netz_leistung"}
+
+
+async def test_add_preset_pick_skips_controls_of_existing_devices(
+    hass: HomeAssistant,
+):
+    """Flow-Ebene (#300): der Options-Flow kennt alle eigenen Geräte und
+    reicht deren Steuer-Entities als `taken` an den Resolver."""
+    hass.states.async_set("input_select.wallbox_lademodus", "Laden")
+    flow = _make_flow(hass, [
+        {"device_type": "wallbox",
+         "entity_charge_mode": "input_select.wallbox_lademodus"},
+    ])
+    flow._pending_type = "battery"
+    flow._pending_name = "Speicher"
+    flow._pending_lookup_cache = [
+        {
+            "vendor": "KOSTAL",
+            "model": "Batterie",
+            "entity_map": {
+                "entity_charge_mode": "input_select.wallbox_lademodus",
+            },
+            "value_map": {},
+        }
+    ]
+    result = await flow.async_step_add_vendor_preset_pick(
+        {"preset_choice": "KOSTAL::Batterie"}
+    )
+    assert result["step_id"] == "add_device_entities"
+    assert flow._pending_preset_entity_map == {}
 
 
 async def test_add_preset_pick_resolves_entity_prefill(hass: HomeAssistant):
