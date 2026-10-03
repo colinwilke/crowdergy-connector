@@ -311,6 +311,15 @@ class CommandDispatcherMixin:
             # home-assistant.log unnötig — analog zum Telemetry-Frame-
             # Log (Cluster D 2026-06-09).
             _LOGGER.debug("Crowdergy SSE command frame: %s", payload_keys)
+            # #292: lokaler PV-Überschuss-Regler (pv_follow.py).
+            if action == "pv_follow" and device_id:
+                await self._start_pv_follow(device_id, data)
+                return
+            if action == "pv_follow_stop" and device_id:
+                await self._stop_pv_follow(
+                    device_id, write_stop=True, reason="Schalter aus",
+                )
+                return
             if action == "set_charge_mode" and device_id:
                 # Dispatch nach Device-Typ:
                 #   * battery  → Phase 3 Option D: Lademodus-Select +
@@ -339,6 +348,11 @@ class CommandDispatcherMixin:
                         float(setpoint_kw) if setpoint_kw is not None else 0.0,
                     )
                 else:
+                    # #292: ein normaler Dispatch beendet den lokalen
+                    # PV-Regler — das Kommando unten schreibt den Zustand.
+                    await self._stop_pv_follow(
+                        device_id, write_stop=False, reason="Solver-Dispatch",
+                    )
                     # Wallbox: Lademodus-String + optionaler Ladestrom.
                     # `current_a` (ganze Ampere) kommt vom Backend NUR im
                     # Power-Modus auf Boxen mit gemappter Ladestrom-Entity
@@ -708,6 +722,11 @@ class CommandDispatcherMixin:
                 device_id, "passive", 0.0,
             )
         elif dev_type == "wallbox":
+            # #292: lokaler PV-Regler endet mit der AI; lädt die Box
+            # gerade, bleibt sie im Stopp-Zustand (solar/lock) zurück.
+            await self._stop_pv_follow(
+                device_id, write_stop=True, reason="AI aus",
+            )
             # AI-OFF-Cleanup für die Wallbox: nur den
             # Charge-Mode-Hold-Loop abräumen, damit der
             # User die Wallbox manuell übernehmen kann.
@@ -1674,6 +1693,11 @@ class CommandDispatcherMixin:
         silently ignored."""
         self._cancel_hold(device_id)
         self._cancel_charge_mode_hold(device_id)
+        # #292: laufenden PV-Regler ohne Write beenden (Gerät ist weg).
+        task = self._pv_follow_tasks().pop(device_id, None)
+        if task is not None and not task.done():
+            task.cancel()
+        self._pv_follow_runs().pop(device_id, None)
         # CN-8 (2026-06-11): auch die aktive Geräteliste + den
         # Entity-Index mitpflegen — vorher PATCHte der Coordinator
         # das gelöschte Device bis zum nächsten Reload weiter
