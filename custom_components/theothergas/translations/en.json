@@ -162,7 +162,8 @@
               "entity_wallbox_charge_current_a": "Charging current (optional)",
               "entity_wallbox_phase_mode": "Phase switch (optional)",
               "entity_water_heater": "Water-heater entity (optional)",
-              "entity_effective_setpoint": "Setpoint the device actually runs (optional)"
+              "entity_effective_setpoint": "Setpoint the device actually runs (optional)",
+              "entity_control_eco": "Eco setpoint (optional)"
             },
             "data_description": {
               "entity_climate": "The climate (thermostat) entity of your heat pump (prefixed climate.) — control and modes are derived from it. For heating, its temperature is treated as the flow temperature; map the room temperature separately as current temperature.",
@@ -174,7 +175,8 @@
               "entity_wallbox_charge_current_a": "Sets the charging current in amps (typically 6–16 A). Lets Crowdergy match the charging power to the solar surplus instead of always charging at full power.",
               "entity_wallbox_phase_mode": "Select entity that switches the wallbox between 1-phase and 3-phase charging (e.g. go-e). With it mapped, Crowdergy can charge single-phase from ~1.4 kW solar surplus instead of needing ~4 kW. The \"auto\" option is never used — Crowdergy always sets the phase explicitly.",
               "entity_water_heater": "Optional: the water_heater entity of your DHW heat pump (prefixed water_heater.). Control, modes and tank temperature are derived from it. If you don't have one, leave this empty and map a control entity instead.",
-              "entity_effective_setpoint": "Read-only. The entity that shows which setpoint the DEVICE is really running — not the one we wrote. Heat pumps in programme mode often keep two setpoints (comfort and eco) and follow only one of them, so a written value can sit correctly in its entity and still have no effect. With this mapped, Crowdergy notices and tells you instead of silently steering into the void. Stiebel ISG example: sensor.heatpump_target_temperature_water (hot water) or sensor.heatpump_target_temperature_hk_1 (heating circuit) — the prefix is your own device's name."
+              "entity_effective_setpoint": "Read-only. The entity that shows which setpoint the DEVICE is really running — not the one we wrote. Heat pumps in programme mode often keep two setpoints (comfort and eco) and follow only one of them, so a written value can sit correctly in its entity and still have no effect. With this mapped, Crowdergy notices and tells you instead of silently steering into the void. Stiebel ISG example: sensor.heatpump_target_temperature_water (hot water) or sensor.heatpump_target_temperature_hk_1 (heating circuit) — the prefix is your own device's name.",
+              "entity_control_eco": "Heating/hot water only, optional. A second writable setpoint (number or thermostat entity) for heat pumps in programme mode that hold either the comfort or the eco setpoint depending on the time window and ignore the other one. Crowdergy writes every target temperature it sends to the control entity here as well (on = value “on”, off = value “off”), clamped to this entity’s own limits. Only numeric target temperatures are mirrored. Stiebel ISG example: the number entity of the eco hot-water setpoint."
             }
           }
         },
@@ -442,7 +444,8 @@
               "entity_wallbox_charge_current_a": "Charging current (optional)",
               "entity_wallbox_phase_mode": "Phase switch (optional)",
               "entity_water_heater": "Water-heater entity (optional)",
-              "entity_effective_setpoint": "Setpoint the device actually runs (optional)"
+              "entity_effective_setpoint": "Setpoint the device actually runs (optional)",
+              "entity_control_eco": "Eco setpoint (optional)"
             },
             "data_description": {
               "entity_climate": "The climate (thermostat) entity of your heat pump (prefixed climate.) — control and modes are derived from it. For heating, its temperature is treated as the flow temperature; map the room temperature separately as current temperature.",
@@ -454,7 +457,8 @@
               "entity_wallbox_charge_current_a": "Sets the charging current in amps (typically 6–16 A). Lets Crowdergy match the charging power to the solar surplus instead of always charging at full power.",
               "entity_wallbox_phase_mode": "Select entity that switches the wallbox between 1-phase and 3-phase charging (e.g. go-e). With it mapped, Crowdergy can charge single-phase from ~1.4 kW solar surplus instead of needing ~4 kW. The \"auto\" option is never used — Crowdergy always sets the phase explicitly.",
               "entity_water_heater": "Optional: the water_heater entity of your DHW heat pump (prefixed water_heater.). Control, modes and tank temperature are derived from it. If you don't have one, leave this empty and map a control entity instead.",
-              "entity_effective_setpoint": "Read-only. The entity that shows which setpoint the DEVICE is really running — not the one we wrote. Heat pumps in programme mode often keep two setpoints (comfort and eco) and follow only one of them, so a written value can sit correctly in its entity and still have no effect. With this mapped, Crowdergy notices and tells you instead of silently steering into the void. Stiebel ISG example: sensor.heatpump_target_temperature_water (hot water) or sensor.heatpump_target_temperature_hk_1 (heating circuit) — the prefix is your own device's name."
+              "entity_effective_setpoint": "Read-only. The entity that shows which setpoint the DEVICE is really running — not the one we wrote. Heat pumps in programme mode often keep two setpoints (comfort and eco) and follow only one of them, so a written value can sit correctly in its entity and still have no effect. With this mapped, Crowdergy notices and tells you instead of silently steering into the void. Stiebel ISG example: sensor.heatpump_target_temperature_water (hot water) or sensor.heatpump_target_temperature_hk_1 (heating circuit) — the prefix is your own device's name.",
+              "entity_control_eco": "Heating/hot water only, optional. A second writable setpoint (number or thermostat entity) for heat pumps in programme mode that hold either the comfort or the eco setpoint depending on the time window and ignore the other one. Crowdergy writes every target temperature it sends to the control entity here as well (on = value “on”, off = value “off”), clamped to this entity’s own limits. Only numeric target temperatures are mirrored. Stiebel ISG example: the number entity of the eco hot-water setpoint."
             }
           }
         },
@@ -615,7 +619,8 @@
               "entity_wallbox_charge_current_a": "Charging current (optional)",
               "entity_wallbox_phase_mode": "Phase switch (optional)",
               "entity_water_heater": "Water-heater entity (optional)",
-              "entity_effective_setpoint": "Setpoint the device actually runs (optional)"
+              "entity_effective_setpoint": "Setpoint the device actually runs (optional)",
+              "entity_control_eco": "Eco setpoint (optional)"
             },
             "data_description": {
               "entity_climate": "The climate (thermostat) entity of your heat pump (prefixed climate.) — control and modes are derived from it. For heating, its temperature is treated as the flow temperature; map the room temperature separately as current temperature.",
@@ -627,7 +632,8 @@
               "entity_wallbox_charge_current_a": "Sets the charging current in amps (typically 6–16 A). Lets Crowdergy match the charging power to the solar surplus instead of always charging at full power.",
               "entity_wallbox_phase_mode": "Select entity that switches the wallbox between 1-phase and 3-phase charging (e.g. go-e). With it mapped, Crowdergy can charge single-phase from ~1.4 kW solar surplus instead of needing ~4 kW. The \"auto\" option is never used — Crowdergy always sets the phase explicitly.",
               "entity_water_heater": "Optional: the water_heater entity of your DHW heat pump (prefixed water_heater.). Control, modes and tank temperature are derived from it. If you don't have one, leave this empty and map a control entity instead.",
-              "entity_effective_setpoint": "Read-only. The entity that shows which setpoint the DEVICE is really running — not the one we wrote. Heat pumps in programme mode often keep two setpoints (comfort and eco) and follow only one of them, so a written value can sit correctly in its entity and still have no effect. With this mapped, Crowdergy notices and tells you instead of silently steering into the void. Stiebel ISG example: sensor.heatpump_target_temperature_water (hot water) or sensor.heatpump_target_temperature_hk_1 (heating circuit) — the prefix is your own device's name."
+              "entity_effective_setpoint": "Read-only. The entity that shows which setpoint the DEVICE is really running — not the one we wrote. Heat pumps in programme mode often keep two setpoints (comfort and eco) and follow only one of them, so a written value can sit correctly in its entity and still have no effect. With this mapped, Crowdergy notices and tells you instead of silently steering into the void. Stiebel ISG example: sensor.heatpump_target_temperature_water (hot water) or sensor.heatpump_target_temperature_hk_1 (heating circuit) — the prefix is your own device's name.",
+              "entity_control_eco": "Heating/hot water only, optional. A second writable setpoint (number or thermostat entity) for heat pumps in programme mode that hold either the comfort or the eco setpoint depending on the time window and ignore the other one. Crowdergy writes every target temperature it sends to the control entity here as well (on = value “on”, off = value “off”), clamped to this entity’s own limits. Only numeric target temperatures are mirrored. Stiebel ISG example: the number entity of the eco hot-water setpoint."
             }
           }
         }

@@ -26,6 +26,8 @@ from .const import (
     CONF_ENTITY_CLIMATE,
     CONF_ENTITY_WATER_HEATER,
     CONF_ENTITY_CONTROL,
+    CONF_ENTITY_CONTROL_ECO,
+    ECO_SETPOINT_TYPES,
     CONF_ENTITY_POWER,
     CONF_ENTITY_POWER_2,
     CONF_ENTITY_SOC,
@@ -242,6 +244,15 @@ _ENTITY_SELECTORS: dict[str, selector.EntitySelector] = {
             "switch", "input_boolean", "number", "select",
             "light", "fan", "climate", "water_heater",
             "input_number", "input_select",
+        ])
+    ),
+    # heating/warmwater OPTIONAL: zweiter Sollwert (ECO) für WPs im
+    # Programmbetrieb, die je nach Zeitfenster Komfort ODER ECO halten.
+    # Control-Slot → kein device_class-Filter (#46-Regel), nur Domains,
+    # auf die der Connector eine Ziel-Temperatur schreiben kann.
+    CONF_ENTITY_CONTROL_ECO: selector.EntitySelector(
+        selector.EntitySelectorConfig(domain=[
+            "number", "input_number", "climate", "water_heater",
         ])
     ),
     # Wallbox-only Lademodus target — restricted to select entities since
@@ -692,6 +703,14 @@ def _entities_schema(
                     _entity_field(CONF_ENTITY_VORLAUF_SETPOINT, d)
                 ] = _ENTITY_SELECTORS[CONF_ENTITY_VORLAUF_SETPOINT]
             control_schema = vol.Schema(control_fields)
+        if device_type in ECO_SETPOINT_TYPES:
+            # Optionaler ECO-Sollwert (beide KonfigModes): bekommt jede
+            # Ziel-Temperatur mitgeschrieben, die entity_control bekommt.
+            fields = dict(control_schema.schema)
+            fields[_entity_field(CONF_ENTITY_CONTROL_ECO, d)] = (
+                _ENTITY_SELECTORS[CONF_ENTITY_CONTROL_ECO]
+            )
+            control_schema = vol.Schema(fields)
         schema_dict[vol.Required("control_section")] = section(
             _with_effect_slot(control_schema, d), {"collapsed": False}
         )

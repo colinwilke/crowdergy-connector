@@ -41,6 +41,7 @@ from .const import (
     CONF_ENTITY_CHARGE_MODE,
     CONF_ENTITY_CLIMATE,
     CONF_ENTITY_CONTROL,
+    CONF_ENTITY_CONTROL_ECO,
     CONF_ENTITY_COOL_CONTROL,
     CONF_ENTITY_CURRENT_TEMP,
     CONF_ENTITY_ENERGY_DISCHARGED_TOTAL,
@@ -1091,6 +1092,7 @@ def _suffix_match(preset_entity_id: str, available: list[str]) -> str | None:
 # water_heater collapsen beim Speichern auf `entity_control`.
 CONTROL_SLOT_KEYS: frozenset[str] = frozenset({
     CONF_ENTITY_CONTROL,
+    CONF_ENTITY_CONTROL_ECO,
     CONF_ENTITY_COOL_CONTROL,
     CONF_ENTITY_CHARGE_MODE,
     CONF_ENTITY_WALLBOX_CHARGE_CURRENT,

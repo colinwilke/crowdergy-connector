@@ -103,6 +103,16 @@ ihn als `sensor.<wp>_target_temperature_water` bzw.
 Aussage; Geräte, die ihren gefahrenen Sollwert nicht exponieren, lassen
 ihn leer.
 
+**Bei heating/warmwater zusätzlich optional: `entity_control_eco`** —
+ein zweiter, schreibbarer Sollwert (number/input_number/climate/
+water_heater) für Wärmepumpen im Programmbetrieb, die je nach
+Zeitfenster den Komfort- ODER den ECO-Sollwert halten. Der Connector
+schreibt jede Ziel-Temperatur, die er nach `entity_control` schreibt,
+auch hierher (eigener Clamp, eigene Idempotenz, eigener
+Circuit-Breaker); Modus-Strings/Schalter werden nie gespiegelt.
+Connector-lokal: kein Backend-Device-Feld, das Backend sieht den Slot
+nur als Key in `entity_map` (Shape-Validierung, s.u.).
+
 kWh-Zähler bei battery/grid sind bewusst optional (nicht jede
 Integration exposed getrennte Lade-/Entlade-Zähler); Capabilities
 werden in Box-GUI/Picker angezeigt. Härter gaten = `required=True` in

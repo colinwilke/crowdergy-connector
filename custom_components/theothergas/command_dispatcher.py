@@ -34,6 +34,7 @@ from .const import (
     CONF_VALUE_WALLBOX_PHASE_1,
     CONF_VALUE_WALLBOX_PHASE_3,
     CONF_ENTITY_CONTROL,
+    CONF_ENTITY_CONTROL_ECO,
     CONF_ENTITY_CONTROL_HOLD,
     CONF_ENTITY_VORLAUF_SETPOINT,
     CONF_VALUE_OFF,
@@ -49,6 +50,7 @@ from .const import (
     CHARGE_MODE_HOLD_INTERVAL,
     COMMAND_LEASE_TTL_S,
     CONF_CHARGE_MODE_VALUE_SOLAR,
+    ECO_SETPOINT_TYPES,
     LOCAL_OVERRIDE_GRACE_S,
     LOCAL_OVERRIDE_HOLD_S,
     SSE_STALE_THRESHOLD_S,
@@ -1148,6 +1150,9 @@ class CommandDispatcherMixin:
         )
         actual = self._control_actual_state(entity_id, domain, raw_value)
         if expected is not None and self._states_match(actual, expected, domain):
+            # Der Komfort-Sollwert steht schon — der ECO-Sollwert kann
+            # trotzdem abweichen (eigene Idempotenz im Helper).
+            await self._sync_eco_setpoint(device_id, raw_value, on)
             self._start_hold(device_id, entity_id, raw_value, domain, on)
             return
 
@@ -1155,6 +1160,7 @@ class CommandDispatcherMixin:
             entity_id, domain, raw_value, on, verbose=True,
             device_id=device_id,
         )
+        await self._sync_eco_setpoint(device_id, raw_value, on)
 
         # After the initial write, kick off (or replace) the hold loop
         # that handles devices reverting their entity_control value
@@ -1631,6 +1637,117 @@ class CommandDispatcherMixin:
             else:
                 _LOGGER.warning("hold re-apply failed for %s: %s", entity_id, err)
 
+    # ── ECO-Sollwert mitschreiben (heating/warmwater) ─────────────────
+
+    async def _sync_eco_setpoint(
+        self,
+        device_id: str,
+        raw_value: Any,
+        on: bool,
+        *,
+        hold_mode: str | None = None,
+        verbose: bool = True,
+    ) -> bool:
+        """Spiegelt die Ziel-Temperatur von `entity_control` auf den
+        optionalen ECO-Sollwert (`entity_control_eco`).
+
+        WPs im Programmbetrieb halten je nach Zeitfenster den Komfort-
+        ODER den ECO-Sollwert; wer nur einen schreibt, steuert im anderen
+        Fenster ins Leere. Deshalb geht JEDER Wert, den wir nach
+        `entity_control` schreiben, auch hierher — gerufen aus
+        `_apply_device_state` (SSE, Resync, Self-Heal, AI-Off-Übergabe)
+        und aus jedem `_hold_loop`-Tick.
+
+        Eigene Einheit aus Clamp + Vergleich (Grenzen DIESER Entity),
+        eigener Circuit-Breaker-Zähler, eigene Eigen-Write-Uhr. Geschrieben
+        wird nur bei Abweichung — auch im ALWAYS-Hold (der Blind-Rewrite
+        gilt der Primär-Entity; ein WP-Parameter wird nicht im 30-s-Takt
+        neu gesetzt).
+
+        Übersteuerung: Fremd-Drift am ECO-Sollwert ohne eigenen Write in
+        `LOCAL_OVERRIDE_GRACE_S` zählt im AUTO-Hold als Nutzer-Eingriff
+        (Gerät pausiert, wie am Komfort-Sollwert) — wir überstimmen den
+        Menschen nicht an einem Register, das er bewusst verstellt hat.
+        Außerhalb des AUTO-Holds wird nur repariert.
+
+        `last_written_value` und `control_value_rejected` bleiben bewusst
+        an der Primär-Entity: sie beschreiben DEN Befehl, nicht seinen
+        Spiegel (sonst flackerten sie zwischen zwei Entities).
+
+        Gibt False zurück, wenn eine Übersteuerung erkannt wurde (der
+        Hold-Loop endet dann), sonst True.
+        """
+        dev = next(
+            (d for d in self.devices if d.get(CONF_DEVICE_ID) == device_id),
+            None,
+        )
+        if dev is None or dev.get(CONF_DEVICE_TYPE) not in ECO_SETPOINT_TYPES:
+            return True
+        eco_entity = (dev.get(CONF_ENTITY_CONTROL_ECO, "") or "").strip()
+        if not eco_entity:
+            return True
+        # Defense-in-depth: der Hold-Loop prüft Consent nicht selbst.
+        if not self._remote_control_allowed("eco-setpoint"):
+            return True
+        target = temperature_control_value(raw_value)
+        if target is None:
+            # Schalter/Modus-Strings: es gibt keine Ziel-Temperatur zu
+            # spiegeln.
+            if verbose:
+                _LOGGER.debug(
+                    "eco setpoint %s: value_%s=%r is not a temperature — "
+                    "nothing to mirror", eco_entity,
+                    "on" if on else "off", raw_value,
+                )
+            return True
+        domain = eco_entity.split(".", 1)[0]
+        if domain not in ("number", "input_number", "climate", "water_heater"):
+            if verbose:
+                _LOGGER.warning(
+                    "Unsupported eco setpoint domain %s for %s", domain,
+                    eco_entity,
+                )
+            return True
+        expected = self._expected_state_value(raw_value, on, domain, eco_entity)
+        actual = self._control_actual_state(eco_entity, domain, raw_value)
+        if self._states_match(actual, expected, domain):
+            return True
+        if (
+            hold_mode == ENTITY_CONTROL_HOLD_AUTO
+            and actual is not None
+            and (
+                time.time()
+                - self.state.last_own_write_at.get(eco_entity, 0.0)
+            ) > LOCAL_OVERRIDE_GRACE_S
+        ):
+            self._mark_local_override(device_id, eco_entity, actual, expected)
+            return False
+        if not self._write_allowed(device_id, eco_entity):  # (#136)
+            return True
+        # (#135) eigener Clamp gegen die Grenzen der ECO-Entity (WARNING);
+        # bewusst ohne device_id — `control_value_rejected` gehört der
+        # Primär-Entity.
+        value = self._clamp_write_value(eco_entity, domain, target)
+        if domain in ("number", "input_number"):
+            service, data = "set_value", {"entity_id": eco_entity, "value": value}
+        else:
+            service, data = (
+                "set_temperature",
+                {"entity_id": eco_entity, "temperature": value},
+            )
+        if hold_mode is not None and actual is not None:
+            _LOGGER.info(
+                "hold: eco setpoint %s drifted (%r → %r), re-writing",
+                eco_entity, expected, actual,
+            )
+        try:
+            await self.hass.services.async_call(
+                domain, service, data, blocking=True,
+            )
+        except Exception as err:  # noqa: BLE001
+            _LOGGER.warning("eco setpoint write failed for %s: %s", eco_entity, err)
+        return True
+
     # ── entity_control hold loop ────────────────────────────────────────
 
     def _start_hold(
@@ -1782,6 +1899,14 @@ class CommandDispatcherMixin:
                         "manual control.",
                         device_id, staleness, SSE_STALE_THRESHOLD_S,
                     )
+                    return
+                # ECO-Sollwert zuerst: eigene Idempotenz, eigener Breaker,
+                # Fremd-Drift im AUTO-Modus pausiert das Gerät genauso wie
+                # am Komfort-Sollwert (dann endet der Hold hier).
+                if not await self._sync_eco_setpoint(
+                    device_id, raw_value, on, hold_mode=hold_mode,
+                    verbose=False,
+                ):
                     return
                 expected = self._expected_state_value(
                     raw_value, on, domain, entity_id,

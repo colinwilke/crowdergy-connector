@@ -60,6 +60,15 @@ Datei ist Ist-Zustand, kein Changelog.
   `is_temperature_control`/`temperature_control_value` in `const.py`;
   Config-Flow bietet für diese Typen °C-NumberSelector-Felder.
   Nicht-numerische Werte = Legacy-Modus-Pfad (unverändert).
+  **ECO-Sollwert** (optional, nur heating/warmwater): ist
+  `entity_control_eco` gemappt, spiegelt `_sync_eco_setpoint` jede
+  numerische Ziel-Temperatur von `entity_control` dorthin — aus
+  `_apply_device_state` (SSE, Resync, Self-Heal, AI-Off) und jedem
+  Hold-Tick; eigener Clamp/Vergleich/Breaker, Write nur bei Abweichung
+  (auch im ALWAYS-Hold). Fremd-Drift am ECO-Sollwert im AUTO-Hold =
+  Übersteuerung (#140) wie am Komfort-Sollwert. `last_written_value`,
+  `control_value_rejected` und `_read_is_on_state` bleiben an der
+  Primär-Entity.
 - **Battery-Dispatch** (`_apply_battery_setpoint`): schreibt
   `entity_battery_mode` (Select) + `entity_battery_power_setpoint`
   (Number), idempotent mit ±10-W-Toleranz.
