@@ -383,6 +383,21 @@ CONF_ENTITY_VORLAUF_SETPOINT = "entity_vorlauf_setpoint_c"
 # ihren gefahrenen Sollwert nicht exponieren.
 CONF_ENTITY_EFFECTIVE_SETPOINT = "entity_effective_setpoint"
 
+# ── ECO-Sollwert mitschreiben (heating/warmwater) ────────────────────
+# Optionaler zweiter STEUER-Slot neben `entity_control`. Manche WPs
+# (Stiebel ISG im Programmbetrieb) halten je nach Zeitfenster den
+# Komfort- ODER den ECO-Sollwert und ignorieren den anderen — ein
+# Befehl nur auf den Komfort-Sollwert bleibt dann wirkungslos. Ist hier
+# eine schreibbare Entity gemappt, schreibt der Connector JEDE
+# Ziel-Temperatur, die er nach `entity_control` schreibt (AN = value_on,
+# AUS = value_off), zusätzlich hierher — mit eigenem Clamp, eigener
+# Idempotenz und eigenem Circuit-Breaker. Nur numerische Werte werden
+# gespiegelt (Temperatur-Modus); Modus-Strings/Schalter nie.
+# Connector-lokal (kein Backend-Feld). Leer = Verhalten wie bisher.
+CONF_ENTITY_CONTROL_ECO = "entity_control_eco"
+# Gerätetypen, für die der Slot angeboten und geschrieben wird.
+ECO_SETPOINT_TYPES = frozenset({"heating", "warmwater"})
+
 # Toleranz des Vergleichs (K bzw. Einheit der Entity). Deckt Rundung
 # (0,5-K-Raster) und Anzeige-Quantisierung ab, ohne einen echten
 # Registerwechsel zu verschlucken.
@@ -566,6 +581,11 @@ _SETPOINT_DOMAINS = frozenset({"climate", "number", "input_number"})
 _SELECT_DOMAINS = frozenset({"select", "input_select"})
 # Battery-Power-Setpoint: Number-artig.
 _NUMBER_DOMAINS = frozenset({"number", "input_number"})
+# ECO-Sollwert: Ziel-Temperatur via number.set_value bzw.
+# climate/water_heater.set_temperature.
+_ECO_SETPOINT_DOMAINS = frozenset({
+    "number", "input_number", "climate", "water_heater",
+})
 # (#152) Wirkungs-Kontrolle: der gefahrene Sollwert kann als Sensor
 # (Stiebel ISG), als Number oder als Select (Modus-artige Geraete)
 # vorliegen. Reiner Lese-Slot.
@@ -607,6 +627,8 @@ MAPPABLE_ENTITY_DOMAINS: dict[str, frozenset[str]] = {
     CONF_ENTITY_BATTERY_MODE: _SELECT_DOMAINS,
     CONF_ENTITY_BATTERY_POWER_SETPOINT: _NUMBER_DOMAINS,
     CONF_ENTITY_VORLAUF_SETPOINT: _SETPOINT_DOMAINS,
+    # Zweiter Sollwert (Komfort/ECO-WPs) — geschrieben wie entity_control.
+    CONF_ENTITY_CONTROL_ECO: _ECO_SETPOINT_DOMAINS,
     # (#152) Wirkungs-Kontrolle: reiner LESE-Slot — der gefahrene
     # Sollwert wird nur verglichen, nie geschrieben.
     CONF_ENTITY_EFFECTIVE_SETPOINT: _EFFECTIVE_DOMAINS,

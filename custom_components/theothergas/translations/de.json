@@ -163,7 +163,8 @@
               "entity_wallbox_charge_current_a": "Ladestrom (optional)",
               "entity_wallbox_phase_mode": "Phasenumschaltung (optional)",
               "entity_water_heater": "Warmwasser-Entität (optional)",
-              "entity_effective_setpoint": "Gefahrener Sollwert (optional)"
+              "entity_effective_setpoint": "Gefahrener Sollwert (optional)",
+              "entity_control_eco": "Eco-Sollwert (optional)"
             },
             "data_description": {
               "entity_climate": "Die „climate\"-Entität (Thermostat, Präfix climate.) deiner Wärmepumpe — Steuerung und Modi werden daraus abgeleitet. Bei Heizung gilt deren Temperatur als Vorlauf; die Raumtemperatur bitte separat als Ist-Temperatur zuordnen.",
@@ -175,7 +176,8 @@
               "entity_wallbox_charge_current_a": "Stellt den Ladestrom in Ampere (typisch 6–16 A). Damit passt Crowdergy die Ladeleistung an den Solarüberschuss an, statt nur mit voller Leistung zu laden.",
               "entity_wallbox_phase_mode": "Select-Entity, die die Wallbox zwischen 1- und 3-phasigem Laden umschaltet (z. B. go-e). Damit kann Crowdergy schon ab ~1,4 kW Solarüberschuss einphasig laden statt erst ab ~4 kW. Die \"Auto\"-Option wird nie genutzt — Crowdergy stellt die Phase immer explizit.",
               "entity_water_heater": "Optional: die „water_heater\"-Entität deiner Brauchwasser-Wärmepumpe (Präfix water_heater.). Steuerung, Modi und Speichertemperatur werden daraus abgeleitet. Hast du keine solche Entität, lass das Feld leer und ordne stattdessen eine Steuer-Entität zu.",
-              "entity_effective_setpoint": "Wird nur gelesen. Die Entity, an der abzulesen ist, welchen Sollwert das GERÄT wirklich fährt — nicht der, den wir geschrieben haben. Wärmepumpen im Programmbetrieb halten oft zwei Sollwerte (Komfort und ECO) und folgen nur einem davon; ein geschriebener Wert steht dann korrekt in seiner Entity und ist trotzdem wirkungslos. Ist das hier gemappt, merkt Crowdergy das und sagt es dir, statt still ins Leere zu steuern. Beispiel Stiebel ISG: sensor.warmepumpe_target_temperature_water (Warmwasser) bzw. sensor.warmepumpe_target_temperature_hk_1 (Heizkreis) — vorn steht der Name deiner Anlage."
+              "entity_effective_setpoint": "Wird nur gelesen. Die Entity, an der abzulesen ist, welchen Sollwert das GERÄT wirklich fährt — nicht der, den wir geschrieben haben. Wärmepumpen im Programmbetrieb halten oft zwei Sollwerte (Komfort und ECO) und folgen nur einem davon; ein geschriebener Wert steht dann korrekt in seiner Entity und ist trotzdem wirkungslos. Ist das hier gemappt, merkt Crowdergy das und sagt es dir, statt still ins Leere zu steuern. Beispiel Stiebel ISG: sensor.warmepumpe_target_temperature_water (Warmwasser) bzw. sensor.warmepumpe_target_temperature_hk_1 (Heizkreis) — vorn steht der Name deiner Anlage.",
+              "entity_control_eco": "Nur Heizung/Warmwasser, optional. Ein zweiter, schreibbarer Sollwert (Number- oder Thermostat-Entity) für Wärmepumpen im Programmbetrieb, die je nach Zeitfenster den Komfort- oder den ECO-Sollwert halten und den anderen ignorieren. Crowdergy schreibt jede Ziel-Temperatur, die es in die Steuer-Entity schreibt, zusätzlich hierher (An = Steuerwert „An“, Aus = Steuerwert „Aus“), begrenzt auf die Grenzen dieser Entity. Gespiegelt werden nur Ziel-Temperaturen. Beispiel Stiebel ISG: die Number-Entity des ECO-Warmwasser-Sollwerts."
             }
           }
         }
@@ -443,7 +445,8 @@
               "entity_wallbox_charge_current_a": "Ladestrom (optional)",
               "entity_wallbox_phase_mode": "Phasenumschaltung (optional)",
               "entity_water_heater": "Warmwasser-Entität (optional)",
-              "entity_effective_setpoint": "Gefahrener Sollwert (optional)"
+              "entity_effective_setpoint": "Gefahrener Sollwert (optional)",
+              "entity_control_eco": "Eco-Sollwert (optional)"
             },
             "data_description": {
               "entity_climate": "Die „climate\"-Entität (Thermostat, Präfix climate.) deiner Wärmepumpe — Steuerung und Modi werden daraus abgeleitet. Bei Heizung gilt deren Temperatur als Vorlauf; die Raumtemperatur bitte separat als Ist-Temperatur zuordnen.",
@@ -455,7 +458,8 @@
               "entity_wallbox_charge_current_a": "Stellt den Ladestrom in Ampere (typisch 6–16 A). Damit passt Crowdergy die Ladeleistung an den Solarüberschuss an, statt nur mit voller Leistung zu laden.",
               "entity_wallbox_phase_mode": "Select-Entity, die die Wallbox zwischen 1- und 3-phasigem Laden umschaltet (z. B. go-e). Damit kann Crowdergy schon ab ~1,4 kW Solarüberschuss einphasig laden statt erst ab ~4 kW. Die \"Auto\"-Option wird nie genutzt — Crowdergy stellt die Phase immer explizit.",
               "entity_water_heater": "Optional: die „water_heater\"-Entität deiner Brauchwasser-Wärmepumpe (Präfix water_heater.). Steuerung, Modi und Speichertemperatur werden daraus abgeleitet. Hast du keine solche Entität, lass das Feld leer und ordne stattdessen eine Steuer-Entität zu.",
-              "entity_effective_setpoint": "Wird nur gelesen. Die Entity, an der abzulesen ist, welchen Sollwert das GERÄT wirklich fährt — nicht der, den wir geschrieben haben. Wärmepumpen im Programmbetrieb halten oft zwei Sollwerte (Komfort und ECO) und folgen nur einem davon; ein geschriebener Wert steht dann korrekt in seiner Entity und ist trotzdem wirkungslos. Ist das hier gemappt, merkt Crowdergy das und sagt es dir, statt still ins Leere zu steuern. Beispiel Stiebel ISG: sensor.warmepumpe_target_temperature_water (Warmwasser) bzw. sensor.warmepumpe_target_temperature_hk_1 (Heizkreis) — vorn steht der Name deiner Anlage."
+              "entity_effective_setpoint": "Wird nur gelesen. Die Entity, an der abzulesen ist, welchen Sollwert das GERÄT wirklich fährt — nicht der, den wir geschrieben haben. Wärmepumpen im Programmbetrieb halten oft zwei Sollwerte (Komfort und ECO) und folgen nur einem davon; ein geschriebener Wert steht dann korrekt in seiner Entity und ist trotzdem wirkungslos. Ist das hier gemappt, merkt Crowdergy das und sagt es dir, statt still ins Leere zu steuern. Beispiel Stiebel ISG: sensor.warmepumpe_target_temperature_water (Warmwasser) bzw. sensor.warmepumpe_target_temperature_hk_1 (Heizkreis) — vorn steht der Name deiner Anlage.",
+              "entity_control_eco": "Nur Heizung/Warmwasser, optional. Ein zweiter, schreibbarer Sollwert (Number- oder Thermostat-Entity) für Wärmepumpen im Programmbetrieb, die je nach Zeitfenster den Komfort- oder den ECO-Sollwert halten und den anderen ignorieren. Crowdergy schreibt jede Ziel-Temperatur, die es in die Steuer-Entity schreibt, zusätzlich hierher (An = Steuerwert „An“, Aus = Steuerwert „Aus“), begrenzt auf die Grenzen dieser Entity. Gespiegelt werden nur Ziel-Temperaturen. Beispiel Stiebel ISG: die Number-Entity des ECO-Warmwasser-Sollwerts."
             }
           }
         }
@@ -615,7 +619,8 @@
               "entity_wallbox_charge_current_a": "Ladestrom (optional)",
               "entity_wallbox_phase_mode": "Phasenumschaltung (optional)",
               "entity_water_heater": "Warmwasser-Entität (optional)",
-              "entity_effective_setpoint": "Gefahrener Sollwert (optional)"
+              "entity_effective_setpoint": "Gefahrener Sollwert (optional)",
+              "entity_control_eco": "Eco-Sollwert (optional)"
             },
             "data_description": {
               "entity_climate": "Die „climate\"-Entität (Thermostat, Präfix climate.) deiner Wärmepumpe — Steuerung und Modi werden daraus abgeleitet. Bei Heizung gilt deren Temperatur als Vorlauf; die Raumtemperatur bitte separat als Ist-Temperatur zuordnen.",
@@ -627,7 +632,8 @@
               "entity_wallbox_charge_current_a": "Stellt den Ladestrom in Ampere (typisch 6–16 A). Damit passt Crowdergy die Ladeleistung an den Solarüberschuss an, statt nur mit voller Leistung zu laden.",
               "entity_wallbox_phase_mode": "Select-Entity, die die Wallbox zwischen 1- und 3-phasigem Laden umschaltet (z. B. go-e). Damit kann Crowdergy schon ab ~1,4 kW Solarüberschuss einphasig laden statt erst ab ~4 kW. Die \"Auto\"-Option wird nie genutzt — Crowdergy stellt die Phase immer explizit.",
               "entity_water_heater": "Optional: die „water_heater\"-Entität deiner Brauchwasser-Wärmepumpe (Präfix water_heater.). Steuerung, Modi und Speichertemperatur werden daraus abgeleitet. Hast du keine solche Entität, lass das Feld leer und ordne stattdessen eine Steuer-Entität zu.",
-              "entity_effective_setpoint": "Wird nur gelesen. Die Entity, an der abzulesen ist, welchen Sollwert das GERÄT wirklich fährt — nicht der, den wir geschrieben haben. Wärmepumpen im Programmbetrieb halten oft zwei Sollwerte (Komfort und ECO) und folgen nur einem davon; ein geschriebener Wert steht dann korrekt in seiner Entity und ist trotzdem wirkungslos. Ist das hier gemappt, merkt Crowdergy das und sagt es dir, statt still ins Leere zu steuern. Beispiel Stiebel ISG: sensor.warmepumpe_target_temperature_water (Warmwasser) bzw. sensor.warmepumpe_target_temperature_hk_1 (Heizkreis) — vorn steht der Name deiner Anlage."
+              "entity_effective_setpoint": "Wird nur gelesen. Die Entity, an der abzulesen ist, welchen Sollwert das GERÄT wirklich fährt — nicht der, den wir geschrieben haben. Wärmepumpen im Programmbetrieb halten oft zwei Sollwerte (Komfort und ECO) und folgen nur einem davon; ein geschriebener Wert steht dann korrekt in seiner Entity und ist trotzdem wirkungslos. Ist das hier gemappt, merkt Crowdergy das und sagt es dir, statt still ins Leere zu steuern. Beispiel Stiebel ISG: sensor.warmepumpe_target_temperature_water (Warmwasser) bzw. sensor.warmepumpe_target_temperature_hk_1 (Heizkreis) — vorn steht der Name deiner Anlage.",
+              "entity_control_eco": "Nur Heizung/Warmwasser, optional. Ein zweiter, schreibbarer Sollwert (Number- oder Thermostat-Entity) für Wärmepumpen im Programmbetrieb, die je nach Zeitfenster den Komfort- oder den ECO-Sollwert halten und den anderen ignorieren. Crowdergy schreibt jede Ziel-Temperatur, die es in die Steuer-Entity schreibt, zusätzlich hierher (An = Steuerwert „An“, Aus = Steuerwert „Aus“), begrenzt auf die Grenzen dieser Entity. Gespiegelt werden nur Ziel-Temperaturen. Beispiel Stiebel ISG: die Number-Entity des ECO-Warmwasser-Sollwerts."
             }
           }
         }

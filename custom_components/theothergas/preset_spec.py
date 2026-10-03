@@ -51,6 +51,7 @@ from .const import (
     CONF_ENTITY_CHARGE_MODE,
     CONF_ENTITY_WALLBOX_CHARGE_CURRENT,
     CONF_ENTITY_CONTROL,
+    CONF_ENTITY_CONTROL_ECO,
     CONF_ENTITY_CONTROL_HOLD,
     CONF_ENTITY_COOL_CONTROL,
     CONF_ENTITY_CURRENT_TEMP,
@@ -208,6 +209,11 @@ PRESET_SLOT_SPEC: dict[str, tuple[PresetSlot, ...]] = {
         PresetSlot(CONF_ENTITY_CONTROL, "entity", True, "Steuerung (An/Aus)"),
         PresetSlot(CONF_VALUE_ON, "value", False, "Steuerwert „An“"),
         PresetSlot(CONF_VALUE_OFF, "value", False, "Steuerwert „Aus“"),
+        # Komfort/ECO-WPs (Stiebel ISG): zweiter Sollwert, bekommt jede
+        # Ziel-Temperatur mitgeschrieben — vendor-typisch, gut teilbar.
+        PresetSlot(
+            CONF_ENTITY_CONTROL_ECO, "entity", False, "Eco-Sollwert (optional)",
+        ),
         PresetSlot(CONF_ENTITY_CURRENT_TEMP, "entity", False, "Ist-Temperatur (°C)"),
         PresetSlot(CONF_ENTITY_ENERGY_TOTAL, "entity", False, "Energiezähler (kWh)"),
         # Modulierende WPs: Solver sendet einen Vorlauf-Sollwert pro Tick.
@@ -236,6 +242,11 @@ PRESET_SLOT_SPEC: dict[str, tuple[PresetSlot, ...]] = {
         PresetSlot(CONF_ENTITY_CONTROL, "entity", True, "Steuerung (An/Aus)"),
         PresetSlot(CONF_VALUE_ON, "value", False, "Steuerwert „An“"),
         PresetSlot(CONF_VALUE_OFF, "value", False, "Steuerwert „Aus“"),
+        # Komfort/ECO-WPs (Stiebel ISG): zweiter Sollwert, bekommt jede
+        # Ziel-Temperatur mitgeschrieben — vendor-typisch, gut teilbar.
+        PresetSlot(
+            CONF_ENTITY_CONTROL_ECO, "entity", False, "Eco-Sollwert (optional)",
+        ),
         PresetSlot(CONF_ENTITY_CURRENT_TEMP, "entity", False, "Speicher-Temperatur (°C)"),
         PresetSlot(CONF_ENTITY_ENERGY_TOTAL, "entity", False, "Energiezähler (kWh)"),
         PresetSlot(CONF_INVERT_POWER_SIGN, "flag", False, "Leistungs-Vorzeichen umkehren"),

@@ -23,6 +23,7 @@ from .const import (
     CONF_ENTITY_CLIMATE,
     CONF_ENTITY_WATER_HEATER,
     CONF_ENTITY_CONTROL,
+    CONF_ENTITY_CONTROL_ECO,
     CONF_ENTITY_POWER,
     CONF_ENTITY_POWER_2,
     CONF_ENTITY_SOC,
@@ -224,6 +225,9 @@ def _build_device_record(
             CONF_ENTITY_PV_TO_BATTERY_POWER, ""
         ),
         CONF_ENTITY_CONTROL: entity_input.get(CONF_ENTITY_CONTROL, ""),
+        # ECO-Sollwert (heating/warmwater): Connector-lokaler Steuer-Slot,
+        # MUSS hier in den Record — sonst verwirft der Submit ihn stumm.
+        CONF_ENTITY_CONTROL_ECO: entity_input.get(CONF_ENTITY_CONTROL_ECO, ""),
         CONF_VALUE_ON: entity_input.get(CONF_VALUE_ON, ""),
         CONF_VALUE_OFF: entity_input.get(CONF_VALUE_OFF, ""),
         CONF_ENTITY_CONTROL_HOLD: entity_input.get(
