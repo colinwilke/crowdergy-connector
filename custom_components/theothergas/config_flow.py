@@ -107,7 +107,10 @@ from .config_flow_schemas import (  # noqa: F401
     _READ_FIELDS,
 )
 from .config_flow_presets import (
+    CONFIG_MODE_TYPES,
+    _apply_preset_config_mode,
     _picked_preset_maps,
+    _preset_entities_defaults,
     _preset_step_defaults,
     _preset_suggests_battery_control,
 )
@@ -999,19 +1002,16 @@ class CrowdergyConfigFlow(ConfigFlow, domain=DOMAIN):
             self._pending_preset_entity_map = None
             self._pending_preset_value_map = None
             self._pending_preset_slots = frozenset()
-            # v3.0: WP-Typen (heating, warmwater) bekommen einen
-            # KonfigMode-Step danach. Andere Typen skippen direkt zu
-            # device_entities mit implizitem config_mode = manual.
-            if self._pending_type in {"heating", "warmwater", "aircon"}:
-                return await self.async_step_device_config_mode()
             self._pending_config_mode = CONFIG_MODE_MANUAL
             # FEAT-1 (2026-06-09, erweitert 2026-06-11): vor dem
-            # manuellen Entity-Step prüfen ob Hersteller-Presets
-            # verfügbar sind — für alle preset-fähigen Typen aus dem
-            # Mapping-Dictionary (vorher solar-only).
+            # Entity-Step prüfen ob Hersteller-Presets verfügbar sind —
+            # für alle preset-fähigen Typen aus dem Mapping-Dictionary.
+            # Der Picker kommt VOR dem KonfigMode-Step: ein gewähltes
+            # Profil legt den Modus selbst fest (heating/warmwater/
+            # aircon erreichten den Picker vorher nie).
             if self._pending_type in PRESET_CAPABLE_TYPES:
                 return await self.async_step_vendor_preset_pick()
-            return await self.async_step_device_entities()
+            return await self._after_preset_pick()
 
         return self.async_show_form(
             step_id="device_type",
@@ -1048,7 +1048,10 @@ class CrowdergyConfigFlow(ConfigFlow, domain=DOMAIN):
                     )
                     self._pending_preset_value_map = maps[1]
                     self._pending_preset_slots = frozenset(maps[0])
-            return await self.async_step_device_entities()
+                    if self._pending_type in CONFIG_MODE_TYPES:
+                        _apply_preset_config_mode(self, maps[0])
+                        return await self.async_step_device_entities()
+            return await self._after_preset_pick()
 
         api_url = self._data.get(CONF_API_URL, "")
         token = self._data.get(CONF_ACCESS_TOKEN, "")
@@ -1063,7 +1066,7 @@ class CrowdergyConfigFlow(ConfigFlow, domain=DOMAIN):
         # Wenn 0 Presets → skip diesen Step komplett, kein User-Hick-Up
         # mit leerem Picker.
         if not presets:
-            return await self.async_step_device_entities()
+            return await self._after_preset_pick()
         self._pending_lookup_cache = presets
         return self.async_show_form(
             step_id="vendor_preset_pick",
@@ -1075,6 +1078,13 @@ class CrowdergyConfigFlow(ConfigFlow, domain=DOMAIN):
                 "count": str(len(presets)),
             },
         )
+
+    async def _after_preset_pick(self) -> ConfigFlowResult:
+        """Ohne Profil: WP-/Klima-Typen fragen den KonfigMode, alle
+        anderen gehen direkt zum Entity-Step (Modus = manuell)."""
+        if self._pending_type in CONFIG_MODE_TYPES:
+            return await self.async_step_device_config_mode()
+        return await self.async_step_device_entities()
 
     async def async_step_device_config_mode(
         self, user_input: dict[str, Any] | None = None
@@ -1122,7 +1132,7 @@ class CrowdergyConfigFlow(ConfigFlow, domain=DOMAIN):
         # ans Schema übergeben. _entities_schema rendert sie als
         # `suggested_value` damit der User sie sehen und ändern kann
         # bevor er bestätigt.
-        defaults = self._pending_preset_entity_map or None
+        defaults = _preset_entities_defaults(self)
         return self.async_show_form(
             step_id="device_entities",
             data_schema=_entities_schema(
@@ -1408,7 +1418,7 @@ class CrowdergyConfigFlow(ConfigFlow, domain=DOMAIN):
         return self.async_show_form(
             step_id="device_values",
             data_schema=_values_schema(
-                self.hass, entity_control, {},
+                self.hass, entity_control, _preset_step_defaults(self),
                 include_cooling=include_cooling,
                 cooling_first=device_type == "aircon",
                 device_type=device_type,
@@ -1815,14 +1825,13 @@ class CrowdergyOptionsFlow(OptionsFlow):
             self._pending_preset_entity_map = None
             self._pending_preset_value_map = None
             self._pending_preset_slots = frozenset()
-            if self._pending_type in {"heating", "warmwater", "aircon"}:
-                return await self.async_step_add_device_config_mode()
             self._pending_config_mode = CONFIG_MODE_MANUAL
             # FEAT-1 v0.2 (2026-06-09, erweitert 2026-06-11): Vendor-
-            # Preset-Picker für alle preset-fähigen Typen.
+            # Preset-Picker für alle preset-fähigen Typen — vor dem
+            # KonfigMode-Step (s. Initial-Flow).
             if self._pending_type in PRESET_CAPABLE_TYPES:
                 return await self.async_step_add_vendor_preset_pick()
-            return await self.async_step_add_device_entities()
+            return await self._add_after_preset_pick()
 
         return self.async_show_form(
             step_id="add_device",
@@ -1857,7 +1866,10 @@ class CrowdergyOptionsFlow(OptionsFlow):
                     )
                     self._pending_preset_value_map = maps[1]
                     self._pending_preset_slots = frozenset(maps[0])
-            return await self.async_step_add_device_entities()
+                    if self._pending_type in CONFIG_MODE_TYPES:
+                        _apply_preset_config_mode(self, maps[0])
+                        return await self.async_step_add_device_entities()
+            return await self._add_after_preset_pick()
 
         presets: list[dict[str, Any]] = []
         if self._pending_type:
@@ -1865,7 +1877,7 @@ class CrowdergyOptionsFlow(OptionsFlow):
                 self.hass, self._pending_type, entry=self._entry,
             )
         if not presets:
-            return await self.async_step_add_device_entities()
+            return await self._add_after_preset_pick()
         self._pending_lookup_cache = presets
         return self.async_show_form(
             step_id="add_vendor_preset_pick",
@@ -1877,6 +1889,12 @@ class CrowdergyOptionsFlow(OptionsFlow):
                 "count": str(len(presets)),
             },
         )
+
+    async def _add_after_preset_pick(self) -> ConfigFlowResult:
+        """Options-Add-Variante von `_after_preset_pick`."""
+        if self._pending_type in CONFIG_MODE_TYPES:
+            return await self.async_step_add_device_config_mode()
+        return await self.async_step_add_device_entities()
 
     async def async_step_add_device_config_mode(
         self, user_input: dict[str, Any] | None = None
@@ -1913,7 +1931,7 @@ class CrowdergyOptionsFlow(OptionsFlow):
             )
             return await self._dispatch_add_post_entities(entity_input)
 
-        defaults = self._pending_preset_entity_map or None
+        defaults = _preset_entities_defaults(self)
         return self.async_show_form(
             step_id="add_device_entities",
             data_schema=_entities_schema(
@@ -2164,7 +2182,7 @@ class CrowdergyOptionsFlow(OptionsFlow):
         return self.async_show_form(
             step_id="add_device_values",
             data_schema=_values_schema(
-                self.hass, entity_control, {},
+                self.hass, entity_control, _preset_step_defaults(self),
                 include_cooling=include_cooling,
                 cooling_first=device_type == "aircon",
                 device_type=device_type,
