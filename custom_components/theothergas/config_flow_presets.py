@@ -11,6 +11,28 @@ from typing import Any
 
 from .const import (
     CONF_ENTITY_BATTERY_MODE,
+    CONF_ENTITY_CLIMATE,
+    CONF_DEVICE_CONFIG_MODE,
+    CONF_ENTITY_CONTROL,
+    CONF_ENTITY_WATER_HEATER,
+    CONFIG_MODE_CLIMATE,
+    CONFIG_MODE_MANUAL,
+)
+from .preset_spec import PRESET_SLOT_SPEC
+
+# Typen mit KonfigMode-Step (Manuell vs. Climate-/Water-Heater-Entity).
+# Bei einer Profil-Wahl leitet sich der Modus aus der Steuer-Entity des
+# Profils ab, der Step entfällt (#69-Folge: der Picker lag vorher HINTER
+# dem Modus-Step und wurde für diese Typen nie erreicht).
+CONFIG_MODE_TYPES = frozenset({"heating", "warmwater", "aircon"})
+
+# Flag-Slots wandern als String "true" im value_map (preset_spec-Doku);
+# die Schemas erwarten bool — `bool("false")` wäre True.
+_FLAG_SLOTS = frozenset(
+    slot.key
+    for slots in PRESET_SLOT_SPEC.values()
+    for slot in slots
+    if slot.kind == "flag"
 )
 
 
@@ -66,10 +88,64 @@ def _preset_step_defaults(flow: Any) -> dict[str, Any]:
     Werte-Steps nach dem Entity-Step. Beide Flow-Klassen (Initial +
     Options-Add) tragen die gleichen `_pending_preset_*`-Attribute.
     Leeres Dict = kein Preset gewählt → Steps rendern wie bisher."""
-    return {
+    merged: dict[str, Any] = {
         **(getattr(flow, "_pending_preset_entity_map", None) or {}),
         **(getattr(flow, "_pending_preset_value_map", None) or {}),
     }
+    for key in _FLAG_SLOTS & merged.keys():
+        raw = merged[key]
+        merged[key] = (
+            raw.strip().lower() == "true" if isinstance(raw, str) else bool(raw)
+        )
+    return merged
+
+
+def _preset_entities_defaults(flow: Any) -> dict[str, Any] | None:
+    """Defaults für den Entity-Step nach einer Profil-Wahl: aufgelöste
+    Entities + Flags (Vorzeichen) aus dem value_map, dazu der KonfigMode
+    explizit — sonst kippt `_entities_schema`s Legacy-Migration ein
+    Profil mit climate-/water_heater-Steuerung in den Climate-Modus,
+    auch wenn dessen Primärfeld die Domain nicht nimmt. None = kein
+    Profil gewählt."""
+    if getattr(flow, "_pending_preset_entity_map", None) is None:
+        return None
+    return {
+        **_preset_step_defaults(flow),
+        CONF_DEVICE_CONFIG_MODE: getattr(
+            flow, "_pending_config_mode", None
+        ) or CONFIG_MODE_MANUAL,
+    }
+
+
+def _preset_config_mode(device_type: str, raw_entity_map: dict[str, str]) -> str:
+    """KonfigMode aus der Steuer-Entity des Profils (ROH-Map, nicht die
+    aufgelöste — ein unauflösbarer Steuer-Slot ändert nichts am
+    Steuer-Muster des Geräts). Climate nur, wenn die Domain zum
+    Primärfeld des Climate-Modus passt (warmwater → water_heater,
+    heating/aircon → climate); sonst Manuell, dort nimmt `entity_control`
+    jede steuerbare Domain."""
+    control = raw_entity_map.get(CONF_ENTITY_CONTROL, "")
+    domain = control.split(".", 1)[0] if "." in control else ""
+    primary = "water_heater" if device_type == "warmwater" else "climate"
+    return CONFIG_MODE_CLIMATE if domain == primary else CONFIG_MODE_MANUAL
+
+
+def _apply_preset_config_mode(flow: Any, raw_entity_map: dict[str, str]) -> None:
+    """Setzt `_pending_config_mode` aus dem gewählten Profil und spiegelt
+    im Climate-Modus die aufgelöste Steuer-Entity auf das Primärfeld
+    (`entity_climate`/`entity_water_heater`) — der Climate-Entity-Step
+    rendert `entity_control` nicht. `_apply_climate_first` kopiert sie
+    beim Submit zurück."""
+    device_type = getattr(flow, "_pending_type", None) or ""
+    mode = _preset_config_mode(device_type, raw_entity_map)
+    flow._pending_config_mode = mode
+    resolved = flow._pending_preset_entity_map
+    if mode == CONFIG_MODE_CLIMATE and resolved and resolved.get(CONF_ENTITY_CONTROL):
+        key = (
+            CONF_ENTITY_WATER_HEATER if device_type == "warmwater"
+            else CONF_ENTITY_CLIMATE
+        )
+        resolved.setdefault(key, resolved[CONF_ENTITY_CONTROL])
 
 
 def _preset_suggests_battery_control(flow: Any) -> bool:
