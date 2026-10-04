@@ -10,15 +10,23 @@ Vertrag: crowdergy-backend docs/wallbox-charge-strategies.md, Abschnitt
 „Lokaler PV-Überschuss-Regler".
 
 Regeln:
-  * Überschuss ``S = −P_grid + P_box + Σ P_akku_lädt`` — invariant gegen
-    die eigene Wirkung (was die Box zieht, fehlt Export oder Akku).
-    Akku-Ladung zählt nur, wenn jeder genannte Akku trotzdem voll wird
-    (SoC ≥ ``soc_start_pct``, läuft die Box: ≥ ``soc_hold_pct``).
+  * Überschuss ``S = −P_grid + P_box − Σ P_akku_entlädt
+    [+ Σ P_akku_lädt]`` — invariant gegen die eigene Wirkung (was die Box
+    zieht, fehlt Export oder Akku, oder der Akku entlädt dafür).
+    Akku-Entladung wird immer abgezogen (ein passiver Akku, der die Box
+    deckt, ist kein PV-Überschuss). Akku-Ladung zählt nur, wenn jeder
+    genannte Akku trotzdem voll wird (SoC ≥ ``soc_start_pct``, läuft die
+    Box: ≥ ``soc_hold_pct``).
   * Start nach `PV_FOLLOW_START_DELAY_S` mit ``S ≥ min_kw + Puffer``,
     Stopp nach `PV_FOLLOW_STOP_DELAY_S` mit ``S < min_kw``;
     Mindestlaufzeit / Mindestpause gegen Takten.
-  * Fehlt eine Messung oder ist das Auto nicht gesteckt: kein Start, eine
-    laufende Box stoppt sofort.
+  * Fehlt eine Messung, ist sie eingefroren (älter als
+    `PV_FOLLOW_SENSOR_STALE_S`) oder ist das Auto nicht gesteckt: kein
+    Start, eine laufende Box stoppt sofort.
+  * ``charging``/``amps`` ändern sich nur nach einem Write, der wirklich
+    durchging; ein gescheiterter Write wird nach `PV_FOLLOW_WRITE_RETRY_S`
+    wiederholt. Zieht die Box ohne eigenen Start anhaltend Leistung, wird
+    sie übernommen (``S ≥ min_kw``) oder erneut gestoppt.
   * Schreibt über `_apply_charge_mode(schedule_hold=False)` — damit gelten
     Consent, Write-Breaker, Clamp und die Reihenfolge Phase → Strom → Modus.
   * Läuft bei toter Cloud weiter (lädt nur aus gemessenem Überschuss); bei
@@ -40,6 +48,7 @@ from .const import (
     CONF_CHARGE_MODE_VALUE_SOLAR,
     CONF_DEVICE_ID,
     CONF_DEVICE_TYPE,
+    CONF_ENTITY_CHARGE_MODE,
     CONF_ENTITY_POWER,
     CONF_ENTITY_POWER_2,
     CONF_ENTITY_SOC,
@@ -62,6 +71,17 @@ PV_FOLLOW_REFRESH_TIMEOUT_S = 3600.0
 # Eigene Boxleistung, ab der die Box als „lädt" gilt (Übernahme eines
 # laufenden Ladevorgangs beim Start des Reglers).
 PV_FOLLOW_RUNNING_KW = 0.5
+# Back-off after a write that did not go through (exception, consent off,
+# write breaker): the same decision is retried after this many seconds
+# instead of on every tick.
+PV_FOLLOW_WRITE_RETRY_S = 60.0
+# A power reading older than this counts as missing. HA (>= 2024.3) stamps
+# `last_reported` on every state write, even when the value is unchanged,
+# so a live polled/pushed sensor refreshes it every few seconds up to about
+# a minute; five minutes of silence means the integration or the meter is
+# stuck. A frozen export value would otherwise keep the box charging from
+# the grid. Too slow for a 15 s controller anyway, so stopping is correct.
+PV_FOLLOW_SENSOR_STALE_S = 300.0
 
 
 @dataclass
@@ -114,6 +134,11 @@ class PvFollowRun:
     above_since: float | None = None
     below_since: float | None = None
     switched_at: float = 0.0
+    # Since when the box draws power although the controller did not
+    # start it (see `reconcile_idle_draw`).
+    draw_since: float | None = None
+    # No write before this timestamp (back-off after a failed write).
+    retry_at: float = 0.0
 
 
 def surplus_kw(
@@ -127,17 +152,71 @@ def surplus_kw(
     """Pure: nutzbarer Überschuss oder None, wenn Grid/Box nicht messbar.
 
     ``batteries`` = ``(power_kw, soc_pct)`` je genanntem Akku
-    (home-zentrisch: − = lädt)."""
+    (home-zentrisch: + = entlädt, − = lädt).
+
+    ``S = −grid + box − Σ entladen [+ Σ laden, wenn jeder Akku voll wird]``.
+    Entladung wird immer abgezogen, unabhängig vom SoC: deckt ein passiver
+    Akku die Box, liest das Netz 0 und ohne Abzug lüde das Auto aus dem
+    Hausakku. Die SoC-Schwelle entscheidet nur, ob Ladeleistung als
+    Überschuss zählt."""
     if grid_kw is None or box_kw is None:
         return None
     s = -grid_kw + max(0.0, box_kw)
     if not batteries:
         return s
+    s -= sum(p for p, _soc in batteries if p is not None and p > 0.0)
     soc_min = params.soc_hold_pct if running else params.soc_start_pct
     fills = all(soc is not None and soc >= soc_min for _p, soc in batteries)
     if fills:
         s += sum(-p for p, _soc in batteries if p is not None and p < 0.0)
     return s
+
+
+def reconcile_idle_draw(
+    run: PvFollowRun,
+    box_kw: float | None,
+    s_kw: float | None,
+    plugged: bool,
+    now: float,
+) -> str:
+    """Pure: reconcile ``charging=False`` with the measured box power.
+
+    A box can draw power the controller never started (left on the power
+    mode by an earlier solver command, a stop write that did not take
+    effect, a manual switch). ``decide()`` only looks for a start then, so
+    without this the box would keep charging from the grid indefinitely.
+    After the box drew more than `PV_FOLLOW_RUNNING_KW` for
+    `PV_FOLLOW_STOP_DELAY_S`: ``adopt`` if the surplus carries it
+    (``S ≥ min_kw``, S already excludes the box's own draw), else
+    ``stop``. Returns ``none`` otherwise. Mutates only ``draw_since``."""
+    if run.charging or box_kw is None or box_kw <= PV_FOLLOW_RUNNING_KW:
+        run.draw_since = None
+        return "none"
+    if run.draw_since is None:
+        run.draw_since = now
+    if now - run.draw_since < PV_FOLLOW_STOP_DELAY_S:
+        return "none"
+    # Next attempt only after another full delay — no write per tick.
+    run.draw_since = now
+    if plugged and s_kw is not None and s_kw >= run.params.min_kw:
+        return "adopt"
+    return "stop"
+
+
+def state_age_s(state: Any, now: float) -> float | None:
+    """Seconds since HA last saw a value for this state: ``last_reported``
+    (HA >= 2024.3, stamped on every write even when the value is
+    unchanged), else ``last_updated`` (only moves on a change of value or
+    attributes). None when the state carries neither."""
+    ts = getattr(state, "last_reported", None) or getattr(
+        state, "last_updated", None
+    )
+    if ts is None:
+        return None
+    try:
+        return now - ts.timestamp()
+    except (AttributeError, TypeError):
+        return None
 
 
 def decide(
@@ -277,15 +356,34 @@ class PvFollowMixin:
             except Exception:  # noqa: BLE001 — der Regler darf nie sterben
                 _LOGGER.exception("pv_follow tick failed for %s", device_id)
 
-    def _signed_power_kw(self, dev: dict[str, Any] | None) -> float | None:
+    def _pv_follow_power_kw(self, entity_id: str, now: float) -> float | None:
+        """`_read_power_kw` plus staleness: a reading older than
+        `PV_FOLLOW_SENSOR_STALE_S` counts as missing."""
+        if not entity_id:
+            return None
+        state = self._get_state(entity_id)
+        if state is None:
+            return None
+        age = state_age_s(state, now)
+        if age is not None and age > PV_FOLLOW_SENSOR_STALE_S:
+            _LOGGER.debug(
+                "pv_follow: %s stale (%.0f s) — treating as missing",
+                entity_id, age,
+            )
+            return None
+        return self._read_power_kw(entity_id)
+
+    def _signed_power_kw(
+        self, dev: dict[str, Any] | None, now: float
+    ) -> float | None:
         """Leistung eines Geräts wie im Telemetrie-Tick (Differenzpaar
-        oder Vorzeichen-Flip), home-zentrisch."""
+        oder Vorzeichen-Flip), home-zentrisch; eingefrorene Werte = None."""
         if dev is None:
             return None
-        power = self._read_power_kw(dev.get(CONF_ENTITY_POWER, "") or "")
+        power = self._pv_follow_power_kw(dev.get(CONF_ENTITY_POWER, "") or "", now)
         second = dev.get(CONF_ENTITY_POWER_2, "") or ""
         if second:
-            p2 = self._read_power_kw(second)
+            p2 = self._pv_follow_power_kw(second, now)
             if power is not None and p2 is not None:
                 return power - p2
             if power is None and p2 is not None:
@@ -311,7 +409,7 @@ class PvFollowMixin:
             await self._stop_pv_follow(device_id, write_stop=False, reason="Gerät weg")
             return
         p = run.params
-        box_kw = self._signed_power_kw(dev)
+        box_kw = self._signed_power_kw(dev, now)
         if run.charging is None:
             # Übernahme: lädt die Box schon (letzter Solver-Befehl), regelt
             # der Regler sie ab hier, ohne Start-Verzögerung.
@@ -326,16 +424,60 @@ class PvFollowMixin:
             plugged = status != "unplugged"
         s_kw = surplus_kw(
             p,
-            grid_kw=self._signed_power_kw(self._dev(p.grid_device_id)),
+            grid_kw=self._signed_power_kw(self._dev(p.grid_device_id), now),
             box_kw=box_kw,
             batteries=[
-                (self._signed_power_kw(b), self._read_soc(b))
+                (self._signed_power_kw(b, now), self._read_soc(b))
                 for b in (self._dev(i) for i in p.battery_device_ids)
                 if b is not None
             ],
             running=bool(run.charging),
         )
+        s_txt = f"{s_kw:.2f}" if s_kw is not None else "—"
+        idle = reconcile_idle_draw(run, box_kw, s_kw, plugged, now)
+        if idle == "adopt":
+            # The box draws power we did not start, and the surplus carries
+            # it: take it over — decide() regulates the current from here.
+            _LOGGER.warning(
+                "pv_follow %s: Box lädt ohne eigenen Start — übernommen "
+                "(Überschuss %s kW)", device_id, s_txt,
+            )
+            run.charging = True
+            run.amps = None
+            run.switched_at = now - PV_FOLLOW_MIN_ON_S
+        elif idle == "stop":
+            solar = dev.get(CONF_CHARGE_MODE_VALUE_SOLAR, "") or ""
+            current_mode = self._read_string(
+                dev.get(CONF_ENTITY_CHARGE_MODE, "") or ""
+            )
+            if solar and current_mode == solar:
+                # The box sits in its firmware solar mode, which is our stop
+                # state: the firmware charges from PV itself. Re-writing
+                # the same mode changes nothing.
+                _LOGGER.debug(
+                    "pv_follow %s: box draws in firmware solar mode — "
+                    "no re-stop", device_id,
+                )
+                return
+            _LOGGER.warning(
+                "pv_follow %s: Box lädt ohne eigenen Start (%.2f kW, "
+                "Überschuss %s kW) — stoppe erneut",
+                device_id, box_kw if box_kw is not None else 0.0, s_txt,
+            )
+            if now >= run.retry_at:
+                if await self._pv_follow_write_stop(device_id):
+                    run.switched_at = now
+                else:
+                    run.retry_at = now + PV_FOLLOW_WRITE_RETRY_S
+            return
         action, amps = decide(run, s_kw, plugged, now)
+        if action == "hold":
+            return
+        if now < run.retry_at:
+            _LOGGER.debug(
+                "pv_follow %s: %s deferred — last write failed", device_id, action
+            )
+            return
         if action in ("start", "adjust") and amps is not None:
             power_value = dev.get(CONF_CHARGE_MODE_VALUE_POWER, "") or ""
             if not power_value:
@@ -346,13 +488,17 @@ class PvFollowMixin:
                 return
             log = _LOGGER.warning if action == "start" else _LOGGER.debug
             log(
-                "pv_follow %s: %s %d A (Überschuss %.2f kW)",
-                device_id, action, amps, s_kw if s_kw is not None else 0.0,
+                "pv_follow %s: %s %d A (Überschuss %s kW)",
+                device_id, action, amps, s_txt,
             )
-            await self._apply_charge_mode(
+            ok = await self._apply_charge_mode(
                 device_id, power_value, schedule_hold=False,
                 charge_current_a=amps, charge_phases=p.phases,
             )
+            if not ok:
+                # Nothing committed: the next eligible tick retries.
+                run.retry_at = now + PV_FOLLOW_WRITE_RETRY_S
+                return
             if action == "start":
                 run.charging = True
                 run.switched_at = now
@@ -360,15 +506,19 @@ class PvFollowMixin:
         elif action == "stop":
             _LOGGER.warning(
                 "pv_follow %s: stop (Überschuss %s kW, gesteckt=%s)",
-                device_id,
-                f"{s_kw:.2f}" if s_kw is not None else "—", plugged,
+                device_id, s_txt, plugged,
             )
-            await self._pv_follow_write_stop(device_id)
+            if not await self._pv_follow_write_stop(device_id):
+                # Stays `charging` so decide() asks for the stop again.
+                run.retry_at = now + PV_FOLLOW_WRITE_RETRY_S
+                return
             run.charging = False
             run.amps = None
             run.switched_at = now
 
-    async def _pv_follow_write_stop(self, device_id: str) -> None:
+    async def _pv_follow_write_stop(self, device_id: str) -> bool:
+        """Stopp-Zustand schreiben (solar, sonst lock). True nur, wenn der
+        Write durchging."""
         dev = self._dev(device_id) or {}
         mode = (
             dev.get(CONF_CHARGE_MODE_VALUE_SOLAR, "")
@@ -380,5 +530,7 @@ class PvFollowMixin:
                 "pv_follow: %s has neither solar nor lock mapped — "
                 "cannot stop charging", device_id,
             )
-            return
-        await self._apply_charge_mode(device_id, mode, schedule_hold=False)
+            return False
+        return bool(
+            await self._apply_charge_mode(device_id, mode, schedule_hold=False)
+        )
