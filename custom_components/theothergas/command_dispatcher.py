@@ -474,7 +474,7 @@ class CommandDispatcherMixin:
         schedule_hold: bool = True,
         charge_current_a: int | None = None,
         charge_phases: int | None = None,
-    ) -> None:
+    ) -> bool:
         """Write the device's configured entity_charge_mode entity.
 
         Two domains supported:
@@ -508,9 +508,14 @@ class CommandDispatcherMixin:
         siehe `_remote_control_allowed`. Gate deckt damit auch den
         Hold-Start (`_start_charge_mode_hold`) ab, der nur von hier
         aus erreichbar ist.
+
+        Returns True only when every attempted write (phase, current,
+        mode) went through — the local PV controller (#292) commits its
+        state on that. Gate/breaker/mapping refusals and failed service
+        calls return False; the other callers ignore the result.
         """
         if not self._remote_control_allowed("_apply_charge_mode"):
-            return
+            return False
         dev = next(
             (d for d in self.devices if d.get(CONF_DEVICE_ID) == device_id),
             None,
@@ -520,20 +525,21 @@ class CommandDispatcherMixin:
                 "set_charge_mode: no matching device config for %s",
                 device_id,
             )
-            return
+            return False
         entity_id = dev.get(CONF_ENTITY_CHARGE_MODE, "") or ""
         if not entity_id:
             _LOGGER.warning(
                 "set_charge_mode: device %s has no entity_charge_mode "
                 "configured", device_id,
             )
-            return
+            return False
         domain = entity_id.split(".", 1)[0]
         # (#136) Schreib-Circuit-Breaker — EIN Zähl-Tick je Apply
         # (Phase/Strom/Modus zählen als ein Kommando; sie feuern nur
         # gemeinsam). Getrippt → gar nichts schreiben.
         if not self._write_allowed(device_id, entity_id):
-            return
+            return False
+        ok = True
         # First write (fresh SSE command) keeps the WARNING so the
         # user sees Crowdergy acting; the hold-loop rewrites drop to
         # DEBUG so a healthy 15-s cadence doesn't flood the HA log.
@@ -589,6 +595,7 @@ class CommandDispatcherMixin:
                         "set_charge_mode: phase write FAILED for %s: %s",
                         phase_entity, err,
                     )
+                    ok = False
             else:
                 _LOGGER.debug(
                     "set_charge_mode: phases=%s ignoriert — Phasen-Entity/"
@@ -629,6 +636,7 @@ class CommandDispatcherMixin:
                         "set_charge_mode: charge-current write FAILED "
                         "for %s: %s", current_entity, err,
                     )
+                    ok = False
         # (#152) Auch der Lademodus ist ein kommandierter Zustand —
         # gleiche Bezugsgroesse wie beim entity_control, damit die
         # Wirkungs-Kontrolle fuer ALLE Geraetetypen dieselbe ist.
@@ -648,7 +656,7 @@ class CommandDispatcherMixin:
                         "set_charge_mode: '%s' is not numeric, can't write "
                         "to %s entity %s", mode, domain, entity_id,
                     )
-                    return
+                    return False
                 await self.hass.services.async_call(
                     domain, "set_value",
                     {"entity_id": entity_id, "value": value},
@@ -659,11 +667,14 @@ class CommandDispatcherMixin:
                     "set_charge_mode: entity %s domain %s not supported "
                     "(expected select / number)", entity_id, domain,
                 )
+                ok = False
         except Exception as err:  # noqa: BLE001
             _LOGGER.exception("set_charge_mode service call failed: %s", err)
+            ok = False
 
         if schedule_hold:
             self._start_charge_mode_hold(device_id)
+        return ok
 
     def _start_charge_mode_hold(self, device_id: str) -> None:
         """Replace any existing charge_mode hold task for this device.
