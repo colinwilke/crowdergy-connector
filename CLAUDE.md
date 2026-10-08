@@ -110,6 +110,10 @@ Kuration bleiben im Backend, Box-Know-how im privaten Box-Repo.
   `coordinator.py` re-exportiert (Tests importieren `coordinator.<NAME>`).
 
 ### Steuerung
+- **AI aus ⇒ kein Write:** für ein Gerät mit `active_state is False` nur
+  Kommandos mit `origin: "user"` ausführen — einmal, ohne Hold; Hold-Loop
+  und Lease-Expiry enden (#350). Ein zweiter Eintrag auf derselben Entity
+  darf sonst nie mitschreiben.
 - **Consent:** Telemetrie-Consent gated nur Energiedaten (Heartbeat,
   Version, Polling nicht); Remote-Control-Consent zentral in allen
   `_apply_*` (inkl. Resync, Self-Heal, Hold, Lease).

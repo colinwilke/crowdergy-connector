@@ -647,3 +647,131 @@ async def test_sse_solar_clears_held_charge_current(hass: HomeAssistant):
     )
 
     assert "w1" not in coord.state.held_charge_current
+
+
+# ════════════════════════════════════════════════════════════════════
+# #350 — AI aus ⇒ Crowdergy schreibt nichts (Feld 2026-10-04: ein zweiter
+# Connector-Eintrag mit AI aus hielt „Solar Pure Mode" alle 15 s gegen die
+# Deadline-Ladung des ersten Eintrags auf derselben Box).
+# ════════════════════════════════════════════════════════════════════
+
+
+def _wallbox_device() -> dict:
+    return {
+        CONF_DEVICE_ID: "w1",
+        CONF_DEVICE_TYPE: "wallbox",
+        CONF_ENTITY_CHARGE_MODE: "select.lademodus",
+    }
+
+
+async def test_charge_mode_hold_loop_bails_and_clears_when_ai_off(
+    hass: HomeAssistant,
+):
+    """Frische SSE, gehaltener Wert — aber AI aus ⇒ kein Re-Write, der
+    Hold räumt sich ab (und startet KEINEN Lease-Expiry)."""
+    coord = make_coordinator(hass, [])
+    coord.state.active_state["w1"] = False
+    coord.state.held_charge_mode["w1"] = "Solar Pure Mode"
+    coord.state.held_charge_current["w1"] = 16
+    coord.state.last_sse_event_at = time.time()
+    coord._apply_charge_mode = AsyncMock()
+    coord._start_charge_mode_lease_expiry = MagicMock()
+
+    with patch(_SLEEP, _breaking_sleep(8)):
+        await _run_until_stopped(coord._charge_mode_hold_loop("w1"))
+
+    coord._apply_charge_mode.assert_not_awaited()
+    assert "w1" not in coord.state.held_charge_mode
+    assert "w1" not in coord.state.held_charge_current
+    coord._start_charge_mode_lease_expiry.assert_not_called()
+
+
+async def test_lease_expiry_writes_nothing_when_ai_off(hass: HomeAssistant):
+    """TTL abgelaufen, aber AI aus ⇒ kein Safe-Default — das Gerät gehört
+    dem User."""
+    coord = make_coordinator(hass, [_solar_wallbox_device()])
+    coord.state.active_state["w1"] = False
+    coord.state.last_sse_event_at = time.time() - COMMAND_LEASE_TTL_S - 5
+    coord._apply_charge_mode = AsyncMock()
+    coord._apply_battery_setpoint = AsyncMock()
+
+    await coord._charge_mode_lease_expiry("w1")
+
+    coord._apply_charge_mode.assert_not_awaited()
+    coord._apply_battery_setpoint.assert_not_awaited()
+
+
+async def test_sse_autonomous_command_dropped_when_ai_off(hass: HomeAssistant):
+    """Ein Kommando ohne `origin: user` für ein Gerät mit AI aus wird
+    verworfen — kein Service-Call, kein Hold."""
+    coord = make_coordinator(hass, [_wallbox_device()])
+    coord.state.active_state["w1"] = False
+    coord._start_charge_mode_hold = MagicMock()
+    hass.states.async_set("select.lademodus", "Power Mode")
+    calls = async_mock_service(hass, "select", "select_option")
+
+    await coord._handle_ws_message(
+        {"type": "command", "action": "set_charge_mode", "device_id": "w1",
+         "value": "Solar Pure Mode"}
+    )
+
+    assert calls == []
+    assert "w1" not in coord.state.held_charge_mode
+    coord._start_charge_mode_hold.assert_not_called()
+
+
+async def test_sse_autonomous_battery_command_dropped_when_ai_off(
+    hass: HomeAssistant,
+):
+    coord = make_coordinator(hass, [{
+        CONF_DEVICE_ID: "b1",
+        CONF_DEVICE_TYPE: "battery",
+    }])
+    coord.state.active_state["b1"] = False
+    coord._apply_battery_setpoint = AsyncMock()
+
+    await coord._handle_ws_message(
+        {"type": "command", "action": "set_charge_mode", "device_id": "b1",
+         "mode": "passive"}
+    )
+
+    coord._apply_battery_setpoint.assert_not_awaited()
+
+
+async def test_sse_user_command_written_once_without_hold_when_ai_off(
+    hass: HomeAssistant,
+):
+    """Hand-Befehl aus der App bei AI aus: genau EIN Write, kein Hold."""
+    coord = make_coordinator(hass, [_wallbox_device()])
+    coord.state.active_state["w1"] = False
+    coord._start_charge_mode_hold = MagicMock()
+    hass.states.async_set("select.lademodus", "Solar Pure Mode")
+    calls = async_mock_service(hass, "select", "select_option")
+
+    await coord._handle_ws_message(
+        {"type": "command", "action": "set_charge_mode", "device_id": "w1",
+         "value": "Power Mode", "origin": "user"}
+    )
+
+    assert len(calls) == 1
+    assert calls[0].data["option"] == "Power Mode"
+    assert "w1" not in coord.state.held_charge_mode
+    coord._start_charge_mode_hold.assert_not_called()
+
+
+async def test_sse_command_with_ai_on_still_holds(hass: HomeAssistant):
+    """Gegenprobe: AI an ⇒ unverändert (Write + Hold)."""
+    coord = make_coordinator(hass, [_wallbox_device()])
+    coord.state.active_state["w1"] = True
+    coord._start_charge_mode_hold = MagicMock()
+    hass.states.async_set("select.lademodus", "Solar Pure Mode")
+    calls = async_mock_service(hass, "select", "select_option")
+
+    await coord._handle_ws_message(
+        {"type": "command", "action": "set_charge_mode", "device_id": "w1",
+         "value": "Power Mode"}
+    )
+
+    assert len(calls) == 1
+    assert coord.state.held_charge_mode["w1"] == "Power Mode"
+    coord._start_charge_mode_hold.assert_called_once_with("w1")

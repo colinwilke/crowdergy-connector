@@ -313,6 +313,23 @@ class CommandDispatcherMixin:
             # home-assistant.log unnötig — analog zum Telemetry-Frame-
             # Log (Cluster D 2026-06-09).
             _LOGGER.debug("Crowdergy SSE command frame: %s", payload_keys)
+            # (#350) AI aus ⇒ Crowdergy steuert nicht. Nur ein Hand-Befehl
+            # des Users (`origin: "user"`: App-Befehl, Not-Aus) wird
+            # ausgeführt — jedes autonome Kommando verworfen, egal welcher
+            # Backend-Pfad es schickt (Feld 2026-10-04: ein zweiter
+            # Connector-Eintrag mit AI aus überschrieb die Ladung der Box).
+            if (
+                action in ("set_charge_mode", "pv_follow")
+                and device_id
+                and self._ai_off(device_id)
+                and data.get("origin") != "user"
+            ):
+                _LOGGER.info(
+                    "%s für %s verworfen — Crowdergy AI ist für das Gerät "
+                    "aus (nur Hand-Befehle werden ausgeführt)",
+                    action, device_id,
+                )
+                return
             # #292: lokaler PV-Überschuss-Regler (pv_follow.py).
             if action == "pv_follow" and device_id:
                 await self._start_pv_follow(device_id, data)
@@ -516,6 +533,14 @@ class CommandDispatcherMixin:
         """
         if not self._remote_control_allowed("_apply_charge_mode"):
             return False
+        # (#350) AI aus: ein Hand-Befehl wird EINMAL geschrieben, nie
+        # gehalten — ein Hold schriebe den Modus alle 15 s zurück und
+        # überstimmte damit jeden anderen, der die Box bedient. Ein evtl.
+        # noch laufender Hold endet hier.
+        log_level = logging.WARNING if schedule_hold else logging.DEBUG
+        if schedule_hold and self._ai_off(device_id):
+            self._cancel_charge_mode_hold(device_id)
+            schedule_hold = False
         dev = next(
             (d for d in self.devices if d.get(CONF_DEVICE_ID) == device_id),
             None,
@@ -542,8 +567,8 @@ class CommandDispatcherMixin:
         ok = True
         # First write (fresh SSE command) keeps the WARNING so the
         # user sees Crowdergy acting; the hold-loop rewrites drop to
-        # DEBUG so a healthy 15-s cadence doesn't flood the HA log.
-        log_level = logging.WARNING if schedule_hold else logging.DEBUG
+        # DEBUG so a healthy 15-s cadence doesn't flood the HA log
+        # (`log_level` is set above, before the AI-off downgrade).
         _LOGGER.log(log_level, "set_charge_mode: %s → %s", entity_id, mode)
         # Update the held value BEFORE the actual write so any in-
         # flight old hold-tick that wakes up between our cancel and
@@ -774,6 +799,12 @@ class CommandDispatcherMixin:
         # ist das Gerät dem User überlassen.
         self._cancel_hold(device_id)
 
+    def _ai_off(self, device_id: str) -> bool:
+        """(#350) Crowdergy AI für dieses Gerät ausdrücklich aus? Ein noch
+        unbekannter Zustand (vor dem Bootstrap) zählt NICHT als aus — das
+        Backend schickt autonome Kommandos ohnehin nur an Geräte mit AI an."""
+        return self.state.active_state.get(device_id) is False
+
     def _cancel_charge_mode_hold(self, device_id: str) -> None:
         """Stop the per-device charge_mode hold and drop the cached
         held value. Called on `passive` commands (worker signals
@@ -843,6 +874,9 @@ class CommandDispatcherMixin:
                     min(30.0, COMMAND_LEASE_TTL_S - staleness)
                 )
 
+            # (#350) AI aus ⇒ kein Safe-Default: das Gerät gehört dem User.
+            if self._ai_off(device_id):
+                return
             dev = next(
                 (d for d in self.devices
                  if d.get(CONF_DEVICE_ID) == device_id),
@@ -898,17 +932,22 @@ class CommandDispatcherMixin:
         → the inverter's native logic regains control rather than
         being stuck on the last command forever).
 
-        Deliberately does NOT gate on `_active_state`. The user can
-        manually tap Wallbox modes (Aus / An / Solar) while AI is off,
-        and those still need to hold against firmwares that auto-
-        revert. AI-off scenarios are handled by the explicit cancel
-        paths above, not by an inline is_active check.
+        (#350) Bails when the device's AI is off: Crowdergy never
+        re-writes anything for an AI-off device — a manual tap is
+        written once (`_apply_charge_mode`), never held. The hold used
+        to keep running for manual taps, which made a connector entry
+        with AI off overwrite the box every 15 s.
         """
         try:
             await asyncio.sleep(CHARGE_MODE_HOLD_INITIAL_DELAY)
             while True:
                 mode = self.state.held_charge_mode.get(device_id)
                 if mode is None:
+                    return
+                if self._ai_off(device_id):
+                    self.state.held_charge_mode.pop(device_id, None)
+                    self.state.held_charge_current.pop(device_id, None)
+                    self.state.held_charge_phases.pop(device_id, None)
                     return
                 # Liveness check: if Crowdergy isn't talking to us,
                 # stop holding so the user's inverter can take over.
