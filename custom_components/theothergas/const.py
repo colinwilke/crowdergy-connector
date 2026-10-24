@@ -17,10 +17,9 @@ DOMAIN = "theothergas"
 DEFAULT_API_URL = "https://api.theothergas.de"
 CONF_API_URL = "api_url"
 CONF_EMAIL = "email"
-CONF_PASSWORD = "password"
 # Onboarding-Symmetrie #39 (2026-06-16): der HACS-Connector pairt jetzt
 # per Code (POST /connector/claim) statt Email/Passwort — wie die Box.
-# CONF_EMAIL/PASSWORD bleiben für Bestands-Entries + Box-Import erhalten.
+# CONF_EMAIL bleibt für Bestands-Entries + Box-Import erhalten.
 CONF_PAIRING_CODE = "pairing_code"
 CONF_ACCESS_TOKEN = "access_token"
 CONF_REFRESH_TOKEN = "refresh_token"
@@ -47,7 +46,6 @@ CONTROLLABLE_TYPES = frozenset(
     {"battery", "wallbox", "heating", "warmwater", "aircon", "generic"}
 )
 
-UPDATE_INTERVAL = 30
 
 CONF_DEVICE_NAME = "device_name"
 CONF_DEVICE_TYPE = "device_type"
@@ -406,9 +404,6 @@ CONTROL_EFFECT_TOLERANCE = 0.6
 # rampen, nachlaufen und seinen Wert verzögert übernehmen — gemeldet
 # wird nur, was sich NICHT von selbst auflöst.
 CONTROL_EFFECT_MIN_MISMATCH_S = 900.0
-# Karenz nach einem eigenen Write: davor wird gar nicht verglichen
-# (die Übernahme durch Integration + Gerät braucht ein paar Sekunden).
-CONTROL_EFFECT_SETTLE_S = 120.0
 
 # ── Hausverbrauchs-Flow-Sensoren (CN-#42, 2026-06-15) ─────────────────
 # „House Consumption decomposed by source" — drei optionale Live-Power-

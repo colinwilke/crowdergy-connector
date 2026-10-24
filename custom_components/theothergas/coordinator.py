@@ -35,23 +35,10 @@ from .const import (
     CONF_ENTITY_ENERGY_TOTAL,
     CONF_INVERT_POWER_SIGN,
     CONF_ENTITY_ENERGY_DISCHARGED_TOTAL,
-    CONF_ENTITY_VORLAUF_TEMP,
-    CONF_ENTITY_HC_PV_POWER,
-    CONF_ENTITY_HC_BATTERY_POWER,
-    CONF_ENTITY_HC_GRID_POWER,
-    CONF_ENTITY_PV_TO_BATTERY_POWER,
     CONF_REFRESH_TOKEN,
     CONF_USER_ID,
-    CONF_VALUE_OFF,
-    CONF_VALUE_ON,
     CONF_ENTITY_COOL_CONTROL,
     CONF_ENTITY_POWER_2,
-    CONF_SUPPORTS_COOLING,
-    CONF_VALUE_COOL_ON,
-    CONF_VALUE_COOL_OFF,
-    CONF_VEHICLE_STATUS_VALUE_ERROR,
-    CONF_VEHICLE_STATUS_VALUE_PLUGGED,
-    CONF_VEHICLE_STATUS_VALUE_UNPLUGGED,
     CONTROLLABLE_TYPES,
     DOMAIN,
 )
@@ -282,6 +269,8 @@ class CrowdergyCoordinator(
         # Logout-Kaskade. Mit Lock: erste Caller refresht, alle weiteren
         # warten am Lock und sehen dann das neue Token via CAS-Check.
         self._refresh_lock: asyncio.Lock = asyncio.Lock()
+        # Serialises telemetry ticks (see `_async_update_data`).
+        self._tick_lock: asyncio.Lock = asyncio.Lock()
         # v2.5.4: dedicated liveness ping. Decoupled from the
         # per-device telemetry stream so a fully idle home no longer
         # has to PATCH N devices every 30 s purely to keep iOS's
@@ -673,35 +662,6 @@ class CrowdergyCoordinator(
         # transienten Status) — Caller behandelt ihn wie zuvor.
         return response  # type: ignore[return-value]
 
-    async def delete_device_backend(self, device_id: str) -> bool:
-        """Backend-DELETE für ein Device, mit Auth-Refresh.
-
-        Cluster B Connector (2026-06-09): vorher hatte
-        `async_remove_config_entry_device` in `__init__.py` einen
-        eigenen httpx-Client OHNE 401-Refresh-Pfad → bei abgelaufenem
-        Token blieb das Device als Orphan im Backend. Jetzt geht's
-        durch denselben authentifizierten Pfad wie alle anderen
-        Backend-Calls.
-        """
-        try:
-            response = await self._authenticated_request(
-                "DELETE", f"/api/v1/devices/{device_id}"
-            )
-        except httpx.RequestError as err:
-            _LOGGER.warning(
-                "Backend delete request for %s failed transport: %s",
-                device_id, err,
-            )
-            return False
-        # 404 = backend hat das schon nicht mehr → für unsere Zwecke ok.
-        if response.status_code in (200, 204, 404):
-            return True
-        _LOGGER.warning(
-            "Backend delete for %s returned %s",
-            device_id, response.status_code,
-        )
-        return False
-
     async def async_shutdown(self) -> None:
         # P3 (2026-06-11): super().async_shutdown() stoppt den
         # Scheduled-Refresh + Debouncer der Basisklasse — vorher
@@ -821,6 +781,27 @@ class CrowdergyCoordinator(
         return False
 
     async def _async_update_data(self) -> dict[str, dict[str, Any]]:
+        """Run one telemetry tick — never two at once.
+
+        `DataUpdateCoordinator` does not serialise refreshes: the
+        scheduled tick and the event-driven `async_refresh` (state-change
+        listener) can overlap whenever a tick is slow (PATCH retries with
+        a 15 s timeout each). Both ticks would then compute the energy Δ
+        against the same `_prev_energy_kwh` baseline — it only advances
+        after a successful send — and the backend would book the same kWh
+        twice. An overlapping refresh is skipped instead (coalesced into
+        the tick already in flight, which reads the newest states anyway).
+        """
+        lock = getattr(self, "_tick_lock", None)
+        if lock is None:
+            lock = self._tick_lock = asyncio.Lock()
+        if lock.locked():
+            _LOGGER.debug("telemetry tick still in flight — skipping overlap")
+            return self.data or {}
+        async with lock:
+            return await self._run_telemetry_tick()
+
+    async def _run_telemetry_tick(self) -> dict[str, dict[str, Any]]:
         # #56: start each tick with no prefetch snapshot (clears any leftover
         # from a mid-tick exception in the prior tick).
         self._state_cache = None

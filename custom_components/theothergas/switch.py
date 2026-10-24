@@ -107,10 +107,9 @@ class CrowdergyActiveSwitch(
             {"action": "toggle_active", "is_active": on},
         )
         if success:
-            # Keep both the cache and the data dict in sync; the SSE
-            # telemetry mirror frame will arrive shortly and re-confirm
-            # this value but applying optimistically avoids UI lag.
-            self.coordinator.state.active_state[self._device_id] = on
-            if self.coordinator.data and self._device_id in self.coordinator.data:
-                self.coordinator.data[self._device_id]["is_active"] = on
-                self.async_write_ha_state()
+            # Same transition path as the SSE mirror frame. The cache is
+            # updated here (avoids UI lag), so the backend's echo frame
+            # sees no change — the side effects (AI-off handover / AI-on
+            # apply) therefore have to run here, exactly once.
+            await self.coordinator._apply_active_transition(self._device_id, on)
+            self.async_write_ha_state()

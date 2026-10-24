@@ -12,7 +12,6 @@ eigene Klasse. Hier verifizieren wir die testbaren Invarianten:
 from __future__ import annotations
 
 import asyncio
-import json
 
 import pytest
 

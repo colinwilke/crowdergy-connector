@@ -341,6 +341,14 @@ class PvFollowMixin:
             run = self._pv_follow_runs().get(device_id)
             if run is None:
                 return
+            # (#350) AI off ⇒ no autonomous writes: the controller ends
+            # without touching the box (the AI-off handover, when it runs,
+            # already left the stop state behind).
+            if self._ai_off(device_id):
+                await self._stop_pv_follow(
+                    device_id, write_stop=False, reason="AI aus",
+                )
+                return
             now = time.time()
             sse_fresh = (
                 now - float(getattr(self.state, "last_sse_event_at", 0.0) or 0.0)

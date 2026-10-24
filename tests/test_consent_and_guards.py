@@ -335,3 +335,66 @@ async def test_apply_device_state_number_drift_writes(hass: HomeAssistant):
 
     assert len(calls) == 1
     assert calls[0].data["value"] == 60.0
+
+
+# ── AI-off via HA switch + Vorlauf gate (#350) ────────────────────────
+
+
+def _battery_dev() -> dict:
+    return {
+        CONF_DEVICE_ID: "bat",
+        CONF_DEVICE_TYPE: "battery",
+        CONF_ENTITY_BATTERY_MODE: "select.bat_mode",
+        CONF_ENTITY_BATTERY_POWER_SETPOINT: "number.bat_setpoint",
+        CONF_VALUE_BATTERY_MODE_ACTIVE: "Aktiv",
+        CONF_VALUE_BATTERY_MODE_PASSIVE: "Passiv",
+    }
+
+
+async def test_ha_switch_ai_off_runs_handover_once(hass: HomeAssistant):
+    """Switching AI off from the HA switch must run the AI-off handover
+    (battery → passive). The switch used to set the cache optimistically,
+    so the backend's echo frame saw no change and the handover never ran;
+    the echo must not run it a second time either."""
+    from unittest.mock import MagicMock
+
+    from custom_components.theothergas.switch import CrowdergyActiveSwitch
+
+    coord = make_coordinator(hass, [_battery_dev()])
+    coord.data = None
+    coord.state.active_state["bat"] = True
+    coord.async_post_command = AsyncMock(return_value=True)
+    hass.states.async_set("select.bat_mode", "Aktiv")
+    modes = async_mock_service(hass, "select", "select_option")
+
+    switch = CrowdergyActiveSwitch(coord, _battery_dev(), MagicMock())
+    switch.async_write_ha_state = MagicMock()
+    await switch.async_turn_off()
+
+    assert coord.state.active_state["bat"] is False
+    assert [c.data["option"] for c in modes] == ["Passiv"]
+
+    # Backend echo of the toggle: no second handover.
+    await coord._handle_ws_message({
+        "type": "telemetry", "device_id": "bat", "data": {"is_active": False},
+    })
+    assert len(modes) == 1
+
+
+async def test_vorlauf_setpoint_not_written_with_ai_off(hass: HomeAssistant):
+    dev = {
+        CONF_DEVICE_ID: "hz",
+        CONF_DEVICE_TYPE: "heating",
+        CONF_ENTITY_VORLAUF_SETPOINT: "number.vl_soll",
+    }
+    coord = make_coordinator(hass, [dev])
+    hass.states.async_set("number.vl_soll", "30", {"min": 20, "max": 55})
+    calls = async_mock_service(hass, "number", "set_value")
+
+    coord.state.active_state["hz"] = False
+    await coord._apply_vorlauf_setpoint("hz", 42.0)
+    assert calls == []
+
+    coord.state.active_state["hz"] = True
+    await coord._apply_vorlauf_setpoint("hz", 42.0)
+    assert [c.data["value"] for c in calls] == [42.0]
