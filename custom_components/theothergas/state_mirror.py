@@ -110,6 +110,20 @@ class DeviceStateMirror:
     # „Nutzer-Eingriff" trennt (LOCAL_OVERRIDE_GRACE_S).
     last_own_write_at: dict[str, float] = field(default_factory=dict)
 
+    # (#140) Der Wert, den die Entity zuletzt nachweislich von UNS hatte
+    # (geschrieben oder bei einem Abgleich schon vorgefunden), je Entity.
+    # Fremd-Drift heißt: die Entity zeigt etwas anderes als diesen Wert.
+    # Zeigt sie noch unseren alten Wert, während das Kommando schon
+    # weiter ist (neuer Vorlauf, ECO-Spiegel), ist das kein Eingriff —
+    # der neue Wert ist nur noch nicht geschrieben.
+    own_entity_value: dict[str, str] = field(default_factory=dict)
+
+    # (#140) Was die Entity unmittelbar VOR unserem letzten Write zeigte.
+    # Steht sie danach unverändert darauf, hat das Gerät den Write nur
+    # noch nicht übernommen (Cloud-/Polling-Integrationen melden den
+    # neuen Sollwert erst mit dem nächsten Update) — kein Eingriff.
+    pre_write_value: dict[str, str] = field(default_factory=dict)
+
     # (#152) Der Wert, den wir zuletzt WIRKLICH auf die Steuer-Entity
     # eines Geräts geschrieben haben — nach dem #135-Clamp, also das,
     # was am Gerät ankommen konnte, nicht was konfiguriert ist. Quelle

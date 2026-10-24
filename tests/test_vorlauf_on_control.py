@@ -15,6 +15,10 @@ und pausierte das Gerät 2 h („Manuelle Bedienung erkannt", Feld colin
 * is_on-Wechsel ohne Vorlauf: Min/Max wie bisher, alter Vorlauf verfällt.
 * Eigene Vorlauf-Entity: An/Aus-Hold unverändert.
 * Wirkungs-Kontrolle vergleicht gegen den Vorlauf.
+* Neuer Vorlauf, Entity zeigt noch unseren alten Wert (ECO-Spiegel,
+  Steuer-Entity): ausstehender Write, kein Override.
+* Träge Entity nach HA-Neustart: zeigt noch den Wert von vor unserem
+  Write → kein Override; ein neuer Fremdwert pausiert weiter.
 """
 from __future__ import annotations
 
@@ -31,6 +35,7 @@ from custom_components.theothergas.const import (
     CONF_DEVICE_ID,
     CONF_DEVICE_TYPE,
     CONF_ENTITY_CONTROL,
+    CONF_ENTITY_CONTROL_ECO,
     CONF_ENTITY_CONTROL_HOLD,
     CONF_ENTITY_VORLAUF_SETPOINT,
     CONF_VALUE_OFF,
@@ -226,3 +231,117 @@ async def test_separate_vorlauf_entity_leaves_hold_unchanged(hass: HomeAssistant
 
     assert climate_calls == []
     assert "d1" not in coord.state.local_override_until
+
+
+ECO = "number.wp_eco_soll"
+
+
+def _eco(hass, value: float) -> None:
+    hass.states.async_set(ECO, str(value), {"min": 10, "max": 30})
+
+
+async def test_new_vorlauf_on_eco_mirror_is_not_an_override(hass: HomeAssistant):
+    """Feld-Repro nach v3.50.5: der ECO-Spiegel hält unseren alten
+    Vorlauf (25,6 °C), der Solver schickt 27 °C. Die ECO-Entity zeigt
+    noch unseren eigenen Wert → nachschreiben, nicht pausieren."""
+    dev = _heating()
+    dev[CONF_ENTITY_CONTROL_ECO] = ECO
+    coord = make_coordinator(hass, [dev])
+    coord.state.on_state["d1"] = True
+    _wp(hass, 25.6)
+    _eco(hass, 25.6)
+    async_mock_service(hass, "climate", "set_temperature")
+    eco_calls = async_mock_service(hass, "number", "set_value")
+    await coord._apply_vorlauf_setpoint("d1", 25.6)
+    await _run_hold(coord, True, "30", ticks=2)  # ECO steht → gemerkt
+    assert eco_calls == []
+
+    coord.state.last_own_write_at[ECO] = time.time() - 600
+    await coord._apply_vorlauf_setpoint("d1", 27.0)
+    _wp(hass, 27.0)
+    await _run_hold(coord, True, "30", ticks=2)
+
+    assert "d1" not in coord.state.local_override_until
+    assert [c.data for c in eco_calls] == [{"entity_id": ECO, "value": 27.0}]
+
+
+async def test_foreign_change_on_eco_mirror_still_pauses(hass: HomeAssistant):
+    """Gegenprobe: zeigt die ECO-Entity einen Wert, den wir nie
+    geschrieben haben, bleibt das ein Eingriff."""
+    dev = _heating()
+    dev[CONF_ENTITY_CONTROL_ECO] = ECO
+    coord = make_coordinator(hass, [dev])
+    coord.state.on_state["d1"] = True
+    _wp(hass, 25.6)
+    _eco(hass, 25.6)
+    async_mock_service(hass, "climate", "set_temperature")
+    eco_calls = async_mock_service(hass, "number", "set_value")
+    await coord._apply_vorlauf_setpoint("d1", 25.6)
+    await _run_hold(coord, True, "30", ticks=2)
+
+    _eco(hass, 21.0)
+    coord.state.last_own_write_at[ECO] = time.time() - 600
+    await _run_hold(coord, True, "30", ticks=2)
+
+    assert eco_calls == []
+    assert coord.state.local_override_until.get("d1", 0) > time.time()
+
+
+async def test_new_vorlauf_skipped_by_breaker_is_not_an_override(
+    hass: HomeAssistant,
+):
+    """Steuer-Entity: neuer Vorlauf kam an, der Write ging (noch) nicht
+    raus — die Entity zeigt unseren alten Vorlauf. Kein Override."""
+    coord = make_coordinator(hass, [_heating()])
+    coord.state.on_state["d1"] = True
+    _wp(hass, 25.6)
+    calls = async_mock_service(hass, "climate", "set_temperature")
+    await coord._apply_vorlauf_setpoint("d1", 25.6)  # steht → gemerkt
+    coord.state.last_own_write_at[WP] = time.time() - 600
+    with patch.object(
+        CrowdergyCoordinator, "_write_allowed", lambda *_a, **_k: False,
+    ):
+        await coord._apply_vorlauf_setpoint("d1", 27.0)
+    await _run_hold(coord, True, "30", ticks=2)
+
+    assert "d1" not in coord.state.local_override_until
+    assert [c.data for c in calls] == [{"entity_id": WP, "temperature": 27.0}]
+
+
+async def test_slow_entity_after_restart_is_not_an_override(hass: HomeAssistant):
+    """Feld-Repro 17:45 nach dem Update: HA-Neustart, die Entity hält noch
+    unseren alten Vorlauf 25,7 °C, der Connector kennt ihn nicht mehr und
+    schreibt AUS = 10 °C. Die Integration übernimmt den Write verzögert —
+    die Entity zeigt > 30 s weiter 25,7. Das ist kein Nutzer-Eingriff."""
+    coord = make_coordinator(hass, [_heating()])
+    coord.state.on_state["d1"] = False
+    _wp(hass, 25.7)
+    calls = async_mock_service(hass, "climate", "set_temperature")
+
+    await coord._apply_device_state("d1", False)  # schreibt 10, Entity träge
+    assert [c.data for c in calls] == [{"entity_id": WP, "temperature": 10.0}]
+    coord._cancel_hold("d1")
+    coord.state.last_own_write_at[WP] = time.time() - 60
+
+    await _run_hold(coord, False, "10", ticks=2)
+
+    assert "d1" not in coord.state.local_override_until
+    assert len(calls) == 2  # nachgeschrieben statt pausiert
+
+
+async def test_slow_entity_then_foreign_value_still_pauses(hass: HomeAssistant):
+    """Gegenprobe: ändert jemand den Wert auf etwas, das weder unser
+    Kommando noch der Stand vor dem Write ist, bleibt es ein Eingriff."""
+    coord = make_coordinator(hass, [_heating()])
+    coord.state.on_state["d1"] = False
+    _wp(hass, 25.7)
+    calls = async_mock_service(hass, "climate", "set_temperature")
+    await coord._apply_device_state("d1", False)
+    coord._cancel_hold("d1")
+    _wp(hass, 21.0)
+    coord.state.last_own_write_at[WP] = time.time() - 60
+
+    await _run_hold(coord, False, "10", ticks=2)
+
+    assert len(calls) == 1
+    assert coord.state.local_override_until.get("d1", 0) > time.time()
