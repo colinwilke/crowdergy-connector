@@ -1013,10 +1013,13 @@ class CrowdergyCoordinator(
             )
             data_missing = measurements_live is False
             payload: dict[str, Any] = {"is_online": not data_missing}
-            if not data_missing:
-                payload["power_kw"] = (
-                    current_power if current_power is not None else 0.0
-                )
+            # Same honesty one level down: the device is live, but its
+            # power sensor alone is unavailable or was never mapped →
+            # omit `power_kw` instead of inventing 0 kW. `_should_send`
+            # treats a key missing on both sides as unchanged, so a
+            # steadily absent value does not count as a change per tick.
+            if not data_missing and current_power is not None:
+                payload["power_kw"] = current_power
             if soc_percent is not None:
                 payload["soc_percent"] = soc_percent
             if vehicle_status is not None:

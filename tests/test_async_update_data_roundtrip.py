@@ -289,14 +289,15 @@ async def test_unmapped_power_still_reports_online(hass: HomeAssistant):
 
     payload = _sent_payload(coord)
     assert payload["is_online"] is True
-    assert payload["power_kw"] == 0.0
+    # No power sensor mapped → no power value, not an invented 0 kW.
+    assert "power_kw" not in payload
 
 
 async def test_one_live_sensor_keeps_device_online(hass: HomeAssistant):
     """Alle-oder-keiner: ein zickender Sensor neben einem gesunden ist KEIN
     Datenausfall. Der Leistungssensor ist weg, der Zähler liefert weiter —
-    das Gerät bleibt online (und `power_kw` fällt auf die ehrliche 0, weil
-    genau dieser eine Wert fehlt, nicht die Quelle)."""
+    das Gerät bleibt online. `power_kw` fehlt im Payload statt auf 0 zu
+    fallen — genau dieser eine Wert ist unbekannt, nicht die Quelle."""
     dev = {
         CONF_DEVICE_ID: "dev-1",
         CONF_DEVICE_TYPE: "solar",
@@ -313,8 +314,41 @@ async def test_one_live_sensor_keeps_device_online(hass: HomeAssistant):
 
     payload = _sent_payload(coord)
     assert payload["is_online"] is True
-    assert payload["power_kw"] == 0.0
+    assert "power_kw" not in payload
     assert payload["energy_kwh_total"] == 100.0
+
+
+async def test_power_sensor_recovery_resends_value(hass: HomeAssistant):
+    """Live device, power sensor flaps: absent while unavailable, the real
+    value once it is back — and a steadily absent `power_kw` does not
+    count as a change on every tick."""
+    dev = {
+        CONF_DEVICE_ID: "dev-1",
+        CONF_DEVICE_TYPE: "solar",
+        CONF_ENTITY_POWER: "sensor.pv_power",
+        CONF_ENTITY_ENERGY_TOTAL: "sensor.pv_energy",
+    }
+    coord = _make_coord(hass, [dev])
+    hass.states.async_set("sensor.pv_power", "unavailable", {})
+    hass.states.async_set(
+        "sensor.pv_energy", "100.0", {"unit_of_measurement": "kWh"}
+    )
+    await coord._async_update_data()
+    first = _sent_payload(coord)
+    assert first["is_online"] is True
+    assert "power_kw" not in first
+
+    # Same state again: missing key on both sides is not a change.
+    assert coord._should_send("dev-1", dict(first)) is False
+
+    hass.states.async_set(
+        "sensor.pv_power", "2500", {"unit_of_measurement": "W"}
+    )
+    await coord._async_update_data()
+    assert coord._patch_telemetry_with_retry.await_count == 2
+    payload = _sent_payload(coord)
+    assert payload["is_online"] is True
+    assert payload["power_kw"] == 2.5
 
 
 async def test_control_entity_alone_does_not_prove_measurement(

@@ -211,6 +211,18 @@ class CommandDispatcherMixin:
             payload = data.get("data") or {}
             if not device_id:
                 return
+            # Echo of our own telemetry PATCH: the backend tags these
+            # frames with a top-level `origin: "telemetry"`. They report
+            # state we just measured, not a command — acting on a delayed
+            # echo could revert a quick local switch in HA. No side
+            # effects, no cache overwrite. Frames without the key (command
+            # mirrors, older backends) take the regular path below.
+            if data.get("origin") == "telemetry":
+                _LOGGER.debug(
+                    "Crowdergy SSE telemetry echo ignored: device=%s keys=%s",
+                    device_id, sorted(payload),
+                )
+                return
             # v3.9.2 (2026-06-04): manuelle App-Befehle kommen als
             # telemetry-Frames mit `is_on`/`is_active`. Ohne dieses Log
             # war „kommt manueller Befehl durch?"-Diagnose blind —

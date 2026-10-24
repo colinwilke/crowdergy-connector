@@ -292,6 +292,53 @@ async def test_dispatch_telemetry_idempotent_when_cache_matches(
     coord._apply_device_state.assert_not_awaited()
 
 
+async def test_dispatch_telemetry_echo_with_origin_has_no_side_effects(
+    hass: HomeAssistant,
+):
+    """Echo of the connector's own PATCH (`origin: "telemetry"`) is not a
+    command: a differing is_on/cool_on/is_active/vorlauf triggers no write
+    and leaves the local state cache untouched."""
+    coord = _routing_coordinator(hass, [{CONF_DEVICE_ID: "d1", CONF_DEVICE_TYPE: "heating"}])
+    coord._apply_active_transition = AsyncMock()
+    coord.state.on_state["d1"] = False
+    coord.state.cool_state["d1"] = False
+    coord.state.active_state["d1"] = True
+    await coord._handle_ws_message(
+        {
+            "type": "telemetry",
+            "origin": "telemetry",
+            "device_id": "d1",
+            "data": {
+                "is_on": True,
+                "cool_on": True,
+                "is_active": False,
+                "vorlauf_setpoint_c": 45,
+            },
+        }
+    )
+    coord._apply_device_state.assert_not_awaited()
+    coord._apply_cool_state.assert_not_awaited()
+    coord._apply_vorlauf_setpoint.assert_not_awaited()
+    coord._apply_active_transition.assert_not_awaited()
+    assert coord.state.on_state["d1"] is False
+    assert coord.state.cool_state["d1"] is False
+    assert coord.state.active_state["d1"] is True
+
+
+async def test_dispatch_telemetry_without_origin_still_applies(
+    hass: HomeAssistant,
+):
+    """The same frame without `origin` (command mirror / older backend)
+    keeps today's behaviour: differing is_on is applied."""
+    coord = _routing_coordinator(hass, [{CONF_DEVICE_ID: "d1", CONF_DEVICE_TYPE: "heating"}])
+    coord.state.on_state["d1"] = False
+    await coord._handle_ws_message(
+        {"type": "telemetry", "device_id": "d1", "data": {"is_on": True}}
+    )
+    coord._apply_device_state.assert_awaited_once_with("d1", True)
+    assert coord.state.on_state["d1"] is True
+
+
 async def test_dispatch_cool_on_processed_before_is_on(hass: HomeAssistant):
     """v3.6.4-Garantie: cool_on wird VOR is_on dispatcht, damit der
     heat-side-Skip-Guard den frisch gesetzten cool_state sieht."""
