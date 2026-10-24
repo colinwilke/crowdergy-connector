@@ -18,6 +18,7 @@ keep working.
 from __future__ import annotations
 
 import json
+import math
 import time
 from typing import Any
 
@@ -177,6 +178,15 @@ _MEASUREMENT_SLOT_KEYS: tuple[str, ...] = (
 )
 
 
+def _finite_float(raw: Any) -> float | None:
+    """`float(raw)` for finite numbers, else None (non-numeric, NaN, inf)."""
+    try:
+        value = float(raw)
+    except (ValueError, TypeError):
+        return None
+    return value if math.isfinite(value) else None
+
+
 class TelemetryReaderMixin:
     """Per-tick HA-state readers + payload compose/decide for
     :class:`~.coordinator.CrowdergyCoordinator` (#21 Phase-C). Pure read/
@@ -281,10 +291,12 @@ class TelemetryReaderMixin:
         state = self._get_state(entity_id)
         if state is None or state.state in ("unknown", "unavailable"):
             return None
-        try:
-            return float(state.state)
-        except (ValueError, TypeError):
-            return state.state
+        # Numeric only: every caller (soc, temperature fallback, outdoor
+        # temp, extras) forwards a number. A non-numeric state used to be
+        # returned verbatim — `_should_send` then raised a TypeError on the
+        # threshold diff and the whole tick (all devices) failed; a NaN/inf
+        # serialises to invalid JSON and the backend rejects the payload.
+        return _finite_float(state.state)
 
     def _read_temp_c(self, entity_id: str) -> Any:
         """Ist-Temperatur lesen. Bei climate.* / water_heater.* steht
@@ -299,13 +311,7 @@ class TelemetryReaderMixin:
             state = self._get_state(entity_id)
             if state is None:
                 return None
-            attr = state.attributes.get("current_temperature")
-            if attr is None:
-                return None
-            try:
-                return float(attr)
-            except (ValueError, TypeError):
-                return None
+            return _finite_float(state.attributes.get("current_temperature"))
         return self._read_entity_state(entity_id)
 
     @staticmethod
@@ -459,9 +465,8 @@ class TelemetryReaderMixin:
         state = self._get_state(entity_id)
         if state is None or state.state in ("unknown", "unavailable"):
             return None
-        try:
-            value = float(state.state)
-        except (ValueError, TypeError):
+        value = _finite_float(state.state)
+        if value is None:
             return None
         unit = (state.attributes.get("unit_of_measurement") or "").strip().lower()
         if unit in ("wh", "w·h", "watt-hours", "watthours"):
@@ -478,11 +483,12 @@ class TelemetryReaderMixin:
         state = self._get_state(entity_id)
         if state is None or state.state in ("unknown", "unavailable"):
             return None
-        try:
-            value = float(state.state)
-        except (ValueError, TypeError):
+        value = _finite_float(state.state)
+        if value is None:
             return None
-        unit = state.attributes.get("unit_of_measurement", "").lower()
+        # `or ""`: an explicit `unit_of_measurement: None` attribute used
+        # to raise AttributeError here and fail the whole tick.
+        unit = (state.attributes.get("unit_of_measurement") or "").strip().lower()
         if unit == "w":
             return value / 1000.0
         return value

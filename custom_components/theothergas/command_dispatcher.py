@@ -229,36 +229,9 @@ class CommandDispatcherMixin:
                     payload.get("vorlauf_setpoint_c"),
                 )
             if "is_active" in payload:
-                new_value = bool(payload["is_active"])
-                if self.state.active_state.get(device_id) != new_value:
-                    self.state.active_state[device_id] = new_value
-                    self._sync_field_into_data(device_id, "is_active", new_value)
-                    # E-2 / XR-1 (2026-06-11): der frühere Wallbox-
-                    # Snapshot/Restore-Pfad (`charge_mode_value_crowdergy`)
-                    # ist entfernt. Das Backend hat die Spalte am
-                    # 2026-06-03 gedroppt (Migration 20260603_0005) und
-                    # sendet den Key nie mehr → Snapshot wurde nie
-                    # befüllt, Restore fand nie etwas. BEWUSSTE
-                    # Entscheidung: der Pre-AI-Lademodus wird bei AI-OFF
-                    # NICHT mehr automatisch restauriert. Wallbox-AI-OFF
-                    # räumt nur noch den Charge-Mode-Hold ab (siehe
-                    # unten), danach gehört die Wallbox dem User.
-                    if new_value:
-                        # Crowdergize on → force an entity_control write
-                        # + start the hold loop using the currently
-                        # cached desired state. Without this, the user
-                        # sees no HA-side action until the backend
-                        # publishes the FIRST is_on *transition*, which
-                        # never happens when the device's current state
-                        # already matches the solver's decision (common
-                        # case: WW physically off, solver decides off,
-                        # backend's "publish only on change" guard
-                        # suppresses the SSE frame). Result: value_off
-                        # never written, hold loop never started.
-                        desired_on = bool(self.state.on_state.get(device_id, False))
-                        await self._apply_device_state(device_id, desired_on)
-                    else:
-                        await self._handover_ai_off(device_id)
+                await self._apply_active_transition(
+                    device_id, bool(payload["is_active"])
+                )
             # v3.6.4: cool_on VOR is_on verarbeiten — `_cool_state`
             # muss gesetzt sein bevor `_apply_device_state(False)` läuft,
             # sonst sieht der Skip-Guard auf der heat-side `_cool_state`
@@ -731,6 +704,35 @@ class CommandDispatcherMixin:
             self._charge_mode_hold_loop(device_id),
             name=f"theothergas_charge_mode_hold_{device_id}",
         )
+
+    async def _apply_active_transition(
+        self, device_id: str, new_value: bool
+    ) -> None:
+        """Adopt an `is_active` (Crowdergy AI) change and run its side
+        effects exactly once per transition. Shared by the SSE telemetry
+        mirror and the HA switch (`switch.py`): the switch used to set the
+        cache optimistically, so the backend's echo frame saw no change and
+        the AI-off handover (safe default, hold/PV-controller teardown)
+        never ran when AI was switched off from Home Assistant.
+
+        The pre-AI charge mode is deliberately NOT restored on AI off —
+        the wallbox handover only tears down holds, afterwards the box
+        belongs to the user.
+        """
+        if self.state.active_state.get(device_id) == new_value:
+            return
+        self.state.active_state[device_id] = new_value
+        self._sync_field_into_data(device_id, "is_active", new_value)
+        if new_value:
+            # AI on → force an entity_control write + start the hold loop
+            # from the cached desired state. Without this nothing happens
+            # until the backend publishes the FIRST is_on *transition*,
+            # which never comes when the device already matches the
+            # solver's decision (backend publishes on change only).
+            desired_on = bool(self.state.on_state.get(device_id, False))
+            await self._apply_device_state(device_id, desired_on)
+        else:
+            await self._handover_ai_off(device_id)
 
     async def _handover_ai_off(self, device_id: str) -> None:
         """AI-Off-Übergabe (Crowdergize an → aus): sicheren Default
@@ -1475,6 +1477,10 @@ class CommandDispatcherMixin:
         Dispatch (cloud-getrieben) — siehe `_remote_control_allowed`."""
         if not self._remote_control_allowed("_apply_vorlauf_setpoint"):
             return
+        # (#350) The flow setpoint only ever comes from the solver (there
+        # is no manual Vorlauf command) — with AI off it is never written.
+        if self._ai_off(device_id):
+            return
         if self._local_override_active(device_id):  # (#140)
             return
         dev = next(
@@ -1849,56 +1855,6 @@ class CommandDispatcherMixin:
         task = self.state.hold_tasks.pop(device_id, None)
         if task is not None and not task.done():
             task.cancel()
-
-    def forget_device(self, device_id: str) -> None:
-        """Prune every per-device bookkeeping dict for a removed
-        device. Called from `async_remove_config_entry_device` so
-        stale keys don't accumulate across the lifetime of one
-        coordinator instance (`async_remove_config_entry_device`
-        schedules a reload since CN-8, this keeps the window until
-        the reload lands clean). Idempotent — missing keys are
-        silently ignored."""
-        self._cancel_hold(device_id)
-        self._cancel_charge_mode_hold(device_id)
-        # #292: laufenden PV-Regler ohne Write beenden (Gerät ist weg).
-        task = self._pv_follow_tasks().pop(device_id, None)
-        if task is not None and not task.done():
-            task.cancel()
-        self._pv_follow_runs().pop(device_id, None)
-        # CN-8 (2026-06-11): auch die aktive Geräteliste + den
-        # Entity-Index mitpflegen — vorher PATCHte der Coordinator
-        # das gelöschte Device bis zum nächsten Reload weiter
-        # (404-Spam im Telemetry-Loop).
-        self.devices = [
-            d for d in self.devices
-            if d.get(CONF_DEVICE_ID) != device_id
-        ]
-        self._entity_to_devices = {
-            entity_id: remaining
-            for entity_id, ids in self._entity_to_devices.items()
-            if (remaining := [i for i in ids if i != device_id])
-        }
-        for d in (
-            self.state.active_state,
-            self.state.on_state,
-            # P3 (2026-06-11): cool_state fehlte im Pruning.
-            self.state.cool_state,
-            # Sicherheitsbündel (2026-08-25): Breaker-/Override-Zustand
-            # eines entfernten Geräts nicht weiterschleppen.
-            self.state.write_breaker_devices,
-            self.state.local_override_until,
-            # (#152) Wirkungs-Kontrolle
-            self.state.last_written_value,
-            self.state.value_rejected_devices,
-            self.state.effective_mismatch_since,
-            self._prev_energy_kwh,
-            self._prev_energy_kwh_discharged,
-            self._last_sent_payload,
-            self._last_send_at,
-            self._last_mirror_at,
-            self._last_sent_hash,
-        ):
-            d.pop(device_id, None)
 
     async def _hold_loop(
         self,

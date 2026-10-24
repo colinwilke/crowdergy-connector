@@ -6,6 +6,7 @@ Pure Regeln (`surplus_kw`, `decide`) plus die Verdrahtung am Coordinator:
 """
 from __future__ import annotations
 
+import asyncio
 import time
 from datetime import datetime, timezone
 from types import SimpleNamespace
@@ -405,3 +406,24 @@ async def test_box_drawing_in_firmware_solar_mode_is_left_alone(hass: HomeAssist
     await coord._pv_follow_tick("wb", run, t0)
     await coord._pv_follow_tick("wb", run, t0 + PV_FOLLOW_STOP_DELAY_S)
     assert not modes and run.charging is False
+
+
+async def test_ai_off_ends_controller_without_write(hass: HomeAssistant, monkeypatch):
+    """(#350) A running controller ends as soon as the device's AI is off —
+    without any further write to the box."""
+    import custom_components.theothergas.pv_follow as pv_mod
+
+    coord = make_coordinator(hass)
+    coord.state.last_sse_event_at = time.time()
+    _field(hass, grid=-8.0, box=0.0, bat=0.0, soc=50.0)
+    modes = async_mock_service(hass, "select", "select_option")
+    currents = async_mock_service(hass, "number", "set_value")
+    run = await _start(coord)
+    run.charging = True
+    coord.state.active_state["wb"] = False
+
+    monkeypatch.setattr(pv_mod, "PV_FOLLOW_INTERVAL_S", 0)
+    await asyncio.wait_for(coord._pv_follow_loop("wb"), timeout=2)
+
+    assert "wb" not in coord._pv_follow_runs()
+    assert modes == [] and currents == []

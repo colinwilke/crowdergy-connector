@@ -372,3 +372,81 @@ async def test_recovery_flips_back_online_and_sends(hass: HomeAssistant):
     payload = _sent_payload(coord)
     assert payload["is_online"] is True
     assert payload["power_kw"] == 0.0
+
+
+async def test_non_numeric_or_nan_readings_never_break_the_tick(hass: HomeAssistant):
+    """A non-numeric SoC / temperature state used to be forwarded verbatim
+    (backend rejects the payload) and crashed `_should_send` on the next
+    tick with a TypeError — failing the tick for ALL devices. NaN must not
+    reach the JSON payload either, and an explicit `unit_of_measurement:
+    None` on a power sensor must not raise."""
+    from custom_components.theothergas.const import (
+        CONF_ENTITY_CURRENT_TEMP,
+        CONF_ENTITY_SOC,
+    )
+
+    dev = {
+        CONF_DEVICE_ID: "bat-1",
+        CONF_DEVICE_TYPE: "battery",
+        CONF_ENTITY_POWER: "sensor.bat_power",
+        CONF_ENTITY_SOC: "sensor.bat_soc",
+        CONF_ENTITY_CURRENT_TEMP: "sensor.bat_temp",
+    }
+    coord = _make_coord(hass, [dev])
+    hass.states.async_set("sensor.bat_power", "0.5", {"unit_of_measurement": None})
+    hass.states.async_set("sensor.bat_soc", "50")
+    hass.states.async_set("sensor.bat_temp", "20.0")
+    await coord._async_update_data()
+
+    hass.states.async_set("sensor.bat_soc", "charging")
+    hass.states.async_set("sensor.bat_temp", "nan")
+    result = await coord._async_update_data()
+
+    payload = _sent_payload(coord)
+    assert "soc_percent" not in payload
+    assert "current_temp_c" not in payload
+    assert payload["power_kw"] == 0.5
+    assert result["bat-1"]["soc_percent"] is None
+
+
+async def test_overlapping_ticks_never_book_the_same_energy_delta_twice(
+    hass: HomeAssistant,
+):
+    """The scheduled tick and an event-driven refresh can overlap while a
+    PATCH hangs. Both used to compute the Δ against the same not-yet-
+    advanced baseline and sent the same kWh twice; the overlapping tick is
+    now skipped."""
+    import asyncio
+
+    dev = {
+        CONF_DEVICE_ID: "dev-1",
+        CONF_DEVICE_TYPE: "heating",
+        CONF_ENTITY_POWER: "sensor.wp_power",
+        CONF_ENTITY_ENERGY_TOTAL: "sensor.wp_energy",
+    }
+    coord = _make_coord(hass, [dev])
+    hass.states.async_set("sensor.wp_power", "1.0", {"unit_of_measurement": "kW"})
+    hass.states.async_set("sensor.wp_energy", "100.0", {"unit_of_measurement": "kWh"})
+    await coord._async_update_data()            # seeds baseline at 100.0
+
+    hass.states.async_set("sensor.wp_energy", "102.0", {"unit_of_measurement": "kWh"})
+    release = asyncio.Event()
+
+    async def _slow_patch(device_id, payload):
+        await release.wait()
+        return _ok_response()
+
+    coord._patch_telemetry_with_retry = AsyncMock(side_effect=_slow_patch)
+    first = asyncio.ensure_future(coord._async_update_data())
+    await asyncio.sleep(0)                      # first tick now awaits its PATCH
+    # Overlapping refresh: must return at once instead of sending again
+    # (the timeout turns a regression into a failure instead of a hang).
+    await asyncio.wait_for(coord._async_update_data(), timeout=2)
+    release.set()
+    await first
+
+    deltas = [
+        c.args[1].get("energy_kwh_delta")
+        for c in coord._patch_telemetry_with_retry.await_args_list
+    ]
+    assert deltas == [2.0]

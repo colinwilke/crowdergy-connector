@@ -22,7 +22,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 import httpx
 
@@ -405,8 +405,6 @@ class TelemetryComposer:
             if local_active is False and bk_active:
                 _LOGGER.info(
                     "state-resync: %s is_active drifted "
-                    "False→True (cache vs backend) — "
-                    "User-Toggle wird empfohlen für "
-                    "Charge-Mode-Snapshot",
+                    "False→True (missed frame) — cache updated",
                     device_id,
                 )

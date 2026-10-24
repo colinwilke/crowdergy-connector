@@ -12,6 +12,10 @@ on:
     # 04:17 UTC nächtlicher Backstop auf main (schedule läuft immer auf main).
     - cron: "17 4 * * *"
 
+# Least privilege: the suite only needs to read the repo.
+permissions:
+  contents: read
+
 concurrency:
   group: connector-test-${{ github.ref }}
   cancel-in-progress: true
