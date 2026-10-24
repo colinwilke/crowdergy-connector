@@ -75,6 +75,7 @@ from .const import (
     USER_AGENT,
 )
 from .device_field_spec import build_payload
+from .http_client import async_create_client
 from .entity_mapper import DeviceGroup, discover_devices, discover_devices_with_llm
 from .preset_spec import (
     PRESET_CAPABLE_TYPES,
@@ -182,14 +183,16 @@ async def _fetch_vendor_presets(
 # ── Persistence helpers ─────────────────────────────────────────────────────
 
 
-async def _fetch_account_email(api_url: str, access_token: str) -> str | None:
+async def _fetch_account_email(
+    hass, api_url: str, access_token: str
+) -> str | None:
     """Best-effort `GET /users/me` → email, nur für den Entry-Titel.
 
     Der Pairing-Claim liefert keine Email; schlägt der Lookup fehl
     (offline / alter Token), fällt der Titel auf die User-ID zurück.
     """
     try:
-        async with httpx.AsyncClient(timeout=10.0) as client:
+        async with await async_create_client(hass, timeout=10.0) as client:
             resp = await client.get(
                 f"{api_url}/api/v1/users/me",
                 headers={"Authorization": f"Bearer {access_token}"},
@@ -310,7 +313,7 @@ async def _resolve_location_defaults(hass) -> dict[str, str]:
         "User-Agent": USER_AGENT,
     }
     try:
-        async with httpx.AsyncClient(timeout=5.0) as client:
+        async with await async_create_client(hass, timeout=5.0) as client:
             response = await client.get(url, params=params, headers=headers)
             response.raise_for_status()
             data = response.json()
@@ -368,7 +371,7 @@ def _region_selector_field(current: str) -> tuple[Any, Any]:
 
 
 async def _refresh_token(
-    api_url: str, refresh_token: str
+    hass, api_url: str, refresh_token: str
 ) -> tuple[str, str] | None:
     """One-shot token refresh for config-flow HTTP calls. The
     coordinator has its own refresh path on `_authenticated_request`;
@@ -376,7 +379,7 @@ async def _refresh_token(
     justify the same machinery, so this small helper covers them.
     Returns (access_token, refresh_token) on success, None otherwise."""
     try:
-        async with httpx.AsyncClient(timeout=10.0) as client:
+        async with await async_create_client(hass, timeout=10.0) as client:
             response = await client.post(
                 f"{api_url}/api/v1/auth/refresh",
                 json={"refresh_token": refresh_token},
@@ -432,9 +435,7 @@ async def _authenticated_config_request(
         # Event-Loop wirft HA dafür eine Blocking-Call-Warnung (live
         # gesehen im Box-Smoke-Test 2026-06-10, analog Coordinator-Fix
         # v3.5.1).
-        client = await hass.async_add_executor_job(
-            lambda: httpx.AsyncClient(timeout=15.0)
-        )
+        client = await async_create_client(hass, timeout=15.0)
         try:
             return await client.request(
                 method,
@@ -447,7 +448,7 @@ async def _authenticated_config_request(
 
     response = await _do(access)
     if response.status_code == 401 and refresh is not None:
-        rotated = await _refresh_token(api_url, refresh)
+        rotated = await _refresh_token(hass, api_url, refresh)
         if rotated is not None:
             new_access, new_refresh = rotated
             new_data = {
@@ -518,7 +519,9 @@ class CrowdergyConfigFlow(ConfigFlow, domain=DOMAIN):
             tokens: dict[str, Any] | None = None
 
             try:
-                async with httpx.AsyncClient(timeout=10.0) as client:
+                async with await async_create_client(
+                    self.hass, timeout=10.0
+                ) as client:
                     response = await client.post(
                         f"{api_url}/api/v1/connector/claim",
                         json={"code": code},
@@ -546,7 +549,7 @@ class CrowdergyConfigFlow(ConfigFlow, domain=DOMAIN):
                 # Der Claim-Response trägt keine Email — Best-Effort-Lookup
                 # nur für einen schönen Entry-Titel (Fallback: User-ID).
                 email = await _fetch_account_email(
-                    api_url, tokens["access_token"]
+                    self.hass, api_url, tokens["access_token"]
                 )
                 self._data[CONF_API_URL] = api_url
                 self._data[CONF_EMAIL] = email or ""
@@ -669,9 +672,7 @@ class CrowdergyConfigFlow(ConfigFlow, domain=DOMAIN):
             try:
                 # Client-Bau im Executor (synchroner CA-Load), analog
                 # `_authenticated_config_request`.
-                client = await self.hass.async_add_executor_job(
-                    lambda: httpx.AsyncClient(timeout=10.0)
-                )
+                client = await async_create_client(self.hass, timeout=10.0)
                 try:
                     response = await client.post(
                         f"{api_url}/api/v1/connector/claim",

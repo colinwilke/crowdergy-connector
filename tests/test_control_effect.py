@@ -26,6 +26,7 @@ import time
 from unittest.mock import patch
 
 from homeassistant.core import HomeAssistant
+from pytest_homeassistant_custom_component.common import async_mock_service
 
 from custom_components.theothergas.config_flow_mapping import (
     _build_device_record,
@@ -332,3 +333,55 @@ def test_build_device_record_persists_effective_slot():
     )
 
     assert record[CONF_ENTITY_EFFECTIVE_SETPOINT] == "sensor.wp_ww_soll"
+
+
+# ════════════════════════════════════════════════════════════════════
+# (5) Numerischer Lademodus — Clamp + Vergleich als Einheit
+# ════════════════════════════════════════════════════════════════════
+
+
+def _numeric_mode_battery() -> dict:
+    return {
+        CONF_DEVICE_ID: "d1",
+        CONF_DEVICE_TYPE: "battery",
+        CONF_ENTITY_CHARGE_MODE: "number.akku_modus",
+    }
+
+
+async def test_numeric_charge_mode_is_clamped(hass: HomeAssistant):
+    """A numeric charge mode outside the entity range is written clamped,
+    the effect reference is the clamped value and the clamp surfaces as
+    `control_value_rejected`."""
+    coord = make_coordinator(hass, [_numeric_mode_battery()])
+    hass.states.async_set(
+        "number.akku_modus", "0", {"min": -3000, "max": 3000},
+    )
+    calls = async_mock_service(hass, "number", "set_value")
+
+    ok = await coord._apply_charge_mode("d1", "5000", schedule_hold=False)
+
+    assert ok is True
+    assert calls[-1].data["value"] == 3000.0
+    assert coord.state.last_written_value["d1"] == "3000.0"
+    assert "d1" in coord.state.value_rejected_devices
+
+    # In range again → written verbatim, rejection clears.
+    await coord._apply_charge_mode("d1", "-2000", schedule_hold=False)
+    assert calls[-1].data["value"] == -2000.0
+    assert coord.state.last_written_value["d1"] == "-2000.0"
+    assert "d1" not in coord.state.value_rejected_devices
+
+
+async def test_select_charge_mode_unchanged_by_clamp(hass: HomeAssistant):
+    """Mode strings on a select never go through the numeric clamp."""
+    dev = _numeric_mode_battery()
+    dev[CONF_ENTITY_CHARGE_MODE] = "select.wallbox_modus"
+    coord = make_coordinator(hass, [dev])
+    hass.states.async_set("select.wallbox_modus", "Standard")
+    calls = async_mock_service(hass, "select", "select_option")
+
+    await coord._apply_charge_mode("d1", "Solar", schedule_hold=False)
+
+    assert calls[-1].data["option"] == "Solar"
+    assert coord.state.last_written_value["d1"] == "Solar"
+    assert coord.state.value_rejected_devices == {}

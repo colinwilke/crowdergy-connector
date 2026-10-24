@@ -212,3 +212,63 @@ async def test_authenticated_request_invokes_proactive_refresh():
     assert resp.status_code == 200
     coord._maybe_proactive_refresh.assert_awaited_once()
     coord._client.request.assert_awaited_once()
+
+
+# ── Refresh: malformed 200 body counts as a failed refresh ───────────
+
+
+def _refresh_coord() -> CrowdergyCoordinator:
+    import asyncio
+
+    coord = _bare_coord()
+    coord._refresh_lock = asyncio.Lock()
+    coord._client = MagicMock()
+    coord.entry = MagicMock()
+    coord.hass = MagicMock()
+    return coord
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        b"<html>bad gateway</html>",          # not JSON → ValueError
+        b'{"access_token": "a"}',              # missing key → KeyError
+        b'["a", "b"]',                         # wrong shape → TypeError
+        b'{"access_token": null, "refresh_token": "r"}',  # non-string
+    ],
+)
+async def test_refresh_malformed_body_fails_soft(body, caplog):
+    coord = _refresh_coord()
+    coord._client.post = AsyncMock(
+        return_value=httpx.Response(
+            200, content=body,
+            request=httpx.Request("POST", "https://api.example/x"),
+        )
+    )
+
+    assert await coord._refresh_access_token() is False
+    assert await coord._refresh_access_token() is False
+
+    # Tokens untouched, nothing persisted.
+    assert coord._access_token == "tok-initial"
+    assert coord._refresh_token == "refresh-initial"
+    coord.hass.config_entries.async_update_entry.assert_not_called()
+    warnings = [
+        r for r in caplog.records
+        if r.levelname == "WARNING" and "malformed" in r.getMessage()
+    ]
+    assert len(warnings) == 1
+
+
+async def test_refresh_valid_body_still_rotates():
+    coord = _refresh_coord()
+    coord.entry.data = {}
+    coord._client.post = AsyncMock(
+        return_value=_response(
+            200, {"access_token": "new-a", "refresh_token": "new-r"},
+        )
+    )
+
+    assert await coord._refresh_access_token() is True
+    assert coord._access_token == "new-a"
+    assert coord._refresh_token == "new-r"

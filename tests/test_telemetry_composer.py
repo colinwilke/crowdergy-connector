@@ -245,3 +245,80 @@ async def test_mirror_skipped_without_telemetry_consent(hass: HomeAssistant):
     await composer.mirror_once()
 
     coord._authenticated_request.assert_not_awaited()
+
+
+# ── Bootstrap: malformed backend body fails soft ─────────────────────
+
+
+def _raw_response(status: int, content: bytes) -> httpx.Response:
+    return httpx.Response(
+        status,
+        content=content,
+        request=httpx.Request("GET", "https://api.example/x"),
+    )
+
+
+async def test_bootstrap_malformed_json_fails_soft(hass: HomeAssistant, caplog):
+    coord = make_coordinator(hass)
+    coord._authenticated_request = AsyncMock(
+        return_value=_raw_response(200, b"<html>gateway</html>")
+    )
+    composer = TelemetryComposer(coord)
+
+    await composer.bootstrap_active_state()  # must not raise
+    await composer.bootstrap_active_state()
+
+    assert coord.state.active_state_bootstrapped is False
+    warnings = [
+        r for r in caplog.records
+        if r.levelname == "WARNING" and "malformed" in r.getMessage()
+    ]
+    assert len(warnings) == 1  # logged once while it persists
+
+
+async def test_bootstrap_missing_id_does_not_half_seed(hass: HomeAssistant):
+    """One bad row must not leave the caches half-written."""
+    coord = make_coordinator(hass)
+    coord._authenticated_request = AsyncMock(
+        return_value=_response(
+            200, [{"id": "d1", "is_active": True}, {"is_active": True}],
+        )
+    )
+    composer = TelemetryComposer(coord)
+
+    await composer.bootstrap_active_state()
+
+    assert coord.state.active_state == {}
+    assert coord.state.active_state_bootstrapped is False
+
+
+async def test_bootstrap_wrong_shape_fails_soft(hass: HomeAssistant):
+    coord = make_coordinator(hass)
+    coord._authenticated_request = AsyncMock(
+        return_value=_response(200, {"detail": "unexpected"})
+    )
+    composer = TelemetryComposer(coord)
+
+    await composer.bootstrap_active_state()
+
+    assert coord.state.active_state_bootstrapped is False
+
+
+async def test_bootstrap_recovers_after_malformed(hass: HomeAssistant):
+    coord = make_coordinator(hass)
+    coord._authenticated_request = AsyncMock(
+        side_effect=[
+            _raw_response(200, b"not json"),
+            _response(200, [{"id": "d1", "is_active": True, "is_on": True}]),
+        ]
+    )
+    composer = TelemetryComposer(coord)
+
+    await composer.bootstrap_active_state()
+    await composer.bootstrap_active_state()
+
+    assert coord.state.active_state_bootstrapped is True
+    assert coord.state.active_state["d1"] is True
+    assert coord.state.on_state["d1"] is True
+    assert coord.state.cool_state["d1"] is False
+    assert composer._bootstrap_malformed_logged is False

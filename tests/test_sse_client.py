@@ -17,8 +17,11 @@ import pytest
 
 from custom_components.theothergas.sse_client import (
     SSE_AUTH_FAILURE_LIMIT,
+    SSE_CONNECT_TIMEOUT_S,
     SSE_QUEUE_MAXSIZE,
+    SSE_READ_TIMEOUT_S,
     SSEClient,
+    sse_client_timeout,
 )
 
 
@@ -190,3 +193,12 @@ async def test_sse_401_backoff_and_reauth_after_limit(monkeypatch):
     # Exponentieller Backoff auch bei Refresh-Erfolg — kein Hot-Loop.
     assert sleeps == [1, 2, 4, 8]
     on_auth_failed.assert_called_once()
+
+
+def test_sse_timeout_bounds_connect_and_read():
+    """No total cap (long-lived stream), but a hanging TCP connect must not
+    wait for the OS default (~2 min) before the reconnect loop retries."""
+    timeout = sse_client_timeout()
+    assert timeout.total is None
+    assert timeout.sock_connect == SSE_CONNECT_TIMEOUT_S == 30
+    assert timeout.sock_read == SSE_READ_TIMEOUT_S
