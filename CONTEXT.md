@@ -32,8 +32,10 @@ Datei ist Ist-Zustand, kein Changelog.
   60-s-Read-Timeout (Backend pingt alle 15 s → 4 verpasste Pings =
   Reconnect). Frames werden geloggt.
 - **Frame-Dispatch:** `type=telemetry` →
-  `is_active`/`is_on`/`cool_on`/`vorlauf_setpoint_c` (manuelle
-  App-Befehle); `type=command` → `set_charge_mode` (Battery/Wallbox);
+  `is_active`/`is_on`/`cool_on` (manuelle App-Befehle) und
+  `room_setpoint_c` (#341: Raum-Sollwert der modulierenden Heizung, ersetzt
+  im AN-Zustand value_on auf Steuer-Entity + ECO-Spiegel; einen Vorlauf
+  schreibt der Connector nie); `type=command` → `set_charge_mode` (Battery/Wallbox);
   `type=device_update` → `_apply_preset_from_backend` (iOS-`apply-preset`
   hat ein Vendor-Preset gestempelt → Gerät+Preset ziehen, vollen
   `value_map` in die Device-Config mergen, entkoppelter Reload);

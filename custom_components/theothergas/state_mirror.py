@@ -114,7 +114,7 @@ class DeviceStateMirror:
     # (geschrieben oder bei einem Abgleich schon vorgefunden), je Entity.
     # Fremd-Drift heißt: die Entity zeigt etwas anderes als diesen Wert.
     # Zeigt sie noch unseren alten Wert, während das Kommando schon
-    # weiter ist (neuer Vorlauf, ECO-Spiegel), ist das kein Eingriff —
+    # weiter ist (neuer Raum-Sollwert, ECO-Spiegel), ist das kein Eingriff —
     # der neue Wert ist nur noch nicht geschrieben.
     own_entity_value: dict[str, str] = field(default_factory=dict)
 
@@ -143,12 +143,19 @@ class DeviceStateMirror:
     # darf rampen und verzögert übernehmen.
     effective_mismatch_since: dict[str, float] = field(default_factory=dict)
 
-    # Vorlauf-Sollwert auf der Steuer-Entity selbst: device_id →
-    # (is_on beim Kommando, Entity, °C nach Clamp). Teilt sich der
-    # Vorlauf-Kanal die Entity mit dem An/Aus-Paar value_on/value_off,
-    # ist er der kommandierte Wert — der Hold vergleicht und repariert
-    # gegen ihn statt gegen Min/Max. Gilt nur für den is_on-Zustand,
-    # in dem er kam; ein is_on-Wechsel ohne neuen Vorlauf verwirft ihn.
-    vorlauf_on_control: dict[str, tuple[bool | None, str, float]] = field(
+    # (#341) Raum-Sollwert der modulierenden Heizung: device_id →
+    # (True, Steuer-Entity, °C nach Clamp). Ersetzt im AN-Zustand
+    # value_on als kommandierten Wert — Hold, Idempotenz, Übersteuerung,
+    # ECO-Spiegel und Wirkungs-Kontrolle vergleichen gegen ihn. Gilt nur
+    # für den laufenden Heizlauf; ein is_on-Wechsel verwirft ihn.
+    room_setpoint_control: dict[str, tuple[bool | None, str, float]] = field(
         default_factory=dict
     )
+
+    # (#341) Tagesbudget der Sollwert-Register: Entity →
+    # (Berlin-Datum ISO, Writes an diesem Tag); dazu, für welche Entity
+    # die Erschöpfung heute schon geloggt wurde.
+    entity_day_write_counts: dict[str, tuple[str, int]] = field(
+        default_factory=dict
+    )
+    day_budget_logged: set[str] = field(default_factory=set)

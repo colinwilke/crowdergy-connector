@@ -123,6 +123,13 @@ Kuration bleiben im Backend, Box-Know-how im privaten Box-Repo.
   Resync vergleichen das `temperature`-**Attribut**, nie `state.state`;
   `_read_is_on_state`: Max → True, Min → False, fremd → None. Aircon bleibt
   Modus-basiert.
+- **Heizung: Raum-Sollwert, nie Vorlauf (#341):** im AN-Zustand ersetzt
+  das Backend-Feld `room_setpoint_c` den `value_on` auf Steuer-Entity +
+  ECO-Spiegel (`room_setpoint_control`, gilt nur für den laufenden
+  Heizlauf; bei AUS ignoriert, AUS = `value_off`). Einen Vorlauf schreibt
+  der Connector nie — den regelt die WP nach Heizkurve. Sollwert-Register
+  (Temperatur-Modus-Steuer-Entity + ECO von heating/warmwater) haben ein
+  Tagesbudget `SETPOINT_WRITES_MAX_PER_DAY` (24) in `_write_allowed`.
 - **Clamp und Vergleich sind eine Einheit:** jeder numerische Write wird
   gegen die Grenzen der Ziel-Entity geklemmt (`_clamp_write_value`, loggt
   WARNING), und Idempotenz-Guard/Hold/Readback vergleichen gegen den

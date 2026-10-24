@@ -157,7 +157,6 @@
               "entity_control": "Control entity",
               "entity_current_temp_c": "Current temperature",
               "entity_vorlauf_temp_c": "Flow temperature (optional)",
-              "entity_vorlauf_setpoint_c": "Flow setpoint (optional)",
               "entity_charge_mode": "Charge mode",
               "entity_wallbox_charge_current_a": "Charging current (optional)",
               "entity_wallbox_phase_mode": "Phase switch (optional)",
@@ -170,7 +169,6 @@
               "entity_control": "Switches the device on and off — a switch, select or number (e.g. SG-Ready).",
               "entity_current_temp_c": "Heating: room temperature (required — this is how Crowdergy tracks your comfort). Hot water: tank temperature if the water-heater entity doesn't report it correctly. Manual: your temperature sensor (required).",
               "entity_vorlauf_temp_c": "Flow-temperature sensor of the heating. Improves the heat pump's efficiency estimate — leave empty if not available.",
-              "entity_vorlauf_setpoint_c": "Manual control only: writable flow setpoint in °C. Crowdergy then modulates the heating smoothly instead of just on/off. Leave empty with a climate entity.",
               "entity_charge_mode": "Wallbox: charge-mode select (lock/charge/solar). Battery: operating-mode entity.",
               "entity_wallbox_charge_current_a": "Sets the charging current in amps (typically 6–16 A). Lets Crowdergy match the charging power to the solar surplus instead of always charging at full power.",
               "entity_wallbox_phase_mode": "Select entity that switches the wallbox between 1-phase and 3-phase charging (e.g. go-e). With it mapped, Crowdergy can charge single-phase from ~1.4 kW solar surplus instead of needing ~4 kW. The \"auto\" option is never used — Crowdergy always sets the phase explicitly.",
@@ -184,7 +182,7 @@
       },
       "device_values": {
         "title": "{device_name} — Switching values",
-        "description": "Crowdergy writes these values to switch the device on and off — so it runs in cheap and solar-rich hours instead of expensive ones.\n\nHeat pumps (heating/hot water) on a climate/water_heater entity are controlled exclusively via target temperatures: On = maximum temperature, Off = minimum temperature (e.g. hot water: On = 55, Off = 40). The heat pump is never hard-switched off and decides itself how long it runs.\n\nFor custom select helpers, enter the raw state value, not the display label.\n\n⚠️ Disclaimer: Crowdergy writes to real devices. You are responsible for ensuring the mapped values (especially temperatures) are safe for your installation; use at your own risk.",
+        "description": "Crowdergy writes these values to switch the device on and off — so it runs in cheap and solar-rich hours instead of expensive ones.\n\nHeat pumps (heating/hot water) on a climate/water_heater entity are controlled exclusively via target temperatures: On = maximum temperature, Off = minimum temperature (e.g. hot water: On = 55, Off = 40). The heat pump is never hard-switched off and decides itself how long it runs. For heating, Crowdergy writes the room setpoint it currently needs while heating — “On” is only the fallback, “Off” should be low (e.g. 10). The heat pump controls its flow temperature itself via its heating curve.\n\nFor custom select helpers, enter the raw state value, not the display label.\n\n⚠️ Disclaimer: Crowdergy writes to real devices. You are responsible for ensuring the mapped values (especially temperatures) are safe for your installation; use at your own risk.",
         "data": {
           "value_on": "Value for on",
           "value_off": "Value for off",
@@ -439,7 +437,6 @@
               "entity_control": "Control entity",
               "entity_current_temp_c": "Current temperature",
               "entity_vorlauf_temp_c": "Flow temperature (optional)",
-              "entity_vorlauf_setpoint_c": "Flow setpoint (optional)",
               "entity_charge_mode": "Charge mode",
               "entity_wallbox_charge_current_a": "Charging current (optional)",
               "entity_wallbox_phase_mode": "Phase switch (optional)",
@@ -452,7 +449,6 @@
               "entity_control": "Switches the device on and off — a switch, select or number (e.g. SG-Ready).",
               "entity_current_temp_c": "Heating: room temperature (required — this is how Crowdergy tracks your comfort). Hot water: tank temperature. Manual: your temperature sensor (required).",
               "entity_vorlauf_temp_c": "Flow-temperature sensor of the heating. Improves the heat pump's efficiency estimate — leave empty if not available.",
-              "entity_vorlauf_setpoint_c": "Manual control only: writable flow setpoint in °C. Crowdergy then modulates the heating smoothly instead of just on/off. Leave empty with a climate entity.",
               "entity_charge_mode": "Wallbox: charge-mode select (lock/charge/solar). Battery: operating-mode entity.",
               "entity_wallbox_charge_current_a": "Sets the charging current in amps (typically 6–16 A). Lets Crowdergy match the charging power to the solar surplus instead of always charging at full power.",
               "entity_wallbox_phase_mode": "Select entity that switches the wallbox between 1-phase and 3-phase charging (e.g. go-e). With it mapped, Crowdergy can charge single-phase from ~1.4 kW solar surplus instead of needing ~4 kW. The \"auto\" option is never used — Crowdergy always sets the phase explicitly.",
@@ -466,7 +462,7 @@
       },
       "add_device_values": {
         "title": "{device_name} — Switching values",
-        "description": "Crowdergy writes these values to switch the device on and off — so it runs in cheap and solar-rich hours instead of expensive ones.\n\nHeat pumps (heating/hot water) on a climate/water_heater entity are controlled exclusively via target temperatures: On = maximum temperature, Off = minimum temperature (e.g. hot water: On = 55, Off = 40). The heat pump is never hard-switched off and decides itself how long it runs.\n\n⚠️ Disclaimer: Crowdergy writes to real devices. You are responsible for ensuring the mapped values (especially temperatures) are safe for your installation; use at your own risk.",
+        "description": "Crowdergy writes these values to switch the device on and off — so it runs in cheap and solar-rich hours instead of expensive ones.\n\nHeat pumps (heating/hot water) on a climate/water_heater entity are controlled exclusively via target temperatures: On = maximum temperature, Off = minimum temperature (e.g. hot water: On = 55, Off = 40). The heat pump is never hard-switched off and decides itself how long it runs. For heating, Crowdergy writes the room setpoint it currently needs while heating — “On” is only the fallback, “Off” should be low (e.g. 10). The heat pump controls its flow temperature itself via its heating curve.\n\n⚠️ Disclaimer: Crowdergy writes to real devices. You are responsible for ensuring the mapped values (especially temperatures) are safe for your installation; use at your own risk.",
         "submit": "Next",
         "data": {
           "value_on": "Value for on",
@@ -614,7 +610,6 @@
               "entity_control": "Control entity",
               "entity_current_temp_c": "Current temperature",
               "entity_vorlauf_temp_c": "Flow temperature (optional)",
-              "entity_vorlauf_setpoint_c": "Flow setpoint (optional)",
               "entity_charge_mode": "Charge mode",
               "entity_wallbox_charge_current_a": "Charging current (optional)",
               "entity_wallbox_phase_mode": "Phase switch (optional)",
@@ -627,7 +622,6 @@
               "entity_control": "Switches the device on and off — a switch, select or number (e.g. SG-Ready).",
               "entity_current_temp_c": "Heating: room temperature (required — this is how Crowdergy tracks your comfort). Hot water: tank temperature. Manual: your temperature sensor (required).",
               "entity_vorlauf_temp_c": "Flow-temperature sensor of the heating. Improves the heat pump's efficiency estimate — leave empty if not available.",
-              "entity_vorlauf_setpoint_c": "Manual control only: writable flow setpoint in °C. Crowdergy then modulates the heating smoothly instead of just on/off. Leave empty with a climate entity.",
               "entity_charge_mode": "Wallbox: charge-mode select. Battery: operating-mode entity.",
               "entity_wallbox_charge_current_a": "Sets the charging current in amps (typically 6–16 A). Lets Crowdergy match the charging power to the solar surplus instead of always charging at full power.",
               "entity_wallbox_phase_mode": "Select entity that switches the wallbox between 1-phase and 3-phase charging (e.g. go-e). With it mapped, Crowdergy can charge single-phase from ~1.4 kW solar surplus instead of needing ~4 kW. The \"auto\" option is never used — Crowdergy always sets the phase explicitly.",
@@ -640,7 +634,7 @@
       },
       "edit_device_values": {
         "title": "{device_name} — Switching values",
-        "description": "Crowdergy writes these values to switch the device on and off.\n\nHeat pumps (heating/hot water) on a climate/water_heater entity are controlled exclusively via target temperatures: On = maximum temperature, Off = minimum temperature (e.g. hot water: On = 55, Off = 40). The heat pump is never hard-switched off and decides itself how long it runs.\n\n⚠️ Disclaimer: Crowdergy writes to real devices. You are responsible for ensuring the mapped values (especially temperatures) are safe for your installation; use at your own risk.",
+        "description": "Crowdergy writes these values to switch the device on and off.\n\nHeat pumps (heating/hot water) on a climate/water_heater entity are controlled exclusively via target temperatures: On = maximum temperature, Off = minimum temperature (e.g. hot water: On = 55, Off = 40). The heat pump is never hard-switched off and decides itself how long it runs. For heating, Crowdergy writes the room setpoint it currently needs while heating — “On” is only the fallback, “Off” should be low (e.g. 10). The heat pump controls its flow temperature itself via its heating curve.\n\n⚠️ Disclaimer: Crowdergy writes to real devices. You are responsible for ensuring the mapped values (especially temperatures) are safe for your installation; use at your own risk.",
         "submit": "Save",
         "data": {
           "value_on": "Value for on",

@@ -159,6 +159,8 @@ COMPLETE_HEATING_CLIMATE = {
     "value_on": "heat",
     "value_off": "off",
     "entity_current_temp_c": "sensor.wp_ruecklauf_temp",
+    # (#341) Alt-Preset mit Vorlauf-Slot: der Slot existiert nicht mehr
+    # und darf nie in die Maps (Default-DENY).
     "entity_vorlauf_setpoint_c": "number.wp_vorlauf_soll",
     # install-spezifisch / nicht-spec → darf NIE in die Maps:
     "shares_hardware_with_device_id": "dev-9",
@@ -180,12 +182,12 @@ def test_extract_heating_splits_entity_and_value():
         "entity_current_power_kw": "sensor.wp_power_consumption",
         "entity_control": "climate.wp_heizkreis",
         "entity_current_temp_c": "sensor.wp_ruecklauf_temp",
-        "entity_vorlauf_setpoint_c": "number.wp_vorlauf_soll",
     }
     assert value_map == {"value_on": "heat", "value_off": "off"}
     flat = {**entity_map, **value_map}
     assert "shares_hardware_with_device_id" not in flat
     assert "district" not in flat
+    assert "entity_vorlauf_setpoint_c" not in flat
 
 
 def test_missing_required_heating_climate_is_complete():

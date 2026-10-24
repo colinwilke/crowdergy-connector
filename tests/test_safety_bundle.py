@@ -31,13 +31,14 @@ from custom_components.theothergas.const import (
     CONF_DEVICE_TYPE,
     CONF_ENTITY_CONTROL,
     CONF_ENTITY_CONTROL_HOLD,
-    CONF_ENTITY_VORLAUF_SETPOINT,
     DOMAIN,
     ENTITY_CONTROL_HOLD_ALWAYS,
     ENTITY_CONTROL_HOLD_AUTO,
     LOCAL_OVERRIDE_GRACE_S,
     LOCAL_OVERRIDE_HOLD_S,
     WRITE_BREAKER_MAX_PER_HOUR,
+    CONF_VALUE_ON,
+    CONF_VALUE_OFF,
 )
 from custom_components.theothergas.coordinator import CrowdergyCoordinator
 from custom_components.theothergas.state_mirror import DeviceStateMirror
@@ -129,25 +130,32 @@ async def test_clamp_without_limits_is_identity(hass: HomeAssistant):
     assert coord._clamp_write_value("number.gibtsnicht", "number", 42.0) == 42.0
 
 
-async def test_vorlauf_setpoint_clamped_to_entity_limits(hass: HomeAssistant):
-    """Der Solver-berechnete Vorlauf-Setpoint läuft durch den Clamp —
-    genau der Weg, den der Config-Flow NICHT begrenzen kann."""
+async def test_room_setpoint_clamped_to_entity_limits(hass: HomeAssistant):
+    """(#341) Der Solver-berechnete Raum-Sollwert läuft durch den Clamp —
+    genau der Weg, den der Config-Flow NICHT begrenzen kann (Stiebel ISG:
+    Raum-Sollwert 5–30 °C)."""
     dev = {
         CONF_DEVICE_ID: "d1",
         CONF_DEVICE_TYPE: "heating",
-        CONF_ENTITY_VORLAUF_SETPOINT: "climate.wp",
+        CONF_ENTITY_CONTROL: "climate.wp",
+        CONF_VALUE_ON: "30",
+        CONF_VALUE_OFF: "10",
     }
     coord = make_coordinator(hass, [dev])
+    coord.state.active_state["d1"] = True
+    coord.state.on_state["d1"] = True
+    coord.state.last_sse_event_at = time.time()
     hass.states.async_set(
         "climate.wp", "heat",
-        {"min_temp": 20, "max_temp": 35, "temperature": 28},
+        {"min_temp": 5, "max_temp": 30, "temperature": 21},
     )
     calls = async_mock_service(hass, "climate", "set_temperature")
 
-    await coord._apply_vorlauf_setpoint("d1", 52.0)
+    await coord._apply_room_setpoint("d1", 33.5)
+    coord._cancel_hold("d1")
 
     assert len(calls) == 1
-    assert calls[0].data["temperature"] == 35.0
+    assert calls[0].data["temperature"] == 30.0
 
 
 # ════════════════════════════════════════════════════════════════════

@@ -86,8 +86,9 @@ Contribute-Flow; das Backend prüft das bewusst NICHT, s.u.):
   `invert_power_sign`. Zusätzlich heating/aircon: `entity_cool_control`,
   `value_cool_on`, `value_cool_off` (Kühl-Seite — `supports_cooling`
   leitet das Backend daraus + dem aircon-Typ ab, ist KEIN Preset-Slot);
-  nur heating: `entity_vorlauf_setpoint_c`, `entity_vorlauf_temp_c`
-  (modulierende WP). Pflicht ist also nur Leistung + Steuer-Entity
+  nur heating: `entity_vorlauf_temp_c` (gemessener Vorlauf, COP-
+  Schätzung). Den früheren Slot `entity_vorlauf_setpoint_c` gibt es seit
+  #341 nicht mehr; in Alt-Presets wird er verworfen (Default-DENY). Pflicht ist also nur Leistung + Steuer-Entity
   (analog wallbox = kW + Lademodus).
 
 **Bei JEDEM steuerbaren Typ zusätzlich optional:

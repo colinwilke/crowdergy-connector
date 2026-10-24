@@ -34,7 +34,6 @@ from .const import (
     CONF_ENTITY_VEHICLE_STATUS,
     CONF_ENTITY_CURRENT_TEMP,
     CONF_ENTITY_EFFECTIVE_SETPOINT,
-    CONF_ENTITY_VORLAUF_SETPOINT,
     CONF_ENTITY_VORLAUF_TEMP,
     CONF_ENTITY_ENERGY_TOTAL,
     CONF_ENTITY_ENERGY_DISCHARGED_TOTAL,
@@ -210,17 +209,6 @@ _ENTITY_SELECTORS: dict[str, selector.EntitySelector] = {
         selector.EntitySelectorConfig(
             domain=["sensor", "number", "input_number",
                     "select", "input_select"]
-        )
-    ),
-    # Phase 2b (2026-06-02): Write-Side Vorlauf-Setpoint. Bei
-    # modulierenden Heizungen sendet der Solver pro Tick °C, der
-    # Connector dispatcht via climate.set_temperature gegen diese
-    # Entity. Domain umfasst climate (modulierende WPs mit
-    # climate.set_temperature-Service) sowie number / input_number
-    # für SG-Ready-WPs mit eigenem Setpoint-Register.
-    CONF_ENTITY_VORLAUF_SETPOINT: selector.EntitySelector(
-        selector.EntitySelectorConfig(
-            domain=["climate", "number", "input_number"]
         )
     ),
     # Climate-first Pick für heating. Aus dem climate-State
@@ -672,13 +660,9 @@ def _entities_schema(
             control_fields[
                 _entity_field(CONF_ENTITY_VORLAUF_TEMP, d)
             ] = _ENTITY_SELECTORS[CONF_ENTITY_VORLAUF_TEMP]
-            # Phase 2b (2026-06-02): Im Climate-Mode wird der Vorlauf-
-            # Setpoint NICHT separat abgefragt — die climate.*-Entity
-            # hat `set_temperature` bereits eingebaut und der Connector
-            # dispatcht direkt gegen `entity_control` (= dieselbe
-            # climate-Entity). Skip hier; Code-Pfad in coordinator
-            # `_apply_vorlauf_setpoint` fällt automatisch auf
-            # entity_control zurück wenn entity_vorlauf_setpoint leer.
+            # (#341) Der Raum-Sollwert der modulierenden Heizung geht auf
+            # diese climate-Entity (Temperatur-Modus); einen Vorlauf
+            # schreibt der Connector nie.
             control_schema = vol.Schema(control_fields)
         else:
             control_fields = {
@@ -690,18 +674,6 @@ def _entities_schema(
             control_fields[
                 _entity_field(CONF_ENTITY_VORLAUF_TEMP, d)
             ] = _ENTITY_SELECTORS[CONF_ENTITY_VORLAUF_TEMP]
-            # Phase 2b (2026-06-02): Manuell-Mode für Heizung — hier ist
-            # entity_control typisch ein SG-Ready-Select oder Boost-
-            # Switch ohne eingebauten Setpoint-Service. Der User muss
-            # die VL-Setpoint-Entity separat angeben (number /
-            # input_number / climate). Solver-Output °C wird via
-            # climate.set_temperature bzw. number.set_value
-            # dispatched. Leer lassen = kein Setpoint-Dispatch, die
-            # Heizung läuft weiter binary on/off.
-            if device_type == "heating":
-                control_fields[
-                    _entity_field(CONF_ENTITY_VORLAUF_SETPOINT, d)
-                ] = _ENTITY_SELECTORS[CONF_ENTITY_VORLAUF_SETPOINT]
             control_schema = vol.Schema(control_fields)
         if device_type in ECO_SETPOINT_TYPES:
             # Optionaler ECO-Sollwert (beide KonfigModes): bekommt jede
