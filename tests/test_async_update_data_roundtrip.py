@@ -289,8 +289,9 @@ async def test_unmapped_power_still_reports_online(hass: HomeAssistant):
 
     payload = _sent_payload(coord)
     assert payload["is_online"] is True
-    # No power sensor mapped → no power value, not an invented 0 kW.
-    assert "power_kw" not in payload
+    # No power slot mapped → 0.0 as before; the backend relies on these
+    # rows to report that the device's power is not measured.
+    assert payload["power_kw"] == 0.0
 
 
 async def test_one_live_sensor_keeps_device_online(hass: HomeAssistant):
