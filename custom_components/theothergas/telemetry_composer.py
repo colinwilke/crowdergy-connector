@@ -101,6 +101,9 @@ class TelemetryComposer:
 
     def __init__(self, coord: "CrowdergyCoordinator") -> None:
         self.coord = coord
+        # Malformed /devices body: WARNING once while it persists, then
+        # DEBUG — the bootstrap retries on every refresh tick.
+        self._bootstrap_malformed_logged = False
 
     # ── Initial-Bootstrap ──────────────────────────────────────────
 
@@ -122,21 +125,45 @@ class TelemetryComposer:
                 "GET", "/api/v1/devices",
             )
             response.raise_for_status()
-            for d in response.json():
-                self.coord.state.active_state[d["id"]] = bool(
-                    d.get("is_active", False)
-                )
-                self.coord.state.on_state[d["id"]] = bool(d.get("is_on", False))
-                self.coord.state.cool_state[d["id"]] = bool(
-                    d.get("cool_on", False)
-                )
-            self.coord.state.active_state_bootstrapped = True
         except (httpx.HTTPStatusError, httpx.RequestError) as err:
             _LOGGER.warning(
                 "Bootstrap of device state failed (%s) — "
                 "will retry next refresh",
                 err,
             )
+            return
+        # Parse the whole body before touching the caches: a malformed
+        # backend response (bad JSON, missing `id`, wrong shape) must
+        # neither half-seed the state nor abort the refresh tick.
+        try:
+            seeded = [
+                (
+                    d["id"],
+                    bool(d.get("is_active", False)),
+                    bool(d.get("is_on", False)),
+                    bool(d.get("cool_on", False)),
+                )
+                for d in response.json()
+            ]
+        except (KeyError, ValueError, TypeError, AttributeError) as err:
+            level = (
+                logging.DEBUG if self._bootstrap_malformed_logged
+                else logging.WARNING
+            )
+            self._bootstrap_malformed_logged = True
+            _LOGGER.log(
+                level,
+                "Bootstrap of device state got a malformed response "
+                "(%s: %s) — will retry next refresh",
+                type(err).__name__, err,
+            )
+            return
+        self._bootstrap_malformed_logged = False
+        for device_id, is_active, is_on, cool_on in seeded:
+            self.coord.state.active_state[device_id] = is_active
+            self.coord.state.on_state[device_id] = is_on
+            self.coord.state.cool_state[device_id] = cool_on
+        self.coord.state.active_state_bootstrapped = True
 
     async def push_outdoor_temp(self) -> None:
         """Optional Outdoor-Temp-Sensor read + POST to /users/me/outdoor.

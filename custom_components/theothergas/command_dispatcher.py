@@ -661,12 +661,12 @@ class CommandDispatcherMixin:
                         "for %s: %s", current_entity, err,
                     )
                     ok = False
-        # (#152) Auch der Lademodus ist ein kommandierter Zustand —
-        # gleiche Bezugsgroesse wie beim entity_control, damit die
-        # Wirkungs-Kontrolle fuer ALLE Geraetetypen dieselbe ist.
-        self.state.last_written_value[device_id] = str(mode)
         try:
             if domain in ("select", "input_select"):
+                # (#152) Auch der Lademodus ist ein kommandierter Zustand —
+                # gleiche Bezugsgroesse wie beim entity_control, damit die
+                # Wirkungs-Kontrolle fuer ALLE Geraetetypen dieselbe ist.
+                self.state.last_written_value[device_id] = str(mode)
                 await self.hass.services.async_call(
                     domain, "select_option",
                     {"entity_id": entity_id, "option": mode},
@@ -681,6 +681,18 @@ class CommandDispatcherMixin:
                         "to %s entity %s", mode, domain, entity_id,
                     )
                     return False
+                # (#135) Numeric modes are clamped against the entity's
+                # limits like every other numeric write. A clamp means the
+                # configured mode value can never be reached — flagged as
+                # `control_value_rejected` via `device_id` (battery/wallbox
+                # have no entity_control, so the charge-mode entity is the
+                # primary control entity here). The hold re-writes this
+                # same clamped value, and the effect check compares
+                # against it (`last_written_value`).
+                value = self._clamp_write_value(
+                    entity_id, domain, value, device_id=device_id,
+                )
+                self.state.last_written_value[device_id] = str(value)
                 await self.hass.services.async_call(
                     domain, "set_value",
                     {"entity_id": entity_id, "value": value},

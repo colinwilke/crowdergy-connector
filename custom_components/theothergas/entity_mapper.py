@@ -35,6 +35,7 @@ from typing import Any, Literal
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import device_registry as dr, entity_registry as er
 
+from .http_client import async_create_client
 from .const import (
     CONF_ENTITY_BATTERY_MODE,
     CONF_ENTITY_BATTERY_POWER_SETPOINT,
@@ -729,7 +730,7 @@ async def discover_devices_with_llm(
         return heuristic_groups
 
     try:
-        async with httpx.AsyncClient(timeout=10.0) as client:
+        async with await async_create_client(hass, timeout=10.0) as client:
             resp = await client.post(
                 f"{api_url}/api/v1/mapping/suggest",
                 headers={
