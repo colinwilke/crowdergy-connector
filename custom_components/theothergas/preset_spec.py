@@ -61,7 +61,6 @@ from .const import (
     CONF_ENTITY_POWER_2,
     CONF_ENTITY_SOC,
     CONF_ENTITY_VEHICLE_STATUS,
-    CONF_ENTITY_VORLAUF_SETPOINT,
     CONF_ENTITY_EFFECTIVE_SETPOINT,
     CONF_ENTITY_VORLAUF_TEMP,
     CONF_INVERT_POWER_SIGN,
@@ -216,11 +215,6 @@ PRESET_SLOT_SPEC: dict[str, tuple[PresetSlot, ...]] = {
         ),
         PresetSlot(CONF_ENTITY_CURRENT_TEMP, "entity", False, "Ist-Temperatur (°C)"),
         PresetSlot(CONF_ENTITY_ENERGY_TOTAL, "entity", False, "Energiezähler (kWh)"),
-        # Modulierende WPs: Solver sendet einen Vorlauf-Sollwert pro Tick.
-        PresetSlot(
-            CONF_ENTITY_VORLAUF_SETPOINT, "entity", False,
-            "Vorlauf-Sollwert (°C, modulierend)",
-        ),
         PresetSlot(CONF_ENTITY_VORLAUF_TEMP, "entity", False, "Vorlauf-Ist (°C, Sensor)"),
         # Heizung-die-auch-kühlt (Dual-Mode): supports_cooling wird im
         # Backend aus value_cool_on/aircon-Typ abgeleitet, nicht hier.

@@ -158,7 +158,6 @@
               "entity_control": "Steuer-Entität",
               "entity_current_temp_c": "Ist-Temperatur",
               "entity_vorlauf_temp_c": "Vorlauftemperatur (optional)",
-              "entity_vorlauf_setpoint_c": "Vorlauf-Sollwert (optional)",
               "entity_charge_mode": "Lademodus",
               "entity_wallbox_charge_current_a": "Ladestrom (optional)",
               "entity_wallbox_phase_mode": "Phasenumschaltung (optional)",
@@ -171,7 +170,6 @@
               "entity_control": "Schaltet das Gerät ein und aus — Schalter, Auswahl oder Zahlenwert (z. B. SG-Ready).",
               "entity_current_temp_c": "Heizung: Raumtemperatur (Pflicht — daran misst Crowdergy deinen Komfort). Warmwasser: Speichertemperatur, falls die Warmwasser-Entität sie nicht korrekt meldet. Manuell: dein Temperaturfühler (Pflicht).",
               "entity_vorlauf_temp_c": "Vorlauffühler der Heizung. Verbessert die Effizienz-Schätzung der Wärmepumpe — leer lassen, wenn nicht vorhanden.",
-              "entity_vorlauf_setpoint_c": "Nur bei manueller Steuerung: schreibbarer Vorlauf-Sollwert in °C. Crowdergy regelt die Heizung dann stufenlos statt nur an/aus. Bei Climate-Entität leer lassen.",
               "entity_charge_mode": "Wallbox: Auswahl der Lademodi (Sperren/Laden/Solar). Batterie: Entität für den Betriebsmodus.",
               "entity_wallbox_charge_current_a": "Stellt den Ladestrom in Ampere (typisch 6–16 A). Damit passt Crowdergy die Ladeleistung an den Solarüberschuss an, statt nur mit voller Leistung zu laden.",
               "entity_wallbox_phase_mode": "Select-Entity, die die Wallbox zwischen 1- und 3-phasigem Laden umschaltet (z. B. go-e). Damit kann Crowdergy schon ab ~1,4 kW Solarüberschuss einphasig laden statt erst ab ~4 kW. Die \"Auto\"-Option wird nie genutzt — Crowdergy stellt die Phase immer explizit.",
@@ -184,7 +182,7 @@
       },
       "device_values": {
         "title": "{device_name} — Schaltwerte",
-        "description": "Mit diesen Werten schaltet Crowdergy das Gerät ein und aus — so läuft es in günstigen und solarreichen Stunden statt in teuren.\n\nWärmepumpen (Heizung/Warmwasser) mit climate-/water_heater-Entität steuert Crowdergy ausschließlich über Zieltemperaturen: An = Maximaltemperatur, Aus = Minimaltemperatur (z. B. Warmwasser: An = 55, Aus = 40). Die Wärmepumpe wird nie hart abgeschaltet und entscheidet selbst, wie lange sie läuft.\n\nBei eigenen Auswahl-Helfern zählt der rohe Zustandswert, nicht das Anzeige-Label.\n\n⚠️ Haftungsausschluss: Crowdergy schreibt auf echte Geräte. Du bist dafür verantwortlich, dass die gemappten Werte (insbesondere Temperaturen) für deine Anlage sicher sind; Nutzung auf eigene Gefahr.",
+        "description": "Mit diesen Werten schaltet Crowdergy das Gerät ein und aus — so läuft es in günstigen und solarreichen Stunden statt in teuren.\n\nWärmepumpen (Heizung/Warmwasser) mit climate-/water_heater-Entität steuert Crowdergy ausschließlich über Zieltemperaturen: An = Maximaltemperatur, Aus = Minimaltemperatur (z. B. Warmwasser: An = 55, Aus = 40). Die Wärmepumpe wird nie hart abgeschaltet und entscheidet selbst, wie lange sie läuft. Bei der Heizung schreibt Crowdergy während des Heizens den Raum-Sollwert, den es gerade braucht — „An“ ist nur der Rückfall, „Aus“ sollte niedrig sein (z. B. 10). Den Vorlauf regelt die Wärmepumpe selbst nach ihrer Heizkurve.\n\nBei eigenen Auswahl-Helfern zählt der rohe Zustandswert, nicht das Anzeige-Label.\n\n⚠️ Haftungsausschluss: Crowdergy schreibt auf echte Geräte. Du bist dafür verantwortlich, dass die gemappten Werte (insbesondere Temperaturen) für deine Anlage sicher sind; Nutzung auf eigene Gefahr.",
         "submit": "Weiter",
         "data": {
           "value_on": "Wert für An",
@@ -440,7 +438,6 @@
               "entity_control": "Steuer-Entität",
               "entity_current_temp_c": "Ist-Temperatur",
               "entity_vorlauf_temp_c": "Vorlauftemperatur (optional)",
-              "entity_vorlauf_setpoint_c": "Vorlauf-Sollwert (optional)",
               "entity_charge_mode": "Lademodus",
               "entity_wallbox_charge_current_a": "Ladestrom (optional)",
               "entity_wallbox_phase_mode": "Phasenumschaltung (optional)",
@@ -453,7 +450,6 @@
               "entity_control": "Schaltet das Gerät ein und aus — Schalter, Auswahl oder Zahlenwert (z. B. SG-Ready).",
               "entity_current_temp_c": "Heizung: Raumtemperatur (Pflicht — daran misst Crowdergy deinen Komfort). Warmwasser: Speichertemperatur. Manuell: dein Temperaturfühler (Pflicht).",
               "entity_vorlauf_temp_c": "Vorlauffühler der Heizung. Verbessert die Effizienz-Schätzung der Wärmepumpe — leer lassen, wenn nicht vorhanden.",
-              "entity_vorlauf_setpoint_c": "Nur bei manueller Steuerung: schreibbarer Vorlauf-Sollwert in °C. Crowdergy regelt die Heizung dann stufenlos statt nur an/aus. Bei Climate-Entität leer lassen.",
               "entity_charge_mode": "Wallbox: Auswahl der Lademodi (Sperren/Laden/Solar). Batterie: Entität für den Betriebsmodus.",
               "entity_wallbox_charge_current_a": "Stellt den Ladestrom in Ampere (typisch 6–16 A). Damit passt Crowdergy die Ladeleistung an den Solarüberschuss an, statt nur mit voller Leistung zu laden.",
               "entity_wallbox_phase_mode": "Select-Entity, die die Wallbox zwischen 1- und 3-phasigem Laden umschaltet (z. B. go-e). Damit kann Crowdergy schon ab ~1,4 kW Solarüberschuss einphasig laden statt erst ab ~4 kW. Die \"Auto\"-Option wird nie genutzt — Crowdergy stellt die Phase immer explizit.",
@@ -466,7 +462,7 @@
       },
       "add_device_values": {
         "title": "{device_name} — Schaltwerte",
-        "description": "Mit diesen Werten schaltet Crowdergy das Gerät ein und aus — so läuft es in günstigen und solarreichen Stunden statt in teuren.\n\nWärmepumpen (Heizung/Warmwasser) mit climate-/water_heater-Entität steuert Crowdergy ausschließlich über Zieltemperaturen: An = Maximaltemperatur, Aus = Minimaltemperatur (z. B. Warmwasser: An = 55, Aus = 40). Die Wärmepumpe wird nie hart abgeschaltet und entscheidet selbst, wie lange sie läuft.\n\n⚠️ Haftungsausschluss: Crowdergy schreibt auf echte Geräte. Du bist dafür verantwortlich, dass die gemappten Werte (insbesondere Temperaturen) für deine Anlage sicher sind; Nutzung auf eigene Gefahr.",
+        "description": "Mit diesen Werten schaltet Crowdergy das Gerät ein und aus — so läuft es in günstigen und solarreichen Stunden statt in teuren.\n\nWärmepumpen (Heizung/Warmwasser) mit climate-/water_heater-Entität steuert Crowdergy ausschließlich über Zieltemperaturen: An = Maximaltemperatur, Aus = Minimaltemperatur (z. B. Warmwasser: An = 55, Aus = 40). Die Wärmepumpe wird nie hart abgeschaltet und entscheidet selbst, wie lange sie läuft. Bei der Heizung schreibt Crowdergy während des Heizens den Raum-Sollwert, den es gerade braucht — „An“ ist nur der Rückfall, „Aus“ sollte niedrig sein (z. B. 10). Den Vorlauf regelt die Wärmepumpe selbst nach ihrer Heizkurve.\n\n⚠️ Haftungsausschluss: Crowdergy schreibt auf echte Geräte. Du bist dafür verantwortlich, dass die gemappten Werte (insbesondere Temperaturen) für deine Anlage sicher sind; Nutzung auf eigene Gefahr.",
         "submit": "Weiter",
         "data": {
           "value_on": "Wert für An",
@@ -614,7 +610,6 @@
               "entity_control": "Steuer-Entität",
               "entity_current_temp_c": "Ist-Temperatur",
               "entity_vorlauf_temp_c": "Vorlauftemperatur (optional)",
-              "entity_vorlauf_setpoint_c": "Vorlauf-Sollwert (optional)",
               "entity_charge_mode": "Lademodus",
               "entity_wallbox_charge_current_a": "Ladestrom (optional)",
               "entity_wallbox_phase_mode": "Phasenumschaltung (optional)",
@@ -627,7 +622,6 @@
               "entity_control": "Schaltet das Gerät ein und aus — Schalter, Auswahl oder Zahlenwert (z. B. SG-Ready).",
               "entity_current_temp_c": "Heizung: Raumtemperatur (Pflicht — daran misst Crowdergy deinen Komfort). Warmwasser: Speichertemperatur. Manuell: dein Temperaturfühler (Pflicht).",
               "entity_vorlauf_temp_c": "Vorlauffühler der Heizung. Verbessert die Effizienz-Schätzung der Wärmepumpe — leer lassen, wenn nicht vorhanden.",
-              "entity_vorlauf_setpoint_c": "Nur bei manueller Steuerung: schreibbarer Vorlauf-Sollwert in °C. Crowdergy regelt die Heizung dann stufenlos statt nur an/aus. Bei Climate-Entität leer lassen.",
               "entity_charge_mode": "Wallbox: Auswahl der Lademodi. Batterie: Entität für den Betriebsmodus.",
               "entity_wallbox_charge_current_a": "Stellt den Ladestrom in Ampere (typisch 6–16 A). Damit passt Crowdergy die Ladeleistung an den Solarüberschuss an, statt nur mit voller Leistung zu laden.",
               "entity_wallbox_phase_mode": "Select-Entity, die die Wallbox zwischen 1- und 3-phasigem Laden umschaltet (z. B. go-e). Damit kann Crowdergy schon ab ~1,4 kW Solarüberschuss einphasig laden statt erst ab ~4 kW. Die \"Auto\"-Option wird nie genutzt — Crowdergy stellt die Phase immer explizit.",
@@ -640,7 +634,7 @@
       },
       "edit_device_values": {
         "title": "{device_name} — Schaltwerte",
-        "description": "Mit diesen Werten schaltet Crowdergy das Gerät ein und aus.\n\nWärmepumpen (Heizung/Warmwasser) mit climate-/water_heater-Entität steuert Crowdergy ausschließlich über Zieltemperaturen: An = Maximaltemperatur, Aus = Minimaltemperatur (z. B. Warmwasser: An = 55, Aus = 40). Die Wärmepumpe wird nie hart abgeschaltet und entscheidet selbst, wie lange sie läuft.\n\n⚠️ Haftungsausschluss: Crowdergy schreibt auf echte Geräte. Du bist dafür verantwortlich, dass die gemappten Werte (insbesondere Temperaturen) für deine Anlage sicher sind; Nutzung auf eigene Gefahr.",
+        "description": "Mit diesen Werten schaltet Crowdergy das Gerät ein und aus.\n\nWärmepumpen (Heizung/Warmwasser) mit climate-/water_heater-Entität steuert Crowdergy ausschließlich über Zieltemperaturen: An = Maximaltemperatur, Aus = Minimaltemperatur (z. B. Warmwasser: An = 55, Aus = 40). Die Wärmepumpe wird nie hart abgeschaltet und entscheidet selbst, wie lange sie läuft. Bei der Heizung schreibt Crowdergy während des Heizens den Raum-Sollwert, den es gerade braucht — „An“ ist nur der Rückfall, „Aus“ sollte niedrig sein (z. B. 10). Den Vorlauf regelt die Wärmepumpe selbst nach ihrer Heizkurve.\n\n⚠️ Haftungsausschluss: Crowdergy schreibt auf echte Geräte. Du bist dafür verantwortlich, dass die gemappten Werte (insbesondere Temperaturen) für deine Anlage sicher sind; Nutzung auf eigene Gefahr.",
         "submit": "Speichern",
         "data": {
           "value_on": "Wert für An",

@@ -6,7 +6,7 @@
 * CN-3: Hold-Self-Heal respektiert die SSE-Staleness (gleicher
   Threshold wie der `_hold_loop`-Bail) — kein Überschreiben von
   User-Eingriffen im Backend-Outage.
-* CN-4: Idempotenz-Guard in `_apply_vorlauf_setpoint` liest bei
+* CN-4: Idempotenz-Guard im Raum-Sollwert-Pfad (#341) liest bei
   climate.* das `temperature`-Attribut statt des HVAC-Mode-Strings.
 * CN-6: number-Domains werden in der Hold-/Expected-Logik numerisch
   verglichen ("60" == "60.0").
@@ -36,7 +36,6 @@ from custom_components.theothergas.const import (
     CONF_ENTITY_CONTROL,
     CONF_ENTITY_CONTROL_HOLD,
     CONF_ENTITY_COOL_CONTROL,
-    CONF_ENTITY_VORLAUF_SETPOINT,
     CONF_VALUE_BATTERY_MODE_ACTIVE,
     CONF_VALUE_BATTERY_MODE_PASSIVE,
     CONF_VALUE_COOL_ON,
@@ -174,17 +173,20 @@ async def test_apply_battery_setpoint_blocked_without_consent(hass: HomeAssistan
     assert number_calls == []
 
 
-async def test_apply_vorlauf_setpoint_blocked_without_consent(hass: HomeAssistant):
+async def test_apply_room_setpoint_blocked_without_consent(hass: HomeAssistant):
     dev = {
         CONF_DEVICE_ID: "d1",
         CONF_DEVICE_TYPE: "heating",
-        CONF_ENTITY_VORLAUF_SETPOINT: "number.vorlauf",
+        CONF_ENTITY_CONTROL: "climate.wp",
+        CONF_VALUE_ON: "30",
+        CONF_VALUE_OFF: "10",
     }
     coord = make_coordinator(hass, [dev], options=NO_CONSENT)
-    hass.states.async_set("number.vorlauf", "40.0")
-    calls = async_mock_service(hass, "number", "set_value")
+    coord.state.on_state["d1"] = True
+    hass.states.async_set("climate.wp", "heat", {"temperature": 21.0})
+    calls = async_mock_service(hass, "climate", "set_temperature")
 
-    await coord._apply_vorlauf_setpoint("d1", 55.0)
+    await coord._apply_room_setpoint("d1", 23.0)
 
     assert calls == []
 
@@ -248,37 +250,47 @@ async def test_self_heal_skips_without_consent(hass: HomeAssistant):
 # ── CN-4: climate-Idempotenz über das temperature-Attribut ───────────
 
 
-async def test_vorlauf_climate_same_setpoint_skips_write(hass: HomeAssistant):
+async def test_room_setpoint_climate_same_setpoint_skips_write(hass: HomeAssistant):
     dev = {
         CONF_DEVICE_ID: "d1",
         CONF_DEVICE_TYPE: "heating",
-        CONF_ENTITY_VORLAUF_SETPOINT: "climate.wp",
+        CONF_ENTITY_CONTROL: "climate.wp",
+        CONF_VALUE_ON: "30",
+        CONF_VALUE_OFF: "10",
     }
     coord = make_coordinator(hass, [dev])
+    coord.state.active_state["d1"] = True
+    coord.state.on_state["d1"] = True
     # climate.* trägt im state den HVAC-Mode; der Setpoint sitzt im
     # Attribut `temperature` — exakt der Standardfall.
-    hass.states.async_set("climate.wp", "heat", {"temperature": 45.0})
+    hass.states.async_set("climate.wp", "heat", {"temperature": 22.5})
     calls = async_mock_service(hass, "climate", "set_temperature")
 
-    await coord._apply_vorlauf_setpoint("d1", 45.0)
+    await coord._apply_room_setpoint("d1", 22.5)
+    coord._cancel_hold("d1")
 
     assert calls == []
 
 
-async def test_vorlauf_climate_changed_setpoint_writes(hass: HomeAssistant):
+async def test_room_setpoint_climate_changed_setpoint_writes(hass: HomeAssistant):
     dev = {
         CONF_DEVICE_ID: "d1",
         CONF_DEVICE_TYPE: "heating",
-        CONF_ENTITY_VORLAUF_SETPOINT: "climate.wp",
+        CONF_ENTITY_CONTROL: "climate.wp",
+        CONF_VALUE_ON: "30",
+        CONF_VALUE_OFF: "10",
     }
     coord = make_coordinator(hass, [dev])
-    hass.states.async_set("climate.wp", "heat", {"temperature": 45.0})
+    coord.state.active_state["d1"] = True
+    coord.state.on_state["d1"] = True
+    hass.states.async_set("climate.wp", "heat", {"temperature": 22.5})
     calls = async_mock_service(hass, "climate", "set_temperature")
 
-    await coord._apply_vorlauf_setpoint("d1", 50.0)
+    await coord._apply_room_setpoint("d1", 24.0)
+    coord._cancel_hold("d1")
 
     assert len(calls) == 1
-    assert calls[0].data["temperature"] == 50.0
+    assert calls[0].data["temperature"] == 24.0
 
 
 # ── CN-6: numerischer Vergleich für number-Domains ───────────────────
@@ -381,20 +393,26 @@ async def test_ha_switch_ai_off_runs_handover_once(hass: HomeAssistant):
     assert len(modes) == 1
 
 
-async def test_vorlauf_setpoint_not_written_with_ai_off(hass: HomeAssistant):
+async def test_room_setpoint_not_written_with_ai_off(hass: HomeAssistant):
     dev = {
         CONF_DEVICE_ID: "hz",
         CONF_DEVICE_TYPE: "heating",
-        CONF_ENTITY_VORLAUF_SETPOINT: "number.vl_soll",
+        CONF_ENTITY_CONTROL: "climate.wp",
+        CONF_VALUE_ON: "30",
+        CONF_VALUE_OFF: "10",
     }
     coord = make_coordinator(hass, [dev])
-    hass.states.async_set("number.vl_soll", "30", {"min": 20, "max": 55})
-    calls = async_mock_service(hass, "number", "set_value")
+    coord.state.on_state["hz"] = True
+    hass.states.async_set(
+        "climate.wp", "heat", {"temperature": 10, "min_temp": 5, "max_temp": 30},
+    )
+    calls = async_mock_service(hass, "climate", "set_temperature")
 
     coord.state.active_state["hz"] = False
-    await coord._apply_vorlauf_setpoint("hz", 42.0)
+    await coord._apply_room_setpoint("hz", 23.0)
     assert calls == []
 
     coord.state.active_state["hz"] = True
-    await coord._apply_vorlauf_setpoint("hz", 42.0)
-    assert [c.data["value"] for c in calls] == [42.0]
+    await coord._apply_room_setpoint("hz", 23.0)
+    coord._cancel_hold("hz")
+    assert [c.data["temperature"] for c in calls] == [23.0]

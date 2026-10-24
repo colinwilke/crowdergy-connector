@@ -353,15 +353,6 @@ CONF_VALUE_COOL_OFF = "value_cool_off"
 # iOS-App gedacht.
 CONF_ENTITY_VORLAUF_TEMP = "entity_vorlauf_temp_c"
 
-# Phase 2b Refactor (2026-06-02): write-side Vorlauf-Setpoint-Entity.
-# Bei modulierenden Heizungen (Backend setzt is_modulating_heating=True
-# für device.type=heating, supports_cooling=False) sendet der Solver
-# pro Tick einen `vorlauf_setpoint_c`-Wert (°C) per SSE. Der Connector
-# dispatcht ihn via `climate.set_temperature(entity_vorlauf_setpoint,
-# temperature=°C)` an die HA-Entity die der User hier mapped. Wenn
-# leer / nicht gemapped: kein Dispatch, Solver-Empfehlung wird
-# stillschweigend ignoriert (User kann später nachpflegen).
-CONF_ENTITY_VORLAUF_SETPOINT = "entity_vorlauf_setpoint_c"
 
 # ── Wirkungs-Kontrolle (#152, 2026-08-29) ────────────────────────────
 # Optionaler Read-Slot für ALLE steuerbaren Typen: die Entity, an der
@@ -478,6 +469,14 @@ COMMAND_LEASE_TTL_S = 900
 # (der 2026-06-Piep-Storm lag bei >1000/h).
 WRITE_BREAKER_MAX_PER_HOUR = 500
 
+# (#341) Tagesbudget für Sollwert-Register der WP-Steuerung (Steuer-
+# Entity im Temperatur-Modus + ECO-Sollwert von Heizung/Warmwasser): je
+# Entity höchstens so viele Writes pro Berlin-Tag. Hintergrund: die
+# Register sitzen in der WP-Steuerung (Stiebel ISG u. a.); Angaben zur
+# Zyklenfestigkeit reichen bis hinunter auf ~10.000. Der Raum-Sollwert
+# ändert sich nur bei Heizlauf-Wechseln und ≥ 1 K, das reicht im Alltag.
+SETPOINT_WRITES_MAX_PER_DAY = 24
+
 # (#140, 2026-08-25) Manuelle Übersteuerung: erkennt der AUTO-Hold
 # einen Drift, der NICHT von uns stammt (kein eigener Service-Call auf
 # der Entity in den letzten LOCAL_OVERRIDE_GRACE_S), gilt das als
@@ -552,7 +551,8 @@ OPT_CONSENT_REMOTE_CONTROL = "consent_remote_control"
 #   * Control-Slots → exakt die Domains, die die Apply-Pfade im
 #     Coordinator tatsächlich schreiben können
 #     (`_write_entity_control`, `_apply_charge_mode`,
-#     `_apply_battery_setpoint`, `_apply_vorlauf_setpoint`).
+#     `_apply_battery_setpoint`; der Raum-Sollwert #341 geht über
+#     `_write_entity_control`).
 #
 # device_class wird BEWUSST nicht zusätzlich geprüft: sie steht beim
 # headless `box_add_device` (nur slot→entity_id) gar nicht zur Verfügung
@@ -570,8 +570,6 @@ _CONTROL_DOMAINS = frozenset({
     "number", "input_number", "select", "input_select",
     "climate", "water_heater",
 })
-# Vorlauf-Setpoint: climate.set_temperature ODER number.set_value.
-_SETPOINT_DOMAINS = frozenset({"climate", "number", "input_number"})
 # Battery-Mode / Charge-Mode (Lademodus): Select-artig.
 _SELECT_DOMAINS = frozenset({"select", "input_select"})
 # Battery-Power-Setpoint: Number-artig.
@@ -621,7 +619,6 @@ MAPPABLE_ENTITY_DOMAINS: dict[str, frozenset[str]] = {
     CONF_ENTITY_WALLBOX_PHASE_MODE: _SELECT_DOMAINS,
     CONF_ENTITY_BATTERY_MODE: _SELECT_DOMAINS,
     CONF_ENTITY_BATTERY_POWER_SETPOINT: _NUMBER_DOMAINS,
-    CONF_ENTITY_VORLAUF_SETPOINT: _SETPOINT_DOMAINS,
     # Zweiter Sollwert (Komfort/ECO-WPs) — geschrieben wie entity_control.
     CONF_ENTITY_CONTROL_ECO: _ECO_SETPOINT_DOMAINS,
     # (#152) Wirkungs-Kontrolle: reiner LESE-Slot — der gefahrene

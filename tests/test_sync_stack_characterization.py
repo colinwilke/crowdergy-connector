@@ -260,7 +260,7 @@ def _routing_coordinator(hass, devices, *, options=None):
     coord = make_coordinator(hass, devices, options=options)
     coord._apply_device_state = AsyncMock()
     coord._apply_cool_state = AsyncMock()
-    coord._apply_vorlauf_setpoint = AsyncMock()
+    coord._apply_room_setpoint = AsyncMock()
     coord._apply_battery_setpoint = AsyncMock()
     coord._apply_charge_mode = AsyncMock()
     coord._sync_field_into_data = lambda *a, **k: None
@@ -296,7 +296,7 @@ async def test_dispatch_telemetry_echo_with_origin_has_no_side_effects(
     hass: HomeAssistant,
 ):
     """Echo of the connector's own PATCH (`origin: "telemetry"`) is not a
-    command: a differing is_on/cool_on/is_active/vorlauf triggers no write
+    command: a differing is_on/cool_on/is_active/room setpoint triggers no write
     and leaves the local state cache untouched."""
     coord = _routing_coordinator(hass, [{CONF_DEVICE_ID: "d1", CONF_DEVICE_TYPE: "heating"}])
     coord._apply_active_transition = AsyncMock()
@@ -312,13 +312,13 @@ async def test_dispatch_telemetry_echo_with_origin_has_no_side_effects(
                 "is_on": True,
                 "cool_on": True,
                 "is_active": False,
-                "vorlauf_setpoint_c": 45,
+                "room_setpoint_c": 23,
             },
         }
     )
     coord._apply_device_state.assert_not_awaited()
     coord._apply_cool_state.assert_not_awaited()
-    coord._apply_vorlauf_setpoint.assert_not_awaited()
+    coord._apply_room_setpoint.assert_not_awaited()
     coord._apply_active_transition.assert_not_awaited()
     assert coord.state.on_state["d1"] is False
     assert coord.state.cool_state["d1"] is False
@@ -356,14 +356,25 @@ async def test_dispatch_cool_on_processed_before_is_on(hass: HomeAssistant):
     assert order == ["cool", "on"]
 
 
-async def test_dispatch_vorlauf_setpoint_routes_and_coerces_float(
+async def test_dispatch_room_setpoint_routes_and_coerces_float(
     hass: HomeAssistant,
 ):
     coord = _routing_coordinator(hass, [{CONF_DEVICE_ID: "d1", CONF_DEVICE_TYPE: "heating"}])
     await coord._handle_ws_message(
-        {"type": "telemetry", "device_id": "d1", "data": {"vorlauf_setpoint_c": "45"}}
+        {"type": "telemetry", "device_id": "d1", "data": {"room_setpoint_c": "22.5"}}
     )
-    coord._apply_vorlauf_setpoint.assert_awaited_once_with("d1", 45.0)
+    coord._apply_room_setpoint.assert_awaited_once_with("d1", 22.5)
+
+
+async def test_dispatch_legacy_vorlauf_key_is_ignored(hass: HomeAssistant):
+    """(#341) Ein altes Backend schickt noch `vorlauf_setpoint_c` — der
+    Connector schreibt nie mehr einen Vorlauf."""
+    coord = _routing_coordinator(hass, [{CONF_DEVICE_ID: "d1", CONF_DEVICE_TYPE: "heating"}])
+    await coord._handle_ws_message(
+        {"type": "telemetry", "device_id": "d1", "data": {"vorlauf_setpoint_c": 45}}
+    )
+    coord._apply_room_setpoint.assert_not_awaited()
+    coord._apply_device_state.assert_not_awaited()
 
 
 async def test_dispatch_command_battery_reads_mode_and_setpoint(
