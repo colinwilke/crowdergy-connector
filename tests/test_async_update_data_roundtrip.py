@@ -289,9 +289,36 @@ async def test_unmapped_power_still_reports_online(hass: HomeAssistant):
 
     payload = _sent_payload(coord)
     assert payload["is_online"] is True
-    # No power slot mapped → 0.0 as before; the backend relies on these
-    # rows to report that the device's power is not measured.
-    assert payload["power_kw"] == 0.0
+    # No power slot mapped → no invented 0 kW: the key is omitted and the
+    # backend reads an online row without `power_kw` as "power not
+    # measured".
+    assert "power_kw" not in payload
+    assert payload["is_on"] is True
+
+
+async def test_unmapped_power_does_not_flap_should_send(hass: HomeAssistant):
+    """A device without a power slot keeps omitting `power_kw` every tick —
+    an unchanged state must not count as a change, and the HA sensor shows
+    None instead of 0."""
+    dev = {
+        CONF_DEVICE_ID: "dev-1",
+        CONF_DEVICE_TYPE: "heating",
+        CONF_ENTITY_CONTROL: "switch.wp",
+        CONF_VALUE_ON: "on",
+        CONF_VALUE_OFF: "off",
+    }
+    coord = _make_coord(hass, [dev])
+    hass.states.async_set("switch.wp", "on", {})
+
+    result = await coord._async_update_data()
+    first = _sent_payload(coord)
+    assert "power_kw" not in first
+    assert result["dev-1"]["current_power_kw"] is None
+    assert result["dev-1"]["is_online"] is True
+
+    assert coord._should_send("dev-1", dict(first)) is False
+    await coord._async_update_data()
+    assert coord._patch_telemetry_with_retry.await_count == 1
 
 
 async def test_one_live_sensor_keeps_device_online(hass: HomeAssistant):

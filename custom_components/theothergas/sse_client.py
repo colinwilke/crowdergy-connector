@@ -44,6 +44,22 @@ SSE_RECONNECT_MAX = 60
 # ewig blocken → User-Befehle fielen ins Leere bis Connector-Reload.
 SSE_READ_TIMEOUT_S = 60
 
+# Connect timeout for the SSE handshake. `total=None` (the stream is
+# long-lived) leaves aiohttp without any connect bound, so a hanging TCP
+# connect waited for the OS default (~2 min) before the reconnect loop
+# could back off and retry.
+SSE_CONNECT_TIMEOUT_S = 30
+
+
+def sse_client_timeout() -> aiohttp.ClientTimeout:
+    """Timeout for the SSE request: no total cap (long-lived stream),
+    bounded connect and bounded idle read (half-open detection)."""
+    return aiohttp.ClientTimeout(
+        total=None,
+        sock_connect=SSE_CONNECT_TIMEOUT_S,
+        sock_read=SSE_READ_TIMEOUT_S,
+    )
+
 # Queue-Cap (Phase-B Backpressure). Bei normaler Last steht da 1-2
 # Frames, mehr nur wenn der Consumer-Task hängt. 512 ist großzügig
 # damit kurze Apply-Spikes nichts droppen, klein genug damit ein
@@ -145,9 +161,7 @@ class SSEClient:
                         # in nginx access logs (deprecated 2026-05-27).
                         "Authorization": f"Bearer {self._get_token()}",
                     },
-                    timeout=aiohttp.ClientTimeout(
-                        total=None, sock_read=SSE_READ_TIMEOUT_S,
-                    ),
+                    timeout=sse_client_timeout(),
                 ) as resp:
                     if resp.status == 401:
                         # CN-11 (2026-06-11): vorher lief bei Refresh-

@@ -243,6 +243,8 @@ class CrowdergyCoordinator(
         self._client: httpx.AsyncClient | None = None  # type: ignore[assignment]
         self._unsub_listeners: list[Any] = []
         self._entity_to_devices: dict[str, list[str]] = {}
+        # Malformed /auth/refresh body: WARNING once while it persists.
+        self._refresh_malformed_logged = False
         # FEAT-5 Phase B (2026-06-09): SSE-Stream-Reader in sse_client.py
         # extrahiert. Coordinator besitzt jetzt nur noch die SSEClient-
         # Instanz + einen Consumer-Task der Frames aus der Queue holt
@@ -361,22 +363,33 @@ class CrowdergyCoordinator(
         without a listener a manual flip at the HA select waited up to
         HEARTBEAT_INTERVAL (30 s) — now it rides the event-driven
         refresh (≤ EVENT_REFRESH_MIN_INTERVAL) like the other slots.
+
+        Every mirrored read slot belongs here: the second power sensor,
+        the discharged/feed-in counter and — for aircon — the climate
+        entity the room temperature falls back to.
         """
         for dev in self.devices:
             device_id = dev[CONF_DEVICE_ID]
-            for key in (
+            keys = [
                 CONF_ENTITY_POWER,
+                CONF_ENTITY_POWER_2,
                 CONF_ENTITY_SOC,
                 CONF_ENTITY_VEHICLE_STATUS,
                 CONF_ENTITY_CURRENT_TEMP,
                 CONF_ENTITY_ENERGY_TOTAL,
+                CONF_ENTITY_ENERGY_DISCHARGED_TOTAL,
                 CONF_ENTITY_CONTROL,
                 CONF_ENTITY_CHARGE_MODE,
                 CONF_ENTITY_COOL_CONTROL,
-            ):
+            ]
+            if dev.get(CONF_DEVICE_TYPE) == "aircon":
+                keys.append(CONF_ENTITY_CLIMATE)
+            for key in keys:
                 entity_id = dev.get(key, "")
                 if entity_id:
-                    self._entity_to_devices.setdefault(entity_id, []).append(device_id)
+                    watchers = self._entity_to_devices.setdefault(entity_id, [])
+                    if device_id not in watchers:
+                        watchers.append(device_id)
 
     def setup_listeners(self) -> None:
         """Subscribe to state changes of all tracked entities."""
@@ -555,9 +568,10 @@ class CrowdergyCoordinator(
                     json={"refresh_token": self._refresh_token},
                 )
                 if response.status_code == 200:
-                    tokens = response.json()
-                    self._access_token = tokens["access_token"]
-                    self._refresh_token = tokens["refresh_token"]
+                    tokens = self._parse_refresh_tokens(response)
+                    if tokens is None:
+                        return False
+                    self._access_token, self._refresh_token = tokens
                     # #19: neues exp übernehmen, damit der nächste
                     # proaktive Check gegen das frische Token rechnet.
                     self._access_token_exp = _jwt_exp(self._access_token)
@@ -570,6 +584,35 @@ class CrowdergyCoordinator(
             except httpx.RequestError as err:
                 _LOGGER.error("Token refresh failed: %s", err)
             return False
+
+    def _parse_refresh_tokens(
+        self, response: httpx.Response
+    ) -> tuple[str, str] | None:
+        """Token pair from a 200 `/auth/refresh` body, or None when the
+        body is malformed (bad JSON, missing keys, non-string tokens). A
+        malformed body counts as a failed refresh — the current tokens stay
+        untouched. WARNING once while it persists, then DEBUG."""
+        try:
+            tokens = response.json()
+            access, refresh = tokens["access_token"], tokens["refresh_token"]
+            if not isinstance(access, str) or not isinstance(refresh, str) \
+                    or not access or not refresh:
+                raise ValueError("token fields are not non-empty strings")
+        except (KeyError, ValueError, TypeError) as err:
+            level = (
+                logging.DEBUG
+                if getattr(self, "_refresh_malformed_logged", False)
+                else logging.WARNING
+            )
+            self._refresh_malformed_logged = True
+            _LOGGER.log(
+                level,
+                "Token refresh returned a malformed body (%s: %s)",
+                type(err).__name__, err,
+            )
+            return None
+        self._refresh_malformed_logged = False
+        return access, refresh
 
     def _token_expires_within(self, margin_s: float) -> bool:
         """True wenn das Access-Token in ≤ margin_s abläuft (oder schon
@@ -1013,19 +1056,19 @@ class CrowdergyCoordinator(
             )
             data_missing = measurements_live is False
             payload: dict[str, Any] = {"is_online": not data_missing}
-            # Same honesty one level down: the device is live, but its
-            # MAPPED power sensor is unavailable/unknown/non-numeric →
-            # omit `power_kw` instead of inventing 0 kW. `_should_send`
-            # treats a key missing on both sides as unchanged, so a
-            # steadily absent value does not count as a change per tick.
-            # No power slot mapped at all → keep sending 0.0: the backend
-            # uses those rows to tell the user that this device's power
-            # is not measured; omitting them would silence that notice.
-            if not data_missing:
-                if current_power is not None:
-                    payload["power_kw"] = current_power
-                elif not (entity_power or entity_power_2):
-                    payload["power_kw"] = 0.0
+            # Same honesty one level down: `power_kw` is sent only when a
+            # power sensor delivered a value. A MAPPED sensor that is
+            # unavailable/unknown/non-numeric and a device with NO power
+            # slot mapped at all both omit the key instead of inventing
+            # 0 kW. The backend reads an online row without `power_kw` as
+            # "power not measured" (requires a backend that does so —
+            # deploy it before this connector). An unmapped power slot is
+            # not a dead measurement: `is_online` stays True (#151
+            # liveness only looks at mapped slots). `_should_send` treats
+            # a key missing on both sides as unchanged, so a steadily
+            # absent value does not count as a change per tick.
+            if not data_missing and current_power is not None:
+                payload["power_kw"] = current_power
             if soc_percent is not None:
                 payload["soc_percent"] = soc_percent
             if vehicle_status is not None:
