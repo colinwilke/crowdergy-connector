@@ -140,7 +140,7 @@
               "invert_power_sign": "Enable if your sensor reports the directions swapped.",
               "entity_soc_percent": "State of charge in % — required for battery and wallbox. Without it Crowdergy can't tell how much can still be charged.",
               "entity_vehicle_status": "Reports whether a car is plugged into the wallbox. Charging is only planned with a car plugged in.",
-              "entity_current_temp_c": "Current temperature in °C — heating flow or tank temperature.",
+              "entity_current_temp_c": "Current temperature in °C — room temperature for heating, tank temperature for hot water.",
               "entity_energy_total": "Cumulative kWh meter — the basis for daily stats and savings. Grid: import. Battery: discharge. Otherwise: the device's own meter.",
               "entity_energy_discharged_total": "Grid (export) and battery (charge) only. Leave empty for other device types.",
               "entity_home_consumption_pv_power": "Vendor sensor of some inverters (e.g. Kostal 'Home Consumption from PV'). Refines the house-consumption chart — otherwise leave empty.",
@@ -165,7 +165,7 @@
               "entity_control_eco": "Eco setpoint (optional)"
             },
             "data_description": {
-              "entity_climate": "The climate (thermostat) entity of your heat pump (prefixed climate.) — control and modes are derived from it. For heating, its temperature is treated as the flow temperature; map the room temperature separately as current temperature.",
+              "entity_climate": "The climate (thermostat) entity of your heat pump (prefixed climate.) — control and modes are derived from it. For heating, Crowdergy writes the room setpoint there; map the measured room temperature separately as current temperature.",
               "entity_control": "Switches the device on and off — a switch, select or number (e.g. SG-Ready).",
               "entity_current_temp_c": "Heating: room temperature (required — this is how Crowdergy tracks your comfort). Hot water: tank temperature if the water-heater entity doesn't report it correctly. Manual: your temperature sensor (required).",
               "entity_vorlauf_temp_c": "Flow-temperature sensor of the heating. Improves the heat pump's efficiency estimate — leave empty if not available.",
@@ -420,7 +420,7 @@
               "invert_power_sign": "Enable if your sensor reports the directions swapped.",
               "entity_soc_percent": "State of charge in % — required for battery and wallbox.",
               "entity_vehicle_status": "Reports whether a car is plugged into the wallbox.",
-              "entity_current_temp_c": "Current temperature in °C — heating flow or tank temperature.",
+              "entity_current_temp_c": "Current temperature in °C — room temperature for heating, tank temperature for hot water.",
               "entity_energy_total": "Cumulative kWh meter — the basis for daily stats and savings. Grid: import. Battery: discharge. Otherwise: the device's own meter.",
               "entity_energy_discharged_total": "Grid (export) and battery (charge) only. Leave empty for other device types.",
               "entity_home_consumption_pv_power": "Vendor sensor of some inverters (e.g. Kostal 'Home Consumption from PV'). Refines the house-consumption chart — otherwise leave empty.",
@@ -445,7 +445,7 @@
               "entity_control_eco": "Eco setpoint (optional)"
             },
             "data_description": {
-              "entity_climate": "The climate (thermostat) entity of your heat pump (prefixed climate.) — control and modes are derived from it. For heating, its temperature is treated as the flow temperature; map the room temperature separately as current temperature.",
+              "entity_climate": "The climate (thermostat) entity of your heat pump (prefixed climate.) — control and modes are derived from it. For heating, Crowdergy writes the room setpoint there; map the measured room temperature separately as current temperature.",
               "entity_control": "Switches the device on and off — a switch, select or number (e.g. SG-Ready).",
               "entity_current_temp_c": "Heating: room temperature (required — this is how Crowdergy tracks your comfort). Hot water: tank temperature. Manual: your temperature sensor (required).",
               "entity_vorlauf_temp_c": "Flow-temperature sensor of the heating. Improves the heat pump's efficiency estimate — leave empty if not available.",
@@ -618,7 +618,7 @@
               "entity_control_eco": "Eco setpoint (optional)"
             },
             "data_description": {
-              "entity_climate": "The climate (thermostat) entity of your heat pump (prefixed climate.) — control and modes are derived from it. For heating, its temperature is treated as the flow temperature; map the room temperature separately as current temperature.",
+              "entity_climate": "The climate (thermostat) entity of your heat pump (prefixed climate.) — control and modes are derived from it. For heating, Crowdergy writes the room setpoint there; map the measured room temperature separately as current temperature.",
               "entity_control": "Switches the device on and off — a switch, select or number (e.g. SG-Ready).",
               "entity_current_temp_c": "Heating: room temperature (required — this is how Crowdergy tracks your comfort). Hot water: tank temperature. Manual: your temperature sensor (required).",
               "entity_vorlauf_temp_c": "Flow-temperature sensor of the heating. Improves the heat pump's efficiency estimate — leave empty if not available.",

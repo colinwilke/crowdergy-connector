@@ -141,7 +141,7 @@
               "invert_power_sign": "Aktivieren, wenn dein Sensor die Richtungen vertauscht meldet.",
               "entity_soc_percent": "Ladestand in % — Pflicht bei Batterie und Wallbox. Ohne Ladestand weiß Crowdergy nicht, wie viel noch geladen werden kann.",
               "entity_vehicle_status": "Meldet, ob ein Auto an der Wallbox steckt. Geladen wird nur mit angestecktem Auto.",
-              "entity_current_temp_c": "Aktuelle Temperatur in °C — Vorlauf der Heizung bzw. Speichertemperatur.",
+              "entity_current_temp_c": "Aktuelle Temperatur in °C — Raumtemperatur bei Heizung, Speichertemperatur bei Warmwasser.",
               "entity_energy_total": "Fortlaufender kWh-Zähler — Grundlage für Tageswerte und Ersparnis. Netz: Bezug. Batterie: Entladen. Sonst: der Zähler des Geräts.",
               "entity_energy_discharged_total": "Nur Netz (Einspeisung) und Batterie (Laden). Bei anderen Gerätetypen leer lassen.",
               "entity_home_consumption_pv_power": "Hersteller-Sensor mancher Wechselrichter (z. B. Kostal „Home Consumption from PV“). Verfeinert das Hausverbrauchs-Diagramm — sonst leer lassen.",
@@ -166,7 +166,7 @@
               "entity_control_eco": "Eco-Sollwert (optional)"
             },
             "data_description": {
-              "entity_climate": "Die „climate\"-Entität (Thermostat, Präfix climate.) deiner Wärmepumpe — Steuerung und Modi werden daraus abgeleitet. Bei Heizung gilt deren Temperatur als Vorlauf; die Raumtemperatur bitte separat als Ist-Temperatur zuordnen.",
+              "entity_climate": "Die „climate\"-Entität (Thermostat, Präfix climate.) deiner Wärmepumpe — Steuerung und Modi werden daraus abgeleitet. Bei Heizung schreibt Crowdergy dort den Raum-Sollwert; die gemessene Raumtemperatur bitte separat als Ist-Temperatur zuordnen.",
               "entity_control": "Schaltet das Gerät ein und aus — Schalter, Auswahl oder Zahlenwert (z. B. SG-Ready).",
               "entity_current_temp_c": "Heizung: Raumtemperatur (Pflicht — daran misst Crowdergy deinen Komfort). Warmwasser: Speichertemperatur, falls die Warmwasser-Entität sie nicht korrekt meldet. Manuell: dein Temperaturfühler (Pflicht).",
               "entity_vorlauf_temp_c": "Vorlauffühler der Heizung. Verbessert die Effizienz-Schätzung der Wärmepumpe — leer lassen, wenn nicht vorhanden.",
@@ -421,7 +421,7 @@
               "invert_power_sign": "Aktivieren, wenn dein Sensor die Richtungen vertauscht meldet.",
               "entity_soc_percent": "Ladestand in % — Pflicht bei Batterie und Wallbox.",
               "entity_vehicle_status": "Meldet, ob ein Auto an der Wallbox steckt.",
-              "entity_current_temp_c": "Aktuelle Temperatur in °C — Vorlauf der Heizung bzw. Speichertemperatur.",
+              "entity_current_temp_c": "Aktuelle Temperatur in °C — Raumtemperatur bei Heizung, Speichertemperatur bei Warmwasser.",
               "entity_energy_total": "Fortlaufender kWh-Zähler — Grundlage für Tageswerte und Ersparnis. Netz: Bezug. Batterie: Entladen. Sonst: der Zähler des Geräts.",
               "entity_energy_discharged_total": "Nur Netz (Einspeisung) und Batterie (Laden). Bei anderen Gerätetypen leer lassen.",
               "entity_home_consumption_pv_power": "Hersteller-Sensor mancher Wechselrichter (z. B. Kostal „Home Consumption from PV“). Verfeinert das Hausverbrauchs-Diagramm — sonst leer lassen.",
@@ -446,7 +446,7 @@
               "entity_control_eco": "Eco-Sollwert (optional)"
             },
             "data_description": {
-              "entity_climate": "Die „climate\"-Entität (Thermostat, Präfix climate.) deiner Wärmepumpe — Steuerung und Modi werden daraus abgeleitet. Bei Heizung gilt deren Temperatur als Vorlauf; die Raumtemperatur bitte separat als Ist-Temperatur zuordnen.",
+              "entity_climate": "Die „climate\"-Entität (Thermostat, Präfix climate.) deiner Wärmepumpe — Steuerung und Modi werden daraus abgeleitet. Bei Heizung schreibt Crowdergy dort den Raum-Sollwert; die gemessene Raumtemperatur bitte separat als Ist-Temperatur zuordnen.",
               "entity_control": "Schaltet das Gerät ein und aus — Schalter, Auswahl oder Zahlenwert (z. B. SG-Ready).",
               "entity_current_temp_c": "Heizung: Raumtemperatur (Pflicht — daran misst Crowdergy deinen Komfort). Warmwasser: Speichertemperatur. Manuell: dein Temperaturfühler (Pflicht).",
               "entity_vorlauf_temp_c": "Vorlauffühler der Heizung. Verbessert die Effizienz-Schätzung der Wärmepumpe — leer lassen, wenn nicht vorhanden.",
@@ -618,7 +618,7 @@
               "entity_control_eco": "Eco-Sollwert (optional)"
             },
             "data_description": {
-              "entity_climate": "Die „climate\"-Entität (Thermostat, Präfix climate.) deiner Wärmepumpe — Steuerung und Modi werden daraus abgeleitet. Bei Heizung gilt deren Temperatur als Vorlauf; die Raumtemperatur bitte separat als Ist-Temperatur zuordnen.",
+              "entity_climate": "Die „climate\"-Entität (Thermostat, Präfix climate.) deiner Wärmepumpe — Steuerung und Modi werden daraus abgeleitet. Bei Heizung schreibt Crowdergy dort den Raum-Sollwert; die gemessene Raumtemperatur bitte separat als Ist-Temperatur zuordnen.",
               "entity_control": "Schaltet das Gerät ein und aus — Schalter, Auswahl oder Zahlenwert (z. B. SG-Ready).",
               "entity_current_temp_c": "Heizung: Raumtemperatur (Pflicht — daran misst Crowdergy deinen Komfort). Warmwasser: Speichertemperatur. Manuell: dein Temperaturfühler (Pflicht).",
               "entity_vorlauf_temp_c": "Vorlauffühler der Heizung. Verbessert die Effizienz-Schätzung der Wärmepumpe — leer lassen, wenn nicht vorhanden.",
