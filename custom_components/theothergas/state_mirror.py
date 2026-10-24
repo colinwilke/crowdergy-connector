@@ -128,3 +128,13 @@ class DeviceStateMirror:
     # CONTROL_EFFECT_MIN_MISMATCH_S wird daraus ein Befund — ein Gerät
     # darf rampen und verzögert übernehmen.
     effective_mismatch_since: dict[str, float] = field(default_factory=dict)
+
+    # Vorlauf-Sollwert auf der Steuer-Entity selbst: device_id →
+    # (is_on beim Kommando, Entity, °C nach Clamp). Teilt sich der
+    # Vorlauf-Kanal die Entity mit dem An/Aus-Paar value_on/value_off,
+    # ist er der kommandierte Wert — der Hold vergleicht und repariert
+    # gegen ihn statt gegen Min/Max. Gilt nur für den is_on-Zustand,
+    # in dem er kam; ein is_on-Wechsel ohne neuen Vorlauf verwirft ihn.
+    vorlauf_on_control: dict[str, tuple[bool | None, str, float]] = field(
+        default_factory=dict
+    )

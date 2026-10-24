@@ -243,24 +243,38 @@ class CommandDispatcherMixin:
                     self.state.cool_state[device_id] = new_cool
                     self._sync_field_into_data(device_id, "cool_on", new_cool)
                     await self._apply_cool_state(device_id, new_cool)
+            setpoint_val: float | None = None
+            vorlauf_via_device_state = False
+            if "vorlauf_setpoint_c" in payload:
+                try:
+                    setpoint_val = float(payload["vorlauf_setpoint_c"])
+                except (ValueError, TypeError):
+                    setpoint_val = None
             if "is_on" in payload:
                 new_on = bool(payload["is_on"])
                 if self.state.on_state.get(device_id) != new_on:
                     self.state.on_state[device_id] = new_on
                     self._sync_field_into_data(device_id, "is_on", new_on)
+                    # Ein Vorlauf-Wert gilt nur für den is_on-Zustand, in
+                    # dem er kam. Kommt der neue gleich mit, schreibt
+                    # `_apply_device_state` ihn statt Min/Max — ein Write
+                    # statt zwei gegenläufiger auf derselben Entity.
+                    self.state.vorlauf_on_control.pop(device_id, None)
+                    if setpoint_val is not None:
+                        self._note_vorlauf_on_control(
+                            device_id, setpoint_val, new_on,
+                        )
+                        vorlauf_via_device_state = (
+                            device_id in self.state.vorlauf_on_control
+                        )
                     await self._apply_device_state(device_id, new_on)
             # Phase 2b (2026-06-02): Vorlauf-Setpoint von modulierenden
             # Heizungen. Backend sendet pro Solver-Tick °C; wir dispatchen
             # via climate.set_temperature gegen die User-konfigurierte
             # entity_vorlauf_setpoint. Skip wenn keine Entity gemapped
             # ist (User darf vorerst weiter on/off-only fahren).
-            if "vorlauf_setpoint_c" in payload:
-                try:
-                    setpoint_val = float(payload["vorlauf_setpoint_c"])
-                except (ValueError, TypeError):
-                    setpoint_val = None
-                if setpoint_val is not None:
-                    await self._apply_vorlauf_setpoint(device_id, setpoint_val)
+            if setpoint_val is not None and not vorlauf_via_device_state:
+                await self._apply_vorlauf_setpoint(device_id, setpoint_val)
             return
 
         # `command` frames are mostly handled via the telemetry mirror
@@ -800,6 +814,7 @@ class CommandDispatcherMixin:
         # wir auf das entity_control schreiben — danach
         # ist das Gerät dem User überlassen.
         self._cancel_hold(device_id)
+        self.state.vorlauf_on_control.pop(device_id, None)
 
     def _ai_off(self, device_id: str) -> bool:
         """(#350) Crowdergy AI für dieses Gerät ausdrücklich aus? Ein noch
@@ -1171,7 +1186,10 @@ class CommandDispatcherMixin:
             )
             return
         domain = entity_id.split(".", 1)[0]
-        raw_value = dev.get(CONF_VALUE_ON if on else CONF_VALUE_OFF, "")
+        raw_value = self._effective_control_value(
+            device_id, entity_id,
+            dev.get(CONF_VALUE_ON if on else CONF_VALUE_OFF, ""), on,
+        )
 
         # v3.6.4: bei climate.* teilen heat- und cool-Pfad dieselbe
         # Entity. Wenn cool-side gerade live ist (cool_on=True), dann
@@ -1453,6 +1471,71 @@ class CommandDispatcherMixin:
                     mode_entity, err,
                 )
 
+    @staticmethod
+    def _vorlauf_target_entity(dev: dict[str, Any]) -> str:
+        """Entity, auf die der Vorlauf-Sollwert geht: der gemappte
+        `entity_vorlauf_setpoint`, sonst eine climate.*-`entity_control`
+        (kennt `set_temperature` selbst), sonst leer."""
+        entity_id = dev.get(CONF_ENTITY_VORLAUF_SETPOINT, "") or ""
+        if not entity_id:
+            control_entity = dev.get(CONF_ENTITY_CONTROL, "") or ""
+            if control_entity.startswith("climate."):
+                entity_id = control_entity
+        return entity_id
+
+    def _note_vorlauf_on_control(
+        self, device_id: str, temperature_c: float, on: bool | None,
+    ) -> None:
+        """Merkt den Vorlauf-Sollwert als kommandierten Wert der
+        Steuer-Entity — nur wenn er auf genau die Entity geht, die auch
+        value_on/value_off als Temperatur (Min/Max) fährt. Sonst gibt es
+        keinen Konflikt und nichts zu merken.
+
+        Ohne das stritten zwei Kanäle um eine Entity: der Solver schrieb
+        z. B. 25,6 °C, der AUTO-Hold erwartete 10/30 °C, schrieb sie
+        binnen 30 s zurück oder hielt den eigenen Vorlauf-Write für einen
+        Nutzer-Eingriff und pausierte das Gerät 2 h (#140, Feld colin
+        2026-10-24, backend#248)."""
+        dev = next(
+            (d for d in self.devices if d.get(CONF_DEVICE_ID) == device_id),
+            None,
+        )
+        if dev is None:
+            return
+        control_entity = dev.get(CONF_ENTITY_CONTROL, "") or ""
+        if not control_entity or self._vorlauf_target_entity(dev) != control_entity:
+            return
+        domain = control_entity.split(".", 1)[0]
+        if not any(
+            is_temperature_control(domain, dev.get(k, ""))
+            for k in (CONF_VALUE_ON, CONF_VALUE_OFF)
+        ):
+            return
+        value = self._clamp_write_value(
+            control_entity, domain, float(temperature_c), warn=False,
+        )
+        self.state.vorlauf_on_control[device_id] = (on, control_entity, value)
+        # (#152) Bezugsgröße der Wirkungs-Kontrolle ist, was wir wirklich
+        # kommandieren — der Vorlauf, nicht Min/Max.
+        self.state.last_written_value[device_id] = str(value)
+
+    def _effective_control_value(
+        self, device_id: str, entity_id: str, raw_value: Any, on: bool,
+    ) -> Any:
+        """Wert, den die Steuer-Entity für `on` halten soll: der
+        gemerkte Vorlauf-Sollwert, wenn er für diese Entity und diesen
+        is_on-Zustand gilt und die Entity im Temperatur-Modus fährt;
+        sonst der konfigurierte value_on/value_off."""
+        rec = self.state.vorlauf_on_control.get(device_id)
+        if rec is None:
+            return raw_value
+        rec_on, rec_entity, rec_value = rec
+        if rec_entity != entity_id or rec_on is not on:
+            return raw_value
+        if not is_temperature_control(entity_id.split(".", 1)[0], raw_value):
+            return raw_value
+        return rec_value
+
     async def _apply_vorlauf_setpoint(
         self, device_id: str, temperature_c: float
     ) -> None:
@@ -1489,13 +1572,7 @@ class CommandDispatcherMixin:
         )
         if dev is None:
             return
-        entity_id = dev.get(CONF_ENTITY_VORLAUF_SETPOINT, "") or ""
-        if not entity_id:
-            # Climate-Mode-Fallback: entity_control ist die climate.*-
-            # Entity, die kennt `set_temperature` selbst.
-            control_entity = dev.get(CONF_ENTITY_CONTROL, "") or ""
-            if control_entity.startswith("climate."):
-                entity_id = control_entity
+        entity_id = self._vorlauf_target_entity(dev)
         if not entity_id:
             return
         domain = entity_id.split(".", 1)[0]
@@ -1522,6 +1599,11 @@ class CommandDispatcherMixin:
         # die Auslegung des Geräts nicht (Fußboden 35 vs. Radiator 55).
         temperature_c = self._clamp_write_value(
             entity_id, domain, float(temperature_c)
+        )
+        # Teilt sich der Vorlauf die Entity mit dem An/Aus-Paar, ist er ab
+        # jetzt der kommandierte Wert (Hold, Übersteuerung, Wirkung).
+        self._note_vorlauf_on_control(
+            device_id, temperature_c, self.state.on_state.get(device_id),
         )
         if actual_raw is not None:
             try:
@@ -1906,18 +1988,24 @@ class CommandDispatcherMixin:
                         device_id, staleness, SSE_STALE_THRESHOLD_S,
                     )
                     return
+                # Vorlauf auf derselben Entity ist der kommandierte Wert —
+                # je Tick neu lesen, der Solver schreibt ihn zwischen den
+                # Ticks fort.
+                value = self._effective_control_value(
+                    device_id, entity_id, raw_value, on,
+                )
                 # ECO-Sollwert zuerst: eigene Idempotenz, eigener Breaker,
                 # Fremd-Drift im AUTO-Modus pausiert das Gerät genauso wie
                 # am Komfort-Sollwert (dann endet der Hold hier).
                 if not await self._sync_eco_setpoint(
-                    device_id, raw_value, on, hold_mode=hold_mode,
+                    device_id, value, on, hold_mode=hold_mode,
                     verbose=False,
                 ):
                     return
                 expected = self._expected_state_value(
-                    raw_value, on, domain, entity_id,
+                    value, on, domain, entity_id,
                 )
-                actual = self._control_actual_state(entity_id, domain, raw_value)
+                actual = self._control_actual_state(entity_id, domain, value)
                 if (
                     hold_mode == ENTITY_CONTROL_HOLD_AUTO
                     and expected is not None
@@ -1959,7 +2047,7 @@ class CommandDispatcherMixin:
                         entity_id, expected, actual,
                     )
                 await self._write_entity_control(
-                    entity_id, domain, raw_value, on, verbose=False,
+                    entity_id, domain, value, on, verbose=False,
                     device_id=device_id,
                 )
                 await asyncio.sleep(HOLD_POLL_INTERVAL)
