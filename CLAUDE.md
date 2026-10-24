@@ -139,7 +139,8 @@ Kuration bleiben im Backend, Box-Know-how im privaten Box-Repo.
   (ALWAYS ist für Auto-Reset-Register): Drift ohne eigenen Write in
   `LOCAL_OVERRIDE_GRACE_S` **und** die Entity zeigt nicht mehr den Wert,
   den sie zuletzt von uns hatte (`own_entity_value`; noch unser alter Wert
-  bei neuerem Kommando = ausstehender Write) → 2-h-Pause; der Vergleich
+  bei neuerem Kommando = ausstehender Write), noch den von vor unserem
+  Write (`pre_write_value`; träge Integration) → 2-h-Pause; der Vergleich
   ist exakte Gleichheit ohne Toleranz; die WARNING mit `actual`/`expected` ist die
   **einzige** Quelle für die Ursache (das Backend sieht nur das Boolean).
 - **Jedes Cloud-Kommando ist eine Lease:** der SSE-Stale-Bail des

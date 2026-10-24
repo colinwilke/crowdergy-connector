@@ -118,6 +118,12 @@ class DeviceStateMirror:
     # der neue Wert ist nur noch nicht geschrieben.
     own_entity_value: dict[str, str] = field(default_factory=dict)
 
+    # (#140) Was die Entity unmittelbar VOR unserem letzten Write zeigte.
+    # Steht sie danach unverändert darauf, hat das Gerät den Write nur
+    # noch nicht übernommen (Cloud-/Polling-Integrationen melden den
+    # neuen Sollwert erst mit dem nächsten Update) — kein Eingriff.
+    pre_write_value: dict[str, str] = field(default_factory=dict)
+
     # (#152) Der Wert, den wir zuletzt WIRKLICH auf die Steuer-Entity
     # eines Geräts geschrieben haben — nach dem #135-Clamp, also das,
     # was am Gerät ankommen konnte, nicht was konfiguriert ist. Quelle

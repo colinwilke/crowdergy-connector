@@ -17,6 +17,8 @@ und pausierte das Gerät 2 h („Manuelle Bedienung erkannt", Feld colin
 * Wirkungs-Kontrolle vergleicht gegen den Vorlauf.
 * Neuer Vorlauf, Entity zeigt noch unseren alten Wert (ECO-Spiegel,
   Steuer-Entity): ausstehender Write, kein Override.
+* Träge Entity nach HA-Neustart: zeigt noch den Wert von vor unserem
+  Write → kein Override; ein neuer Fremdwert pausiert weiter.
 """
 from __future__ import annotations
 
@@ -304,3 +306,42 @@ async def test_new_vorlauf_skipped_by_breaker_is_not_an_override(
 
     assert "d1" not in coord.state.local_override_until
     assert [c.data for c in calls] == [{"entity_id": WP, "temperature": 27.0}]
+
+
+async def test_slow_entity_after_restart_is_not_an_override(hass: HomeAssistant):
+    """Feld-Repro 17:45 nach dem Update: HA-Neustart, die Entity hält noch
+    unseren alten Vorlauf 25,7 °C, der Connector kennt ihn nicht mehr und
+    schreibt AUS = 10 °C. Die Integration übernimmt den Write verzögert —
+    die Entity zeigt > 30 s weiter 25,7. Das ist kein Nutzer-Eingriff."""
+    coord = make_coordinator(hass, [_heating()])
+    coord.state.on_state["d1"] = False
+    _wp(hass, 25.7)
+    calls = async_mock_service(hass, "climate", "set_temperature")
+
+    await coord._apply_device_state("d1", False)  # schreibt 10, Entity träge
+    assert [c.data for c in calls] == [{"entity_id": WP, "temperature": 10.0}]
+    coord._cancel_hold("d1")
+    coord.state.last_own_write_at[WP] = time.time() - 60
+
+    await _run_hold(coord, False, "10", ticks=2)
+
+    assert "d1" not in coord.state.local_override_until
+    assert len(calls) == 2  # nachgeschrieben statt pausiert
+
+
+async def test_slow_entity_then_foreign_value_still_pauses(hass: HomeAssistant):
+    """Gegenprobe: ändert jemand den Wert auf etwas, das weder unser
+    Kommando noch der Stand vor dem Write ist, bleibt es ein Eingriff."""
+    coord = make_coordinator(hass, [_heating()])
+    coord.state.on_state["d1"] = False
+    _wp(hass, 25.7)
+    calls = async_mock_service(hass, "climate", "set_temperature")
+    await coord._apply_device_state("d1", False)
+    coord._cancel_hold("d1")
+    _wp(hass, 21.0)
+    coord.state.last_own_write_at[WP] = time.time() - 60
+
+    await _run_hold(coord, False, "10", ticks=2)
+
+    assert len(calls) == 1
+    assert coord.state.local_override_until.get("d1", 0) > time.time()

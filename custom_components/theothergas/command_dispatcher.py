@@ -1091,12 +1091,21 @@ class CommandDispatcherMixin:
             return True
         return False
 
-    def _note_own_value(self, entity_id: str, value: Any) -> None:
+    def _note_own_value(
+        self, entity_id: str, value: Any, *, before: Any = None,
+        written: bool = False,
+    ) -> None:
         """(#140) Merkt `value` als Wert, den `entity_id` von uns hat —
-        nach einem eigenen Write oder wenn ein Abgleich ihn schon in der
-        Entity vorfindet. Referenz der Fremd-Drift-Erkennung."""
+        nach einem eigenen Write (`written`, dann mit dem Wert `before`,
+        den die Entity davor zeigte) oder wenn ein Abgleich ihn schon in
+        der Entity vorfindet. Referenz der Fremd-Drift-Erkennung."""
         if value is not None:
             self.state.own_entity_value[entity_id] = str(value)
+        if written:
+            if before is None:
+                self.state.pre_write_value.pop(entity_id, None)
+            else:
+                self.state.pre_write_value[entity_id] = str(before)
 
     def _is_foreign_drift(
         self, entity_id: str, actual: Any, domain: str
@@ -1106,14 +1115,22 @@ class CommandDispatcherMixin:
         nicht mehr den Wert zeigt, den sie zuletzt von uns hatte (exakte
         Gleichheit). Steht noch unser alter Wert drin, ist nur das
         Kommando weitergezogen (neuer Vorlauf auf der Steuer-Entity, ECO-
-        Spiegel) — das ist ein ausstehender Write, kein Eingriff (Feld
-        colin 2026-10-24, nach v3.50.5)."""
+        Spiegel) — das ist ein ausstehender Write, kein Eingriff. Steht
+        sie unverändert auf dem Wert von VOR unserem letzten Write, hat
+        das Gerät ihn nur noch nicht übernommen (träge Integration, z. B.
+        nach einem HA-Neustart) — ebenfalls kein Eingriff (Feld colin
+        2026-10-24, nach v3.50.5)."""
         if (
             time.time() - self.state.last_own_write_at.get(entity_id, 0.0)
         ) <= LOCAL_OVERRIDE_GRACE_S:
             return False
-        own = self.state.own_entity_value.get(entity_id)
-        return not self._states_match(actual, own, domain)
+        for ref in (
+            self.state.own_entity_value.get(entity_id),
+            self.state.pre_write_value.get(entity_id),
+        ):
+            if self._states_match(actual, ref, domain):
+                return False
+        return True
 
     def _mark_local_override(
         self, device_id: str, entity_id: str, actual: Any, expected: Any
@@ -1651,7 +1668,9 @@ class CommandDispatcherMixin:
                 pass
         if not self._write_allowed(device_id, entity_id):  # (#136)
             return
-        self._note_own_value(entity_id, temperature_c)
+        self._note_own_value(
+            entity_id, temperature_c, before=actual_raw, written=True,
+        )
         _LOGGER.debug(
             "set_vorlauf_setpoint: %s → %.1f °C", entity_id, temperature_c,
         )
@@ -1718,6 +1737,8 @@ class CommandDispatcherMixin:
             )
             self._note_own_value(
                 entity_id, self.state.last_written_value[device_id],
+                before=self._control_actual_state(entity_id, domain, raw_value),
+                written=True,
             )
         try:
             if domain in ("switch", "input_boolean", "light", "fan"):
@@ -1918,7 +1939,7 @@ class CommandDispatcherMixin:
                 "hold: eco setpoint %s drifted (%r → %r), re-writing",
                 eco_entity, expected, actual,
             )
-        self._note_own_value(eco_entity, value)
+        self._note_own_value(eco_entity, value, before=actual, written=True)
         try:
             await self.hass.services.async_call(
                 domain, service, data, blocking=True,
