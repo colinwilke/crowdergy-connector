@@ -1091,6 +1091,30 @@ class CommandDispatcherMixin:
             return True
         return False
 
+    def _note_own_value(self, entity_id: str, value: Any) -> None:
+        """(#140) Merkt `value` als Wert, den `entity_id` von uns hat —
+        nach einem eigenen Write oder wenn ein Abgleich ihn schon in der
+        Entity vorfindet. Referenz der Fremd-Drift-Erkennung."""
+        if value is not None:
+            self.state.own_entity_value[entity_id] = str(value)
+
+    def _is_foreign_drift(
+        self, entity_id: str, actual: Any, domain: str
+    ) -> bool:
+        """(#140) Abweichung = Nutzer-Eingriff? Nur wenn wir seit
+        LOCAL_OVERRIDE_GRACE_S nicht geschrieben haben UND die Entity
+        nicht mehr den Wert zeigt, den sie zuletzt von uns hatte (exakte
+        Gleichheit). Steht noch unser alter Wert drin, ist nur das
+        Kommando weitergezogen (neuer Vorlauf auf der Steuer-Entity, ECO-
+        Spiegel) — das ist ein ausstehender Write, kein Eingriff (Feld
+        colin 2026-10-24, nach v3.50.5)."""
+        if (
+            time.time() - self.state.last_own_write_at.get(entity_id, 0.0)
+        ) <= LOCAL_OVERRIDE_GRACE_S:
+            return False
+        own = self.state.own_entity_value.get(entity_id)
+        return not self._states_match(actual, own, domain)
+
     def _mark_local_override(
         self, device_id: str, entity_id: str, actual: Any, expected: Any
     ) -> None:
@@ -1232,6 +1256,7 @@ class CommandDispatcherMixin:
         )
         actual = self._control_actual_state(entity_id, domain, raw_value)
         if expected is not None and self._states_match(actual, expected, domain):
+            self._note_own_value(entity_id, expected)
             # Der Komfort-Sollwert steht schon — der ECO-Sollwert kann
             # trotzdem abweichen (eigene Idempotenz im Helper).
             await self._sync_eco_setpoint(device_id, raw_value, on)
@@ -1620,11 +1645,13 @@ class CommandDispatcherMixin:
         if actual_raw is not None:
             try:
                 if abs(float(actual_raw) - temperature_c) <= 0.05:
+                    self._note_own_value(entity_id, actual_raw)
                     return
             except (ValueError, TypeError):
                 pass
         if not self._write_allowed(device_id, entity_id):  # (#136)
             return
+        self._note_own_value(entity_id, temperature_c)
         _LOGGER.debug(
             "set_vorlauf_setpoint: %s → %.1f °C", entity_id, temperature_c,
         )
@@ -1688,6 +1715,9 @@ class CommandDispatcherMixin:
             # den vom Geraet gefahrenen Sollwert.
             self.state.last_written_value[device_id] = (
                 self._expected_state_value(raw_value, on, domain, entity_id)
+            )
+            self._note_own_value(
+                entity_id, self.state.last_written_value[device_id],
             )
         try:
             if domain in ("switch", "input_boolean", "light", "fan"):
@@ -1861,14 +1891,12 @@ class CommandDispatcherMixin:
         expected = self._expected_state_value(raw_value, on, domain, eco_entity)
         actual = self._control_actual_state(eco_entity, domain, raw_value)
         if self._states_match(actual, expected, domain):
+            self._note_own_value(eco_entity, expected)
             return True
         if (
             hold_mode == ENTITY_CONTROL_HOLD_AUTO
             and actual is not None
-            and (
-                time.time()
-                - self.state.last_own_write_at.get(eco_entity, 0.0)
-            ) > LOCAL_OVERRIDE_GRACE_S
+            and self._is_foreign_drift(eco_entity, actual, domain)
         ):
             self._mark_local_override(device_id, eco_entity, actual, expected)
             return False
@@ -1890,6 +1918,7 @@ class CommandDispatcherMixin:
                 "hold: eco setpoint %s drifted (%r → %r), re-writing",
                 eco_entity, expected, actual,
             )
+        self._note_own_value(eco_entity, value)
         try:
             await self.hass.services.async_call(
                 domain, service, data, blocking=True,
@@ -2023,6 +2052,7 @@ class CommandDispatcherMixin:
                     and expected is not None
                     and self._states_match(actual, expected, domain)
                 ):
+                    self._note_own_value(entity_id, expected)
                     # AUTO + state stimmt → skip. Spart Service-Calls
                     # und Piep-Bestätigungen bei AC.
                     await asyncio.sleep(HOLD_POLL_INTERVAL)
@@ -2043,12 +2073,7 @@ class CommandDispatcherMixin:
                     # dort ist eine Abweichung kein Nutzereingriff.
                     if (
                         hold_mode == ENTITY_CONTROL_HOLD_AUTO
-                        and (
-                            time.time()
-                            - self.state.last_own_write_at.get(
-                                entity_id, 0.0
-                            )
-                        ) > LOCAL_OVERRIDE_GRACE_S
+                        and self._is_foreign_drift(entity_id, actual, domain)
                     ):
                         self._mark_local_override(
                             device_id, entity_id, actual, expected

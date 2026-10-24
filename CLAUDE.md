@@ -137,8 +137,10 @@ Kuration bleiben im Backend, Box-Know-how im privaten Box-Repo.
 - **Schreib-Circuit-Breaker** `_write_allowed` (500/h je Entity) sitzt an
   jedem Write-Pfad. **Übersteuerungs-Erkennung nur im AUTO-Hold**
   (ALWAYS ist für Auto-Reset-Register): Drift ohne eigenen Write in
-  `LOCAL_OVERRIDE_GRACE_S` → 2-h-Pause; der Vergleich ist exakte
-  Gleichheit ohne Toleranz; die WARNING mit `actual`/`expected` ist die
+  `LOCAL_OVERRIDE_GRACE_S` **und** die Entity zeigt nicht mehr den Wert,
+  den sie zuletzt von uns hatte (`own_entity_value`; noch unser alter Wert
+  bei neuerem Kommando = ausstehender Write) → 2-h-Pause; der Vergleich
+  ist exakte Gleichheit ohne Toleranz; die WARNING mit `actual`/`expected` ist die
   **einzige** Quelle für die Ursache (das Backend sieht nur das Boolean).
 - **Jedes Cloud-Kommando ist eine Lease:** der SSE-Stale-Bail des
   charge_mode-Holds startet den Lease-Expiry (`COMMAND_LEASE_TTL_S`) →
