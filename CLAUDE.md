@@ -56,6 +56,7 @@ public, MIT. `custom_components/theothergas/`:
 | `const.py` | `DEVICE_TYPES`, `CONTROLLABLE_TYPES` (SSOT), `MAPPABLE_ENTITY_DOMAINS` (Allowlist), `GERMAN_STATES`, Intervalle, `is_temperature_control` |
 | `entity_mapper.py` | Registry-Identität, Preset-Auflösung, Integrations-Klarnamen |
 | `provisioning.py` / `box_services.py` | Box-Pfade — **nur mit `theothergas:`-YAML-Key aktiv** |
+| `battery_pv_follow.py` | Akku-Lade-Setpoint lokal auf den PV-Überschuss am Sub-Zähler nachregeln (`pv_follow`-Key im Akku-Kommando) |
 | `switch.py` / `binary_sensor.py` | „Crowdergy AI"-Switch je Gerät + `crowdergy_connected` am **einen** Hub-Device |
 
 Public-Repo-Disziplin: hier liegt nur das Slot-Schema; Store-Daten und

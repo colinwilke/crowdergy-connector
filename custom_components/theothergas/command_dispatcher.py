@@ -357,12 +357,9 @@ class CommandDispatcherMixin:
                     return
                 dev_type = dev.get(CONF_DEVICE_TYPE, "")
                 if dev_type == "battery":
-                    mode = data.get("mode") or "passive"
-                    setpoint_kw = data.get("setpoint_kw")
-                    await self._apply_battery_setpoint(
-                        device_id, mode,
-                        float(setpoint_kw) if setpoint_kw is not None else 0.0,
-                    )
+                    # backend#401: mit `pv_follow` regelt der Connector den
+                    # Lade-Setpoint lokal nach (battery_pv_follow.py).
+                    await self._handle_battery_command(device_id, data)
                 else:
                     # #292: ein normaler Dispatch beendet den lokalen
                     # PV-Regler — das Kommando unten schreibt den Zustand.
@@ -794,6 +791,7 @@ class CommandDispatcherMixin:
             # Automation lässt den Setpoint los, WR
             # übernimmt PV-Native-Priority.
             self._cancel_charge_mode_hold(device_id)
+            self._stop_battery_pv_follow(device_id, reason="AI aus")
             await self._apply_battery_setpoint(
                 device_id, "passive", 0.0,
             )
@@ -930,6 +928,7 @@ class CommandDispatcherMixin:
                     "for %ds, battery falls back to passive.",
                     device_id, COMMAND_LEASE_TTL_S,
                 )
+                self._stop_battery_pv_follow(device_id, reason="Lease abgelaufen")
                 await self._apply_battery_setpoint(device_id, "passive", 0.0)
             elif dev_type == "wallbox":
                 solar_value = (
@@ -1458,7 +1457,7 @@ class CommandDispatcherMixin:
 
     async def _apply_battery_setpoint(
         self, device_id: str, mode: str, setpoint_kw: float
-    ) -> None:
+    ) -> bool:
         """Phase 3 Option D (2026-06-02): Battery-Dispatch via 2 HA-
         Entities — Lademodus-Select (Aktiv/Passiv) + Power-Setpoint-
         Number (signed Watts, + = laden, − = entladen).
@@ -1481,15 +1480,18 @@ class CommandDispatcherMixin:
         CN-1: zentrales Consent-Gate, alle Caller cloud-getrieben
         (SSE command-Frame, AI-off-Übergabe aus dem SSE-Dispatch) —
         siehe `_remote_control_allowed`.
+
+        Returns True, wenn der Zielzustand steht (geschrieben oder schon
+        da), sonst False (backend#401: der PV-Regler wiederholt dann).
         """
         if not self._remote_control_allowed("_apply_battery_setpoint"):
-            return
+            return False
         dev = next(
             (d for d in self.devices if d.get(CONF_DEVICE_ID) == device_id),
             None,
         )
         if dev is None:
-            return
+            return False
         mode_entity = dev.get(CONF_ENTITY_BATTERY_MODE, "") or ""
         active_val = dev.get(CONF_VALUE_BATTERY_MODE_ACTIVE, "") or ""
         passive_val = dev.get(CONF_VALUE_BATTERY_MODE_PASSIVE, "") or ""
@@ -1501,10 +1503,10 @@ class CommandDispatcherMixin:
                 "Battery %s: mode-entity / mode-values nicht gemapped — skip",
                 device_id,
             )
-            return
+            return False
 
         if not self._write_allowed(device_id, mode_entity):  # (#136)
-            return
+            return False
 
         if mode == "passive":
             current_mode = self._read_current_state(mode_entity)
@@ -1524,7 +1526,8 @@ class CommandDispatcherMixin:
                         "Battery passive-write failed for %s: %s",
                         mode_entity, err,
                     )
-            return
+                    return False
+            return True
 
         # Aktiv-Pfad: Setpoint berechnen + schreiben, dann Mode aktivieren.
         target_w = float(setpoint_kw) * 1000.0
@@ -1565,7 +1568,7 @@ class CommandDispatcherMixin:
                         "Aktiv läuft (Cluster B Connector 2026-06-09).",
                         setpoint_entity, err, active_val,
                     )
-                    return
+                    return False
 
         # Mode-Select zuletzt setzen — sodass der Setpoint schon
         # geschrieben ist wenn HA's Automation auf "Aktiv" reagiert.
@@ -1586,6 +1589,8 @@ class CommandDispatcherMixin:
                     "Battery active-mode-write failed for %s: %s",
                     mode_entity, err,
                 )
+                return False
+        return True
 
     def _room_setpoint_entity(self, device_id: str) -> str:
         """(#341) Steuer-Entity, die einen Raum-Sollwert annimmt: die
