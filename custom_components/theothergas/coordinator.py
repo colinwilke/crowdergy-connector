@@ -43,6 +43,7 @@ from .const import (
     DOMAIN,
 )
 
+from .battery_pv_follow import BatteryPvFollowMixin
 from .command_dispatcher import CommandDispatcherMixin
 from .pv_follow import (  # noqa: F401 — re-export für Tests (coordinator.<NAME>)
     PV_FOLLOW_INTERVAL_S,
@@ -211,6 +212,7 @@ def _jwt_exp(token: str) -> float | None:
 
 class CrowdergyCoordinator(
     PvFollowMixin,
+    BatteryPvFollowMixin,
     CommandDispatcherMixin,
     TelemetryReaderMixin,
     DataUpdateCoordinator[dict[str, dict[str, Any]]],
@@ -748,6 +750,7 @@ class CrowdergyCoordinator(
         self.state.charge_mode_hold_tasks.clear()
         # #292: lokale PV-Regler.
         self._cancel_pv_follow_all()
+        self._cancel_battery_pv_follow_all()
         for task in list(self.state.charge_mode_lease_tasks.values()):
             task.cancel()
         self.state.charge_mode_lease_tasks.clear()
