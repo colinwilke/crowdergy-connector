@@ -1059,6 +1059,12 @@ class CrowdergyCoordinator(
             )
             data_missing = measurements_live is False
             payload: dict[str, Any] = {"is_online": not data_missing}
+            # (backend#419) Einzelne tote Mess-Entities beim Slot-Namen —
+            # `is_online` bleibt alle-oder-keiner. Immer gesendet (auch
+            # `[]`), damit das Backend die Erholung sieht.
+            payload["unavailable_slots"] = self._unavailable_measurement_slots(
+                dev, current_temp_entity=entity_current_temp,
+            )
             # Same honesty one level down: `power_kw` is sent only when a
             # power sensor delivered a value. A MAPPED sensor that is
             # unavailable/unknown/non-numeric and a device with NO power

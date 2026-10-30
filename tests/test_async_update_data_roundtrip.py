@@ -344,6 +344,9 @@ async def test_one_live_sensor_keeps_device_online(hass: HomeAssistant):
     assert payload["is_online"] is True
     assert "power_kw" not in payload
     assert payload["energy_kwh_total"] == 100.0
+    # (backend#419) …aber der eine tote Wert wird beim Slot-Namen gemeldet
+    # — nie mit der Entity-ID.
+    assert payload["unavailable_slots"] == [CONF_ENTITY_POWER]
 
 
 async def test_power_sensor_recovery_resends_value(hass: HomeAssistant):
@@ -512,3 +515,49 @@ async def test_overlapping_ticks_never_book_the_same_energy_delta_twice(
         for c in coord._patch_telemetry_with_retry.await_args_list
     ]
     assert deltas == [2.0]
+
+
+# ── Einzelne tote Werte (backend#419) ────────────────────────────────────
+
+
+async def test_unavailable_slots_lists_every_dead_slot(hass: HomeAssistant):
+    """Gesund → `[]` (explizit, damit das Backend die Erholung sieht);
+    alle tot → jeder gemappte Mess-Slot; Steuer-Slots zählen nie."""
+    dev = {
+        CONF_DEVICE_ID: "dev-1",
+        CONF_DEVICE_TYPE: "solar",
+        CONF_ENTITY_POWER: "sensor.pv_power",
+        CONF_ENTITY_ENERGY_TOTAL: "sensor.pv_energy",
+    }
+    coord = _make_coord(hass, [dev])
+    hass.states.async_set("sensor.pv_power", "1.0", {"unit_of_measurement": "kW"})
+    hass.states.async_set("sensor.pv_energy", "100.0", {"unit_of_measurement": "kWh"})
+    await coord._async_update_data()
+    assert _sent_payload(coord)["unavailable_slots"] == []
+
+    hass.states.async_set("sensor.pv_power", "unavailable", {})
+    hass.states.async_set("sensor.pv_energy", "unknown", {})
+    await coord._async_update_data()
+    payload = _sent_payload(coord)
+    assert payload["is_online"] is False
+    assert payload["unavailable_slots"] == [
+        CONF_ENTITY_POWER, CONF_ENTITY_ENERGY_TOTAL,
+    ]
+
+
+async def test_slot_flip_is_its_own_send(hass: HomeAssistant):
+    """Ein Wert fällt weg, ohne dass sich sonst etwas ändert: das ist eine
+    Row wert, sonst sähe das Backend die Lücke erst am Hard-Ceiling."""
+    dev = {
+        CONF_DEVICE_ID: "dev-1",
+        CONF_DEVICE_TYPE: "grid",
+        CONF_ENTITY_POWER: "sensor.grid_power",
+        CONF_ENTITY_ENERGY_TOTAL: "sensor.grid_energy",
+    }
+    coord = _make_coord(hass, [dev])
+    hass.states.async_set("sensor.grid_power", "0.5", {"unit_of_measurement": "kW"})
+    hass.states.async_set("sensor.grid_energy", "100.0", {"unit_of_measurement": "kWh"})
+    await coord._async_update_data()
+    first = dict(_sent_payload(coord))
+    flipped = dict(first, unavailable_slots=[CONF_ENTITY_ENERGY_TOTAL])
+    assert coord._should_send("dev-1", flipped) is True
