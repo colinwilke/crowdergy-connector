@@ -255,8 +255,24 @@ class TelemetryReaderMixin:
         vier gesunden ist kein Datenausfall, und ein Fehlalarm kostet
         hier mehr Vertrauen als eine verpasste Teilstörung. Der Fall,
         um den es geht, nimmt ohnehin alle Entities derselben
-        Integration gleichzeitig mit.
+        Integration gleichzeitig mit. Einzelne tote Slots meldet
+        `_unavailable_measurement_slots` (backend#419) — das Backend
+        macht daraus nach einer Schonfrist einen eigenen Hinweis.
         """
+        slots = self._measurement_slot_entities(dev, current_temp_entity)
+        if not slots:
+            return None
+        for _slot, entity_id in slots:
+            if self._entity_delivers(entity_id):
+                return True
+        return False
+
+    def _measurement_slot_entities(
+        self, dev: dict[str, Any], current_temp_entity: str = "",
+    ) -> list[tuple[str, str]]:
+        """(Slot-Key, Entity-ID) aller gemappten Mess-Slots dieses Geräts —
+        die Menge, über die `_measurement_liveness` und
+        `_unavailable_measurement_slots` urteilen."""
         # Der Coordinator hat den Temperatur-Slot für den Tick schon
         # aufgelöst (aircon fällt auf `entity_climate` zurück) und reicht
         # ihn durch. Ohne Durchreichung nehmen wir den rohen Slot aus
@@ -264,26 +280,44 @@ class TelemetryReaderMixin:
         # Temperatur ist, hier still ohne Mess-Slots und könnte NIE einen
         # Datenausfall melden.
         temp_entity = current_temp_entity or dev.get(CONF_ENTITY_CURRENT_TEMP, "")
-        entity_ids: list[str] = []
+        out: list[tuple[str, str]] = []
         for key in _MEASUREMENT_SLOT_KEYS:
             eid = temp_entity if key == CONF_ENTITY_CURRENT_TEMP else dev.get(key, "")
             if eid:
-                entity_ids.append(eid)
+                out.append((key, eid))
         # Solver-/Chart-Extras zählen mit: ein Solar-Gerät, dessen
         # HC-Flow-Sensoren noch liefern, ist nicht datenlos.
         for _payload_key, conf_key, _reader in _SOLVER_EXTRA_FIELDS.get(
             dev.get(CONF_DEVICE_TYPE, ""), []
         ):
             eid = dev.get(conf_key, "")
-            if eid:
-                entity_ids.append(eid)
-        if not entity_ids:
-            return None
-        for entity_id in entity_ids:
-            state = self._get_state(entity_id)
-            if state is not None and state.state not in ("unknown", "unavailable"):
-                return True
-        return False
+            if eid and all(k != conf_key for k, _ in out):
+                out.append((conf_key, eid))
+        return out
+
+    def _entity_delivers(self, entity_id: str) -> bool:
+        state = self._get_state(entity_id)
+        return state is not None and state.state not in ("unknown", "unavailable")
+
+    def _unavailable_measurement_slots(
+        self, dev: dict[str, Any], *, current_temp_entity: str = "",
+    ) -> list[str]:
+        """Slot-Keys der gemappten Mess-Entities, die gerade nichts
+        liefern (`unknown`/`unavailable`/aus HA verschwunden) — auch wenn
+        andere Slots desselben Geräts weiter liefern (backend#419).
+
+        Ergänzt `_measurement_liveness`, ersetzt es nicht: das bleibt
+        alle-oder-keiner und entscheidet über `is_online`/`power_kw`.
+        Diese Liste ist nur die Aussage „dieser Wert fehlt" — das Backend
+        meldet sie nach einer Schonfrist beim Namen. Es gehen nur
+        Slot-Keys raus, nie Entity-IDs."""
+        return [
+            slot
+            for slot, entity_id in self._measurement_slot_entities(
+                dev, current_temp_entity
+            )
+            if not self._entity_delivers(entity_id)
+        ]
 
     def _read_entity_state(self, entity_id: str) -> Any:
         if not entity_id:
@@ -438,6 +472,8 @@ class TelemetryReaderMixin:
         for key in (
             "vehicle_status", "charge_mode", "is_on", "cool_on", "is_online",
             "control_value_rejected", "control_ineffective",
+            # (backend#419) Ein Wert fällt weg oder kommt zurück.
+            "unavailable_slots",
         ):
             if payload.get(key) != prev.get(key):
                 return True
