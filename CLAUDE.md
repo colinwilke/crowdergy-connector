@@ -28,6 +28,12 @@ in Kommentaren: Mapping in colinwilke/crowdergy-backend#257.
 - **Udo arbeitet ausschließlich über PRs** (Draft ok). Colin reviewt und
   merged. Udo merged nichts und gibt nichts frei.
 - Claude-Sessions handeln im Namen dessen, der sie startet.
+- **Keine Spekulation — Aussagen nur auf Datenlage:** eine Aussage braucht
+  eine gemessene Größe, eine Code-Stelle, eine Log-Zeile oder ein
+  Testergebnis. Eine plausible Kausalkette oder ein Mechanismus, den es im
+  Code gibt, belegt nicht, dass er im Feld gefeuert hat. Fehlt die Evidenz:
+  „weiß ich nicht“ sagen, plus welche Größe fehlt und woher sie käme. Gilt
+  für Chat, Memory, PRs und Commits.
 - **Releases (Manifest-Bump + Tag) nur auf Zuruf von Colin.** Reihenfolge
   bei neuen Telemetrie-Feldern: **Backend zuerst deployen** — das Backend
   ist `extra="forbid"`, ein Alt-Backend 422t sonst die ganze Payload.
