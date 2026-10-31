@@ -191,7 +191,7 @@ Kuration bleiben im Backend, Box-Know-how im privaten Box-Repo.
   Backend 400t); der Resolver rät nie (mehrdeutig → verbatim). HA-Helfer
   (`input_*`) kann der Connector nicht anlegen — nur die Box von außen;
   der Picker informiert und befüllt vor.
-- Brand-Icon liegt in `brand/`; sichtbar erst nach PR im `brands`-Fork.
+- Brand-Icon liegt in `custom_components/theothergas/brand/` (HA ≥ 2026.3 liest es lokal; home-assistant/brands nimmt keine Custom-Integrationen mehr).
 
 ## Stolpersteine
 
