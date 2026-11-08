@@ -396,7 +396,7 @@ async def test_daily_setpoint_budget_blocks_after_24_writes(hass: HomeAssistant)
         assert coord._write_allowed("d1", WP) is True
     assert coord._write_allowed("d1", WP) is False
     assert "d1" in coord.state.write_breaker_devices
-    day, count = coord.state.entity_day_write_counts[WP]
+    _day, count = coord.state.entity_day_write_counts[WP]
     assert count == SETPOINT_WRITES_MAX_PER_DAY
     coord.state.entity_day_write_counts[WP] = ("2000-01-01", count)
     assert coord._write_allowed("d1", WP) is True

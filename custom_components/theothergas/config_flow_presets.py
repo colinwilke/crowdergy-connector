@@ -8,11 +8,10 @@ from __future__ import annotations
 
 from typing import Any
 
-
 from .const import (
+    CONF_DEVICE_CONFIG_MODE,
     CONF_ENTITY_BATTERY_MODE,
     CONF_ENTITY_CLIMATE,
-    CONF_DEVICE_CONFIG_MODE,
     CONF_ENTITY_CONTROL,
     CONF_ENTITY_WATER_HEATER,
     CONFIG_MODE_CLIMATE,
@@ -36,7 +35,7 @@ _FLAG_SLOTS = frozenset(
 )
 
 
-# NB (#97, 2026-07-02): das frühere `_resolve_integration_domain`
+# NB: das frühere `_resolve_integration_domain`
 # (first-resolvable-Entity) ist entfernt — der Contribute-Flow nutzt
 # ausschließlich `entity_mapper.dominant_integration_domain` (häufigste
 # Domain; identisches None-Verhalten, da beide dieselbe Registry

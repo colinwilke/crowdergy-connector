@@ -64,7 +64,7 @@ class BatteryPvFollowParams:
     min_kw: float
 
     @classmethod
-    def from_frame(cls, data: Any) -> "BatteryPvFollowParams | None":
+    def from_frame(cls, data: Any) -> BatteryPvFollowParams | None:
         if not isinstance(data, dict):
             return None
         try:
@@ -247,7 +247,7 @@ class BatteryPvFollowMixin:
                 return
             try:
                 await self._battery_pv_follow_tick(device_id, run, now)
-            except Exception:  # noqa: BLE001 — der Regler darf nie sterben
+            except Exception:  # der Regler darf nie sterben
                 _LOGGER.exception(
                     "battery pv_follow tick failed for %s", device_id
                 )

@@ -1,0 +1,35 @@
+# Lint-Konfiguration (ruff). Formatierung bleibt manuell — kein `ruff format`.
+target-version = "py312"
+line-length = 100
+extend-exclude = [".venv"]
+
+[lint]
+select = [
+  "F",      # pyflakes
+  "E", "W", # pycodestyle
+  "I",      # isort
+  "UP",     # pyupgrade
+  "B",      # bugbear
+  "C4",     # comprehensions
+  "SIM",    # simplify
+  "PERF",   # perflint
+  "PIE",    # misc
+  "RUF",    # ruff-eigene Regeln
+  "PLW0108",# unnötige Lambdas
+]
+ignore = [
+  "RUF001", "RUF002", "RUF003", # deutsche Typografie („“ – …) ist Absicht
+  "RUF012",                     # HA-Entity-Klassenattribute sind konventionell mutable
+  "SIM105",                     # try/except/pass bleibt lesbarer als contextlib.suppress
+  "SIM117",                     # verschachtelte with-Blöcke in Tests
+  "B008",                       # Default-Argumente mit Aufruf (HA-Muster)
+]
+
+[lint.per-file-ignores]
+# Re-Exporte stehen bewusst hinter den Modul-Konstanten (SSOT-Zugriffspunkte).
+"custom_components/theothergas/config_flow.py" = ["E402"]
+"custom_components/theothergas/coordinator.py" = ["E402"]
+"tests/test_config_flow_pairing.py" = ["E402"]
+
+[lint.isort]
+known-first-party = ["custom_components"]

@@ -79,9 +79,7 @@ def test_translation_keys_cover_strings(lang: str) -> None:
 
 _ANGLE_PLACEHOLDER = re.compile(r"<[A-Za-z][A-Za-z0-9_-]*>")
 
-_UI_STRING_FILES = [INTEGRATION_DIR / "strings.json"] + sorted(
-    TRANSLATIONS_DIR.glob("*.json")
-)
+_UI_STRING_FILES = [INTEGRATION_DIR / "strings.json", *sorted(TRANSLATIONS_DIR.glob("*.json"))]
 
 
 @pytest.mark.parametrize(

@@ -12,11 +12,11 @@ from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.theothergas.const import (
     CONF_DEVICE_ID,
+    CONF_DEVICE_TYPE,
     CONF_ENTITY_CHARGE_MODE,
+    CONF_ENTITY_CLIMATE,
     CONF_ENTITY_CONTROL,
     CONF_ENTITY_COOL_CONTROL,
-    CONF_DEVICE_TYPE,
-    CONF_ENTITY_CLIMATE,
     CONF_ENTITY_ENERGY_DISCHARGED_TOTAL,
     CONF_ENTITY_ENERGY_TOTAL,
     CONF_ENTITY_POWER,

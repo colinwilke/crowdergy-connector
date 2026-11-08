@@ -17,7 +17,7 @@ DOMAIN = "theothergas"
 DEFAULT_API_URL = "https://api.theothergas.de"
 CONF_API_URL = "api_url"
 CONF_EMAIL = "email"
-# Onboarding-Symmetrie #39 (2026-06-16): der HACS-Connector pairt jetzt
+# Onboarding-Symmetrie #39: der HACS-Connector pairt jetzt
 # per Code (POST /connector/claim) statt Email/Passwort — wie die Box.
 # CONF_EMAIL bleibt für Bestands-Entries + Box-Import erhalten.
 CONF_PAIRING_CODE = "pairing_code"
@@ -38,7 +38,7 @@ DEVICE_TYPES = [
 
 # Device types the Crowdergy app can switch on/off through the
 # user-mapped entity_control. Solar / Grid / Haushalt sind read-only.
-# CN-13 (2026-06-11): SSOT hier in const.py — vorher dupliziert in
+# SSOT hier in const.py — vorher dupliziert in
 # config_flow.py (`_CONTROLLABLE_TYPES`) und switch.py
 # (`_CROWDERGIZE_TYPES`, dort fehlte `aircon` → Klimaanlagen bekamen
 # nie einen Crowdergy-AI-Switch).
@@ -152,7 +152,6 @@ CONF_VALUE_OFF = "value_off"
 # Eco-Temperatur) und schreibt sie via `set_temperature`. Die WP regelt
 # Laufzeit/Takten dann selbst; ein hartes `set_hvac_mode("off")` /
 # `set_operation_mode("off")` gibt es in diesem Modus nicht mehr.
-#
 # Aktiv, wenn die Steuer-Entity climate.* / water_heater.* ist UND der
 # gemappte Wert numerisch parst. number/input_number-Steuer-Entities
 # schreiben ohnehin schon Temperatur-Setpoints (`set_value`) — das ist
@@ -221,7 +220,6 @@ CONF_ENTITY_CHARGE_MODE = "entity_charge_mode"
 # others). v2.1 and earlier had the user enter these strings in the
 # iOS app — moving the mapping here keeps all infrastructure plumbing
 # in one place alongside CONF_VALUE_ON / OFF and CONF_VEHICLE_STATUS_*.
-#
 # Internal token names track the solver's vocabulary:
 #   * lock  → "Aus"             (charging blocked)
 #   * power → "An"              (max-power push)
@@ -231,7 +229,7 @@ CONF_CHARGE_MODE_VALUE_LOCK = "charge_mode_value_lock"
 CONF_CHARGE_MODE_VALUE_POWER = "charge_mode_value_power"
 CONF_CHARGE_MODE_VALUE_SOLAR = "charge_mode_value_solar"
 
-# Wallbox-only OPTIONAL Ladestrom-Steuerung (2026-06-20). Analog zum
+# Wallbox-only OPTIONAL Ladestrom-Steuerung. Analog zum
 # Batterie-Power-Setpoint: eine HA-Number-Entity die den Ladestrom in
 # Ampere setzt (typisch 6–16 A). Wenn der User sie mappt, nimmt das
 # Backend an, dass die Box im „An"/Power-Modus mit variablem Strom
@@ -297,17 +295,11 @@ CONF_SHARES_HARDWARE_WITH = "shares_hardware_with_device_id"
 # Hold-mode for entity_control: how the connector handles devices whose
 # Modbus registers / OCPP transaction state revert to a default after a
 # few seconds (Kostal, SMA, some OCPP wallboxes …).
-#
 # "always" (default) — write once, then re-write every 30 s for as long
 #                      as Crowdergize is active. Harmless on devices
 #                      that hold fine; rescues those that don't.
 # "never"            — write once, leave it alone. For low-traffic
 #                      Modbus setups; assumes the device sticks.
-#
-# Legacy `auto` values stored in old config entries collapse to
-# `always` at load time (see `_start_hold`) — we used to have a
-# release-after-stable-checks third mode but it never paid off
-# against the simple-and-safe periodic rewrite.
 CONF_ENTITY_CONTROL_HOLD = "entity_control_hold"
 # Drei Modi für die Steuer-Entitäts-Hold-Loop (gilt für entity_control
 # bei heating/warmwater/generic und für entity_charge_mode bei wallbox/
@@ -346,7 +338,6 @@ CONF_VALUE_COOL_OFF = "value_cool_off"
 # Backend (app/mpc/solver_fields.py) ist Single Source of Truth für
 # Validierung — Connector schiebt locker rüber, Backend filtert
 # unbekannte/falsche Werte raus.
-#
 # Neue Solver-Eingabe = (1) Eintrag hier + (2) Registry-Eintrag im
 # Backend + (3) Worker liest via `read_extra(latest_tele.extra, key)`.
 # UI bleibt unangetastet — diese Felder sind explizit nicht für die
@@ -354,7 +345,7 @@ CONF_VALUE_COOL_OFF = "value_cool_off"
 CONF_ENTITY_VORLAUF_TEMP = "entity_vorlauf_temp_c"
 
 
-# ── Wirkungs-Kontrolle (#152, 2026-08-29) ────────────────────────────
+# ── Wirkungs-Kontrolle ────────────────────────────
 # Optionaler Read-Slot für ALLE steuerbaren Typen: die Entity, an der
 # abzulesen ist, welchen Sollwert das GERÄT tatsächlich fährt — im
 # Unterschied zu dem Wert, den wir in die Steuer-Entity geschrieben
@@ -365,7 +356,6 @@ CONF_ENTITY_VORLAUF_TEMP = "entity_vorlauf_temp_c"
 # Entity, das Gerät fährt einen anderen — und ohne diesen Slot merkt
 # das niemand (Feld colin 2026-08-29: Komfort-WW 35 geschrieben, WP
 # fuhr durchgehend ECO 49,5).
-#
 # Beispiele Stiebel ISG: sensor.<wp>_target_temperature_water (WW),
 # sensor.<wp>_target_temperature_hk_1 (Heizkreis). Leer = kein
 # Vergleich, kein Zustand — das ist der Normalfall bei Geräten, die
@@ -406,7 +396,6 @@ CONTROL_EFFECT_MIN_MISMATCH_S = 900.0
 #   * HC-from-Grid    → Grid-Device
 # Plus EIN optionaler 4. Sensor (PV→Batterie-Ladeleistung, W ≥0) am
 # Battery-Device, falls der Inverter ihn direkt liefert.
-#
 # Diese Werte verlassen die Box NICHT als typed Columns, sondern laufen
 # über die `telemetry.extra`-Pipeline (wie `vorlauf_temp_c`) als kW mit.
 # Backend (#41, `GET /users/me/energy/today`) bucketet sie pro Slot und
@@ -442,7 +431,7 @@ CHARGE_MODE_HOLD_INTERVAL = 15
 # packet loss.
 SSE_STALE_THRESHOLD_S = 60
 
-# #B2 (2026-08-12) Kommandos als Lease: der SSE-Stale-Bail oben stoppt
+# #B2 Kommandos als Lease: der SSE-Stale-Bail oben stoppt
 # nur das RE-WRITE — auf einer Box mit stickigem Mode-Select (go-e)
 # bleibt der zuletzt geschriebene Modus trotzdem stehen (ein latchendes
 # power/lock, solange die Cloud tot ist: die Restlücke der Worker-Stall-
@@ -455,7 +444,7 @@ SSE_STALE_THRESHOLD_S = 60
 # normalen Reconnect-Blip, ≪ einer Nacht am falschen Modus.
 COMMAND_LEASE_TTL_S = 900
 
-# (#136, 2026-08-25) Schreib-Circuit-Breaker: harter Zähler je
+# Schreib-Circuit-Breaker: harter Zähler je
 # (Entity, Stunde). Über der Schwelle stoppt der Connector JEDEN
 # weiteren Write auf diese Entity bis zur nächsten Stunde und meldet
 # den Zustand ans Backend (`write_breaker`-Telemetrie-Flag →
@@ -477,7 +466,7 @@ WRITE_BREAKER_MAX_PER_HOUR = 500
 # ändert sich nur bei Heizlauf-Wechseln und ≥ 1 K, das reicht im Alltag.
 SETPOINT_WRITES_MAX_PER_DAY = 24
 
-# (#140, 2026-08-25) Manuelle Übersteuerung: erkennt der AUTO-Hold
+# Manuelle Übersteuerung: erkennt der AUTO-Hold
 # einen Drift, der NICHT von uns stammt (kein eigener Service-Call auf
 # der Entity in den letzten LOCAL_OVERRIDE_GRACE_S), gilt das als
 # absichtlicher Nutzer-Eingriff → das Gerät wird für
@@ -491,7 +480,7 @@ SETPOINT_WRITES_MAX_PER_DAY = 24
 LOCAL_OVERRIDE_HOLD_S = 7200
 LOCAL_OVERRIDE_GRACE_S = 30
 
-# CN (2026-07-03): der eigene `sensor`-Platform-Mirror
+# CN: der eigene `sensor`-Platform-Mirror
 # (Crowdergy_Current Power / State of Charge) wurde entfernt — er
 # doppelte nur die schon vorhandenen Integrations-Entities des Users
 # (siehe project-memory „HA-Entity-Generierung"). Der Steuer-Switch
@@ -541,7 +530,6 @@ OPT_CONSENT_REMOTE_CONTROL = "consent_remote_control"
 # das zu schwach (jede neue HA-Domain wäre per Default erlaubt). Ab
 # v3.23 gilt Default-DENY: pro Mapping-Slot ist nur eine explizite
 # Allowlist von HA-Domains zugelassen.
-#
 # Die erlaubten Domains pro Slot sind direkt aus den authoritativen
 # Quellen abgeleitet, damit echte Presets (inkl. dem live-verifizierten
 # KOSTAL-Plenticore-Mapping) NICHT brechen:
@@ -553,7 +541,6 @@ OPT_CONSENT_REMOTE_CONTROL = "consent_remote_control"
 #     (`_write_entity_control`, `_apply_charge_mode`,
 #     `_apply_battery_setpoint`; der Raum-Sollwert #341 geht über
 #     `_write_entity_control`).
-#
 # device_class wird BEWUSST nicht zusätzlich geprüft: sie steht beim
 # headless `box_add_device` (nur slot→entity_id) gar nicht zur Verfügung
 # und würde echte Presets aussperren. Domain-Ebene reicht für das

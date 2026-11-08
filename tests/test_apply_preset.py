@@ -14,6 +14,7 @@ from unittest.mock import AsyncMock, patch
 import pytest
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
+from custom_components.theothergas.command_dispatcher import _merge_preset_value_map
 from custom_components.theothergas.const import (
     CONF_DEVICE_ID,
     CONF_DEVICE_TYPE,
@@ -21,8 +22,6 @@ from custom_components.theothergas.const import (
     DOMAIN,
 )
 from custom_components.theothergas.coordinator import CrowdergyCoordinator
-from custom_components.theothergas.command_dispatcher import _merge_preset_value_map
-
 
 # ── Pure: _merge_preset_value_map ────────────────────────────────────────────
 

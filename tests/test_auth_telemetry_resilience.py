@@ -29,7 +29,6 @@ from custom_components.theothergas.coordinator import (
     _jwt_exp,
 )
 
-
 # ── Helpers ──────────────────────────────────────────────────────────
 
 

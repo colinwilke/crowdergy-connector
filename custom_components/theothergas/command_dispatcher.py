@@ -16,46 +16,46 @@ from datetime import datetime
 from typing import Any
 from zoneinfo import ZoneInfo
 
-# aiohttp + aiohttp_client raus seit FEAT-5 Phase B (2026-06-09) —
+# aiohttp + aiohttp_client raus seit FEAT-5 Phase B —
 # Stream-Reader nutzt sie drüben in sse_client.py.
 import httpx
 
 from .const import (
-    OPT_CONSENT_REMOTE_CONTROL,
-    CONF_ENTITY_BATTERY_MODE,
-    CONF_VALUE_BATTERY_MODE_ACTIVE,
-    CONF_VALUE_BATTERY_MODE_PASSIVE,
-    CONF_ENTITY_BATTERY_POWER_SETPOINT,
+    CHARGE_MODE_HOLD_INITIAL_DELAY,
+    CHARGE_MODE_HOLD_INTERVAL,
+    COMMAND_LEASE_TTL_S,
     CONF_BATTERY_SETPOINT_INVERT_SIGN,
+    CONF_CHARGE_MODE_VALUE_SOLAR,
     CONF_DEVICE_ID,
     CONF_DEVICE_TYPE,
     CONF_DEVICES,
+    CONF_ENTITY_BATTERY_MODE,
+    CONF_ENTITY_BATTERY_POWER_SETPOINT,
     CONF_ENTITY_CHARGE_MODE,
-    CONF_ENTITY_WALLBOX_CHARGE_CURRENT,
-    CONF_ENTITY_WALLBOX_PHASE_MODE,
-    CONF_VALUE_WALLBOX_PHASE_1,
-    CONF_VALUE_WALLBOX_PHASE_3,
     CONF_ENTITY_CONTROL,
     CONF_ENTITY_CONTROL_ECO,
     CONF_ENTITY_CONTROL_HOLD,
+    CONF_ENTITY_COOL_CONTROL,
+    CONF_ENTITY_WALLBOX_CHARGE_CURRENT,
+    CONF_ENTITY_WALLBOX_PHASE_MODE,
+    CONF_VALUE_BATTERY_MODE_ACTIVE,
+    CONF_VALUE_BATTERY_MODE_PASSIVE,
+    CONF_VALUE_COOL_OFF,
+    CONF_VALUE_COOL_ON,
     CONF_VALUE_OFF,
     CONF_VALUE_ON,
-    CONF_ENTITY_COOL_CONTROL,
-    CONF_VALUE_COOL_ON,
-    CONF_VALUE_COOL_OFF,
+    CONF_VALUE_WALLBOX_PHASE_1,
+    CONF_VALUE_WALLBOX_PHASE_3,
+    ECO_SETPOINT_TYPES,
     ENTITY_CONTROL_HOLD_AUTO,
     ENTITY_CONTROL_HOLD_NEVER,
     HOLD_INITIAL_DELAY,
     HOLD_POLL_INTERVAL,
-    CHARGE_MODE_HOLD_INITIAL_DELAY,
-    CHARGE_MODE_HOLD_INTERVAL,
-    COMMAND_LEASE_TTL_S,
-    CONF_CHARGE_MODE_VALUE_SOLAR,
-    ECO_SETPOINT_TYPES,
     LOCAL_OVERRIDE_GRACE_S,
     LOCAL_OVERRIDE_HOLD_S,
-    SSE_STALE_THRESHOLD_S,
+    OPT_CONSENT_REMOTE_CONTROL,
     SETPOINT_WRITES_MAX_PER_DAY,
+    SSE_STALE_THRESHOLD_S,
     WRITE_BREAKER_MAX_PER_HOUR,
     is_temperature_control,
     temperature_control_value,
@@ -104,17 +104,14 @@ class CommandDispatcherMixin:
         off). Walks each Crowdergize-active device once per tick and
         restarts the hold task if it's gone.
 
-        CN-1 (2026-06-11): früher Skip ohne Remote-Control-Consent —
-        das zentrale Gate in `_apply_device_state` würde ohnehin
-        greifen, aber so läuft kein nutzloses Diffing und das Log
-        bleibt eindeutig.
+        Früher Skip ohne Remote-Control-Consent: das zentrale Gate in
+        `_apply_device_state` würde ohnehin greifen, aber so läuft kein
+        nutzloses Diffing und das Log bleibt eindeutig.
 
-        CN-3 (2026-06-11): früher Skip bei SSE-Staleness — derselbe
-        Threshold wie der Bail im `_hold_loop`. Vorher restartete der
-        Self-Heal den Hold jeden 30-s-Tick und schrieb den gecachten
-        Zustand zurück, womit ein User-Eingriff während eines Backend-
-        Outages alle ~30 s überschrieben wurde („User regains manual
-        control" galt nur bis zum nächsten Tick).
+        Früher Skip bei SSE-Staleness (derselbe Threshold wie der Bail im
+        `_hold_loop`): sonst würde der Self-Heal während eines
+        Backend-Outages jeden 30-s-Tick den gecachten Zustand
+        zurückschreiben und einen User-Eingriff überschreiben.
         """
         if not self._remote_control_allowed("hold-self-heal"):
             return
@@ -176,7 +173,6 @@ class CommandDispatcherMixin:
             return False
 
     # ── Inbound SSE: commands pushed from the Crowdergy backend ────────────
-    #
     # SSE-Stream-Reader extrahiert nach `sse_client.py` (FEAT-5 Phase B,
     # 2026-06-09). Coordinator hält nur noch SSEClient-Instanz +
     # Consumer-Task; das Stream-Reading + Reconnect-Backoff + Auth-
@@ -227,7 +223,7 @@ class CommandDispatcherMixin:
                     device_id, sorted(payload),
                 )
                 return
-            # v3.9.2 (2026-06-04): manuelle App-Befehle kommen als
+            # v3.9.2: manuelle App-Befehle kommen als
             # telemetry-Frames mit `is_on`/`is_active`. Ohne dieses Log
             # war „kommt manueller Befehl durch?"-Diagnose blind —
             # einzige Signatur war ein späterer state-resync-Reapply.
@@ -237,7 +233,8 @@ class CommandDispatcherMixin:
             # Aktivierung via `logger:` config oder ENV `LOG_LEVEL=DEBUG`.
             if any(k in payload for k in ("is_active", "is_on", "cool_on", "room_setpoint_c")):
                 _LOGGER.debug(
-                    "Crowdergy SSE telemetry frame: device=%s is_active=%s is_on=%s cool_on=%s room_setpoint=%s",
+                    "Crowdergy SSE telemetry frame: device=%s is_active=%s is_on=%s "
+                    "cool_on=%s room_setpoint=%s",
                     device_id,
                     payload.get("is_active"),
                     payload.get("is_on"),
@@ -300,12 +297,12 @@ class CommandDispatcherMixin:
             # Boilerplate). Vorgängerversion printete nur `value`, was
             # für Battery-Frames immer None ist (Battery liest `mode` +
             # `setpoint_kw` aus separaten Keys) — das war misleading bei
-            # „kommt Steuerung durch"-Diagnose. v3.9.2 (2026-06-04).
+            # „kommt Steuerung durch"-Diagnose. v3.9.2.
             payload_keys = {
                 k: v for k, v in data.items()
                 if k not in ("type",)
             }
-            # P3 (2026-06-11): WARNING → DEBUG. Command-Frames sind
+            # P3: WARNING → DEBUG. Command-Frames sind
             # Normalbetrieb (jeder Solver-Tick); als WARNING wuchs
             # home-assistant.log unnötig — analog zum Telemetry-Frame-
             # Log (Cluster D 2026-06-09).
@@ -346,7 +343,7 @@ class CommandDispatcherMixin:
                      if d.get(CONF_DEVICE_ID) == device_id),
                     None,
                 )
-                # P3 (2026-06-11): unbekannte device_id fiel vorher in
+                # P3: unbekannte device_id fiel vorher in
                 # den Wallbox-Else-Zweig (Cancel-Hold / Apply für ein
                 # Gerät das es lokal nicht gibt). Frame ignorieren.
                 if dev is None:
@@ -369,12 +366,12 @@ class CommandDispatcherMixin:
                     # Wallbox: Lademodus-String + optionaler Ladestrom.
                     # `current_a` (ganze Ampere) kommt vom Backend NUR im
                     # Power-Modus auf Boxen mit gemappter Ladestrom-Entity
-                    # (2026-06-20). Connector schreibt ihn VOR dem Modus.
+                    # Connector schreibt ihn VOR dem Modus.
                     if value is None:
                         self._cancel_charge_mode_hold(device_id)
                     else:
                         current_a = data.get("current_a")
-                        # 1/3-Phasen-Umschaltung (2026-07-19): explizite
+                        # 1/3-Phasen-Umschaltung: explizite
                         # Phasenzahl vom Solver, nur im Power-Modus auf
                         # Boxen mit gemappter Phasen-Entity.
                         phases = data.get("phases")
@@ -472,7 +469,7 @@ class CommandDispatcherMixin:
             self.hass.async_create_task(
                 self.hass.config_entries.async_reload(self.entry.entry_id)
             )
-        except Exception:  # noqa: BLE001 — Dispatch-Loop nie crashen lassen
+        except Exception:  # Dispatch-Loop nie crashen lassen
             _LOGGER.exception(
                 "device_update: Preset-Apply für %s fehlgeschlagen", device_id
             )
@@ -580,7 +577,7 @@ class CommandDispatcherMixin:
             else:
                 self.state.held_charge_phases.pop(device_id, None)
 
-        # 1/3-Phasenzahl (2026-07-19) VOR dem Strom schreiben: die
+        # 1/3-Phasenzahl VOR dem Strom schreiben: die
         # Ampere-Zahl bedeutet je Phasenzahl das Dreifache an Leistung —
         # erst der Grobregler (Phase), dann der Feinregler (Strom), dann
         # der Modus. „Auto" wird nie geschrieben; ohne gemappte Entity/
@@ -609,7 +606,7 @@ class CommandDispatcherMixin:
                         {"entity_id": phase_entity, "option": phase_value},
                         blocking=True,
                     )
-                except Exception as err:  # noqa: BLE001
+                except Exception as err:
                     _LOGGER.exception(
                         "set_charge_mode: phase write FAILED for %s: %s",
                         phase_entity, err,
@@ -650,7 +647,7 @@ class CommandDispatcherMixin:
                         },
                         blocking=True,
                     )
-                except Exception as err:  # noqa: BLE001
+                except Exception as err:
                     _LOGGER.exception(
                         "set_charge_mode: charge-current write FAILED "
                         "for %s: %s", current_entity, err,
@@ -699,7 +696,7 @@ class CommandDispatcherMixin:
                     "(expected select / number)", entity_id, domain,
                 )
                 ok = False
-        except Exception as err:  # noqa: BLE001
+        except Exception as err:
             _LOGGER.exception("set_charge_mode service call failed: %s", err)
             ok = False
 
@@ -786,7 +783,7 @@ class CommandDispatcherMixin:
         )
         dev_type = (dev or {}).get(CONF_DEVICE_TYPE, "")
         if dev_type == "battery":
-            # v3.8.0 (2026-06-02) AI-off Battery-Übergabe:
+            # v3.8.0 AI-off Battery-Übergabe:
             # Lademodus auf "Passiv" schreiben → HA-
             # Automation lässt den Setpoint los, WR
             # übernimmt PV-Native-Priority.
@@ -808,7 +805,7 @@ class CommandDispatcherMixin:
             # früheren Wert zurückgesetzt (E-2 / XR-1,
             # 2026-06-11: der Restore-Pfad ist tot —
             # Backend sendet `charge_mode_value_crowdergy`
-            # seit 2026-06-03 nicht mehr).
+            # nicht mehr).
             self._cancel_charge_mode_hold(device_id)
         elif dev_type in ("heating", "warmwater", "aircon", "generic"):
             # entity_control auf value_off — sorgt
@@ -855,7 +852,7 @@ class CommandDispatcherMixin:
             task.cancel()
         self._cancel_charge_mode_lease_expiry(device_id)
 
-    # ── #B2 (2026-08-12): Kommandos als Lease — TTL-Expiry ────────────
+    # ── #B2: Kommandos als Lease — TTL-Expiry ────────────
 
     def _start_charge_mode_lease_expiry(self, device_id: str) -> None:
         """One-shot-Task nach dem SSE-Stale-Bail: wartet bis
@@ -952,7 +949,7 @@ class CommandDispatcherMixin:
                 )
         except asyncio.CancelledError:
             raise
-        except Exception:  # noqa: BLE001
+        except Exception:  # Dispatch-Loop nie crashen lassen
             _LOGGER.exception(
                 "charge_mode lease expiry for %s crashed", device_id
             )
@@ -1002,7 +999,7 @@ class CommandDispatcherMixin:
                     self.state.held_charge_mode.pop(device_id, None)
                     self.state.held_charge_current.pop(device_id, None)
                     self.state.held_charge_phases.pop(device_id, None)
-                    # #B2 (2026-08-12): der Bail stoppt nur das RE-WRITE —
+                    # #B2: der Bail stoppt nur das RE-WRITE —
                     # auf einem stickigen Mode-Select (go-e) bleibt der
                     # zuletzt geschriebene Modus trotzdem stehen. Ein
                     # One-shot-Lease-Expiry-Task schreibt nach
@@ -1021,7 +1018,7 @@ class CommandDispatcherMixin:
                 await asyncio.sleep(CHARGE_MODE_HOLD_INTERVAL)
         except asyncio.CancelledError:
             raise
-        except Exception:  # noqa: BLE001
+        except Exception:
             _LOGGER.exception(
                 "charge_mode hold loop for %s crashed", device_id
             )
@@ -1045,7 +1042,7 @@ class CommandDispatcherMixin:
         new_data[device_id] = new_bucket
         self.async_set_updated_data(new_data)
 
-    # ── Sicherheitsbündel #135/#136/#140 (2026-08-25) ────────────────────
+    # ── Sicherheitsbündel #135/#136/#140 ────────────────────
 
     def _write_allowed(self, device_id: str, entity_id: str) -> bool:
         """(#136) Schreib-Circuit-Breaker: harter Zähler je
@@ -1276,7 +1273,7 @@ class CommandDispatcherMixin:
         missing so a partial / new-style config can't crash the
         coordinator.
 
-        CN-1 (2026-06-11): zentrales Remote-Control-Consent-Gate.
+        zentrales Remote-Control-Consent-Gate.
         Jeder Caller ist cloud-getrieben (SSE-Dispatch, State-Resync,
         Hold-Self-Heal) — siehe `_remote_control_allowed`-Docstring.
         """
@@ -1444,7 +1441,7 @@ class CommandDispatcherMixin:
                     {"entity_id": heat_entity, "hvac_mode": mode},
                     blocking=True,
                 )
-            except Exception as err:  # noqa: BLE001
+            except Exception as err:
                 _LOGGER.exception(
                     "set_hvac_mode failed for %s: %s", heat_entity, err,
                 )
@@ -1458,7 +1455,7 @@ class CommandDispatcherMixin:
     async def _apply_battery_setpoint(
         self, device_id: str, mode: str, setpoint_kw: float
     ) -> bool:
-        """Phase 3 Option D (2026-06-02): Battery-Dispatch via 2 HA-
+        """Phase 3 Option D: Battery-Dispatch via 2 HA-
         Entities — Lademodus-Select (Aktiv/Passiv) + Power-Setpoint-
         Number (signed Watts, + = laden, − = entladen).
 
@@ -1521,7 +1518,7 @@ class CommandDispatcherMixin:
                         {"entity_id": mode_entity, "option": passive_val},
                         blocking=True,
                     )
-                except Exception as err:  # noqa: BLE001
+                except Exception as err:
                     _LOGGER.exception(
                         "Battery passive-write failed for %s: %s",
                         mode_entity, err,
@@ -1560,7 +1557,7 @@ class CommandDispatcherMixin:
                         {"entity_id": setpoint_entity, "value": target_w},
                         blocking=True,
                     )
-                except Exception as err:  # noqa: BLE001
+                except Exception as err:
                     _LOGGER.error(
                         "Battery setpoint-write FAILED for %s: %s — "
                         "skipping subsequent mode-switch to %s damit "
@@ -1584,7 +1581,7 @@ class CommandDispatcherMixin:
                     {"entity_id": mode_entity, "option": active_val},
                     blocking=True,
                 )
-            except Exception as err:  # noqa: BLE001
+            except Exception as err:
                 _LOGGER.exception(
                     "Battery active-mode-write failed for %s: %s",
                     mode_entity, err,
@@ -1698,7 +1695,7 @@ class CommandDispatcherMixin:
         on first toggle. The hold path stays quiet — the same issue
         would otherwise log every HOLD_POLL_INTERVAL.
 
-        `device_id` (#136, 2026-08-25): schaltet den Schreib-Circuit-
+        `device_id`: schaltet den Schreib-Circuit-
         Breaker scharf (Zähler je Entity/Stunde) und stempelt den
         eigenen Write für die #140-Übersteuerungs-Erkennung. Alle
         Produktions-Caller reichen ihn durch.
@@ -1811,7 +1808,7 @@ class CommandDispatcherMixin:
                     "Bad value_%s=%r for %s (%s) — %s",
                     "on" if on else "off", raw_value, entity_id, domain, err,
                 )
-        except Exception as err:  # noqa: BLE001
+        except Exception as err:
             if verbose:
                 _LOGGER.exception("entity_control write failed: %s", err)
             else:
@@ -1923,7 +1920,7 @@ class CommandDispatcherMixin:
             await self.hass.services.async_call(
                 domain, service, data, blocking=True,
             )
-        except Exception as err:  # noqa: BLE001
+        except Exception as err:
             _LOGGER.warning("eco setpoint write failed for %s: %s", eco_entity, err)
         return True
 
@@ -2013,7 +2010,7 @@ class CommandDispatcherMixin:
             while True:
                 if not self.state.active_state.get(device_id, False):
                     return
-                # Cluster B Connector (2026-06-09): SSE-Stale-Bail
+                # Cluster B Connector: SSE-Stale-Bail
                 # mirror'd vom `_charge_mode_hold_loop`. Vorher schrieb
                 # diese Loop blind weiter, auch wenn Crowdergy gar
                 # nicht mehr antwortet → User-Manuelle-Änderung an
@@ -2062,7 +2059,7 @@ class CommandDispatcherMixin:
                     and expected is not None
                     and not self._states_match(actual, expected, domain)
                 ):
-                    # (#140, 2026-08-25) Fremd-Drift im AUTO-Modus =
+                    # Fremd-Drift im AUTO-Modus =
                     # Nutzer-Eingriff: stammt die Abweichung nicht von
                     # einem EIGENEN Write der letzten
                     # LOCAL_OVERRIDE_GRACE_S, wird der Mensch NICHT
@@ -2090,7 +2087,7 @@ class CommandDispatcherMixin:
                 await asyncio.sleep(HOLD_POLL_INTERVAL)
         except asyncio.CancelledError:
             raise
-        except Exception:  # noqa: BLE001
+        except Exception:
             _LOGGER.exception("hold loop for %s crashed", device_id)
 
     @staticmethod

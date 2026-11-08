@@ -1,5 +1,4 @@
-"""SSEClient — Reconnecting Server-Sent-Events Reader extrahiert aus
-coordinator.py (FEAT-5 Phase B, 2026-06-09).
+"""SSEClient — Reconnecting Server-Sent-Events Reader.
 
 Trennt das **Stream-Reading** vom **Message-Dispatch**:
 
@@ -11,11 +10,9 @@ Trennt das **Stream-Reading** vom **Message-Dispatch**:
   Methoden.
 
 Die Trennung macht den SSE-Pfad testbar ohne den Apply-Stack
-mitzustarten (Cluster E Connector Test-Setup), und entkoppelt zwei
-Failure-Domains: ein hängender Apply-Call blockiert nicht mehr den
-Stream-Reader (Queue overflow → Drop + Warning statt Stream-Stall).
-
-Memo: `project_connector_coordinator_split_plan_2026_06_09.md` Phase B.
+mitzustarten und entkoppelt zwei Failure-Domains: ein hängender
+Apply-Call blockiert nicht den Stream-Reader (Queue overflow → Drop +
+Warning statt Stream-Stall).
 """
 from __future__ import annotations
 
@@ -32,8 +29,7 @@ from homeassistant.helpers import aiohttp_client
 
 _LOGGER = logging.getLogger(__name__)
 
-# SSE-Reconnect-Backoff. Identisch zu den Werten die vor der Extraktion
-# direkt in coordinator.py standen — keine Verhaltensänderung in Phase B.
+# SSE-Reconnect-Backoff.
 SSE_RECONNECT_INITIAL = 1
 SSE_RECONNECT_MAX = 60
 
@@ -66,7 +62,7 @@ def sse_client_timeout() -> aiohttp.ClientTimeout:
 # echter Consumer-Stall sichtbar wird.
 SSE_QUEUE_MAXSIZE = 512
 
-# CN-11 (2026-06-11): nach so vielen aufeinanderfolgenden 401-Zyklen
+# nach so vielen aufeinanderfolgenden 401-Zyklen
 # (Handshake-401 → Refresh-Versuch → erneut 401) gilt die Auth als
 # endgültig tot — der Reader stoppt und meldet via `on_auth_failed`
 # (Coordinator startet dann den Reauth-Flow). Reset des Zählers erst
@@ -164,7 +160,7 @@ class SSEClient:
                     timeout=sse_client_timeout(),
                 ) as resp:
                     if resp.status == 401:
-                        # CN-11 (2026-06-11): vorher lief bei Refresh-
+                        # vorher lief bei Refresh-
                         # Erfolg ein `continue` OHNE Sleep — wenn das
                         # Backend trotz frischem Token weiter 401t
                         # (Revocation, Clock-Skew, Backend-Bug), war
@@ -242,7 +238,7 @@ class SSEClient:
                             )
             except asyncio.CancelledError:
                 raise
-            except (aiohttp.ClientError, asyncio.TimeoutError) as err:
+            except (TimeoutError, aiohttp.ClientError) as err:
                 # asyncio.TimeoutError = sock_read=SSE_READ_TIMEOUT_S
                 # ausgelöst, d.h. half-open Stream → reconnect.
                 _LOGGER.warning(
@@ -250,7 +246,7 @@ class SSEClient:
                     "reconnecting in %ss",
                     err, delay,
                 )
-            except Exception as err:  # noqa: BLE001
+            except Exception as err:
                 _LOGGER.exception("Unexpected SSE error: %s", err)
 
             await asyncio.sleep(delay)

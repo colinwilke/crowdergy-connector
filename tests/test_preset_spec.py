@@ -39,10 +39,10 @@ def test_capable_types_match_user_concept():
     # #68 (2026-06-18): die steuerbaren thermischen Lasten kamen dazu, damit
     # Presets für sie beigetragen werden können (Box-Wizard-Phase-5).
     # haushalt (Residual) + generic (Catch-all) bleiben ohne Spec.
-    assert PRESET_CAPABLE_TYPES == {
+    assert {
         "solar", "grid", "battery", "wallbox",
         "heating", "warmwater", "aircon",
-    }
+    } == PRESET_CAPABLE_TYPES
 
 
 def test_every_entity_slot_is_domain_allowlisted():

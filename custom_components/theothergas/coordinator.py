@@ -9,42 +9,39 @@ import time
 from datetime import timedelta
 from typing import Any
 
-# aiohttp + aiohttp_client raus seit FEAT-5 Phase B (2026-06-09) —
-# Stream-Reader nutzt sie drüben in sse_client.py.
 import httpx
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import Event, HomeAssistant, callback
 from homeassistant.helpers.event import async_track_state_change_event
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 
+from .battery_pv_follow import BatteryPvFollowMixin
+from .command_dispatcher import CommandDispatcherMixin
 from .const import (
     CONF_ACCESS_TOKEN,
     CONF_API_URL,
-    OPT_CONSENT_REMOTE_CONTROL,
-    OPT_CONSENT_TELEMETRY,
     CONF_DEVICE_ID,
     CONF_DEVICE_TYPE,
     CONF_DEVICES,
     CONF_ENTITY_CHARGE_MODE,
     CONF_ENTITY_CLIMATE,
     CONF_ENTITY_CONTROL,
+    CONF_ENTITY_COOL_CONTROL,
+    CONF_ENTITY_CURRENT_TEMP,
+    CONF_ENTITY_ENERGY_DISCHARGED_TOTAL,
+    CONF_ENTITY_ENERGY_TOTAL,
     CONF_ENTITY_POWER,
+    CONF_ENTITY_POWER_2,
     CONF_ENTITY_SOC,
     CONF_ENTITY_VEHICLE_STATUS,
-    CONF_ENTITY_CURRENT_TEMP,
-    CONF_ENTITY_ENERGY_TOTAL,
     CONF_INVERT_POWER_SIGN,
-    CONF_ENTITY_ENERGY_DISCHARGED_TOTAL,
     CONF_REFRESH_TOKEN,
     CONF_USER_ID,
-    CONF_ENTITY_COOL_CONTROL,
-    CONF_ENTITY_POWER_2,
     CONTROLLABLE_TYPES,
     DOMAIN,
+    OPT_CONSENT_REMOTE_CONTROL,
+    OPT_CONSENT_TELEMETRY,
 )
-
-from .battery_pv_follow import BatteryPvFollowMixin
-from .command_dispatcher import CommandDispatcherMixin
 from .pv_follow import (  # noqa: F401 — re-export für Tests (coordinator.<NAME>)
     PV_FOLLOW_INTERVAL_S,
     PV_FOLLOW_MIN_OFF_S,
@@ -56,17 +53,19 @@ from .pv_follow import (  # noqa: F401 — re-export für Tests (coordinator.<NA
     PV_FOLLOW_WRITE_RETRY_S,
     PvFollowMixin,
 )
+
 # #21 Phase-C: read/compose/decide helpers live in telemetry_reader now.
 # Re-export the module-level constants so existing `coordinator.<NAME>`
 # imports (tests, vendoring) keep resolving.
 from .telemetry_reader import (  # noqa: F401
+    _PREFETCH_SLOT_KEYS,
+    _SOLVER_EXTRA_FIELDS,
     IDENTICAL_HEARTBEAT_INTERVAL,
     PER_DEVICE_HEARTBEAT_INTERVAL,
     SEND_THRESHOLDS,
     TelemetryReaderMixin,
-    _PREFETCH_SLOT_KEYS,
-    _SOLVER_EXTRA_FIELDS,
 )
+
 _LOGGER = logging.getLogger(__name__)
 
 
@@ -85,7 +84,7 @@ anything missed. Prevents storms when a power sensor updates every
 sub-second."""
 
 
-# Loop-Intervalle: seit #97 (2026-07-02) EINZIG in telemetry_composer.py
+# Loop-Intervalle: seit #97 EINZIG in telemetry_composer.py
 # definiert (die Loops leben + lesen dort); hier nur re-exportiert für
 # `coordinator.<NAME>`-Zugriffe (Tests/Vendoring) — analog der
 # telemetry_reader-Konstanten oben. Vorher trug coordinator.py eine
@@ -96,9 +95,8 @@ from .telemetry_composer import (  # noqa: F401
     STATE_RESYNC_INTERVAL,
 )
 
-
 # SSE-Konstanten (Reconnect-Backoff, Read-Timeout) leben seit FEAT-5
-# Phase B (2026-06-09) in sse_client.py.
+# Phase B in sse_client.py.
 
 
 def _load_manifest_version() -> str:
@@ -110,14 +108,13 @@ def _load_manifest_version() -> str:
     try:
         import os
         path = os.path.join(os.path.dirname(__file__), "manifest.json")
-        with open(path, "r", encoding="utf-8") as f:
+        with open(path, encoding="utf-8") as f:
             return json.load(f).get("version", "0.0.0")
-    except Exception:  # noqa: BLE001
+    except Exception:
         return "0.0.0"
 
 
 # ── #18 Telemetry-PATCH Retry/Backoff ────────────────────────────────
-#
 # Vorher: ein transienter Transport-Fehler (Netzwerk-Flap, kurzer
 # Backend-Hiccup) auf dem Telemetry-PATCH wurde nur geloggt; der Send
 # ging verloren und wurde erst beim nächsten `_should_send`-True-Tick
@@ -206,7 +203,7 @@ def _jwt_exp(token: str) -> float | None:
         claims = json.loads(base64.urlsafe_b64decode(padded))
         exp = claims.get("exp")
         return float(exp) if exp is not None else None
-    except Exception:  # noqa: BLE001
+    except Exception:
         return None
 
 
@@ -247,7 +244,7 @@ class CrowdergyCoordinator(
         self._entity_to_devices: dict[str, list[str]] = {}
         # Malformed /auth/refresh body: WARNING once while it persists.
         self._refresh_malformed_logged = False
-        # FEAT-5 Phase B (2026-06-09): SSE-Stream-Reader in sse_client.py
+        # SSE-Stream-Reader in sse_client.py
         # extrahiert. Coordinator besitzt jetzt nur noch die SSEClient-
         # Instanz + einen Consumer-Task der Frames aus der Queue holt
         # und auf `_handle_ws_message` mapped. Lifecycle (start/stop)
@@ -257,14 +254,14 @@ class CrowdergyCoordinator(
         self._sse_client: SSEClient | None = None
         self._sse_consumer_task: asyncio.Task | None = None
         self._SSEClient = SSEClient  # for late instantiation in async_init
-        # FEAT-5 Phase D (2026-06-09): TelemetryComposer hält die 3
+        # TelemetryComposer hält die 3
         # Background-Loops (heartbeat, device-mirror, state-resync) +
         # bootstrap/outdoor-temp-helpers. Coordinator delegiert die
         # vorigen `_run_*_loop`-Methoden und `_bootstrap_active_state`
         # / `_push_outdoor_temp` an `self._composer.*`.
         from .telemetry_composer import TelemetryComposer
         self._composer = TelemetryComposer(self)
-        # Cluster A Connector (2026-06-09): single-flight Lock + CAS für
+        # Cluster A Connector: single-flight Lock + CAS für
         # _refresh_access_token. Vorher konnten parallele 401s (Telemetry-
         # PATCH + State-Resync GET + Outdoor-Temp POST treffen gleichzeitig
         # nach Token-Expiry) jeweils einen eigenen /auth/refresh-Call
@@ -282,22 +279,10 @@ class CrowdergyCoordinator(
         self._heartbeat_task: asyncio.Task | None = None
         self._device_mirror_task: asyncio.Task | None = None
         self._state_resync_task: asyncio.Task | None = None
-        # FEAT-5 Phase A (2026-06-09): per-Device-State-Cache wandert
-        # in eine eigene `DeviceStateMirror`-Dataclass. Die alten
-        # Attribut-Namen (`_active_state`, `_on_state`, `_cool_state`,
-        # `_hold_tasks`, `_charge_mode_hold_tasks`, `_held_charge_mode`,
-        # `_last_sse_event_at`) bleiben über @property-Shims weiter
-        # zugreifbar damit die ~250 bestehenden Call-Sites unverändert
-        # laufen. Phase B migriert die Sites pro Cluster auf typed
-        # Accessor-Methoden. Siehe state_mirror.py.
+        # Per-Device-Live-State (Soll-Zustände, Hold-Tasks, Leases, Uhren)
+        # lebt gebündelt im DeviceStateMirror — siehe state_mirror.py.
         from .state_mirror import DeviceStateMirror
         self.state: DeviceStateMirror = DeviceStateMirror()
-        # `_last_sse_event_at` ist jetzt auch im DeviceStateMirror —
-        # siehe @property-Shim weiter unten.
-        # (E-2 / XR-1, 2026-06-11: das frühere
-        # `_pre_crowdergize_charge_mode`-Snapshot-Dict ist entfernt —
-        # toter Restore-Pfad, das Backend sendet
-        # `charge_mode_value_crowdergy` seit 2026-06-03 nicht mehr.)
         # Read once at coordinator init — never changes during a HA
         # session (a manifest bump means HACS reloads the integration).
         # Manifest-Read deferred (siehe Kommentar oben bei _client).
@@ -322,19 +307,19 @@ class CrowdergyCoordinator(
         # enough to be worth a row.
         self._last_sent_payload: dict[str, dict[str, Any]] = {}
         self._last_send_at: dict[str, float] = {}
-        # CN-5 (2026-06-11): eigener Timestamp für den Device-Mirror.
+        # eigener Timestamp für den Device-Mirror.
         # `_last_send_at` gehört EXKLUSIV den echten `_should_send`-Sends
         # in `_async_update_data` — vorher hat der Mirror-Loop ihn
         # mitgeschrieben und damit den 90-s-Soft-Heartbeat und das
         # 600-s-Hard-Ceiling in `_should_send` dauerhaft ausgehebelt
         # (sub-threshold Drift wurde nie gemeldet).
         self._last_mirror_at: dict[str, float] = {}
-        # C7 (2026-06-01) payload-hash dedup: stabilen content-hash
+        # C7 payload-hash dedup: stabilen content-hash
         # des letzten gesendeten payloads pro Gerät. Wenn der neue
         # hash identisch ist, hat der 90s-Soft-Heartbeat nichts neues
         # zu erzählen → skip bis IDENTICAL_HEARTBEAT_INTERVAL.
         self._last_sent_hash: dict[str, int] = {}
-        # v3.26.0 (2026-06-15): Device-IDs die das Backend mit 404/410
+        # v3.26.0: Device-IDs die das Backend mit 404/410
         # auf einen Telemetry-PATCH quittiert hat. Backend-Fix für die
         # FK-Violation-Race (Device gelöscht zwischen SELECT und INSERT)
         # gibt jetzt 410 zurück. Der Connector merkt sich diese IDs
@@ -346,7 +331,7 @@ class CrowdergyCoordinator(
         # Throttle bookkeeping for the event-driven `async_refresh`
         # path. The scheduled 30 s tick is unaffected.
         self._last_event_refresh_at: float = 0.0
-        # CN-1 (2026-06-11): per-context dedup for the consent-gate
+        # per-context dedup for the consent-gate
         # DEBUG log so the periodic loops (resync 90 s, self-heal 30 s,
         # hold loops) don't spam the log while consent is revoked.
         self._consent_denied_logged: set[str] = set()
@@ -443,7 +428,7 @@ class CrowdergyCoordinator(
             )
 
     def _start_reauth(self) -> None:
-        """CN-11 (2026-06-11): SSE-Auth endgültig tot — der Stream hat
+        """CN-11: SSE-Auth endgültig tot — der Stream hat
         SSE_AUTH_FAILURE_LIMIT 401-Zyklen hinter sich, Refresh hilft
         nicht mehr. Aus einem Hintergrund-Task ist
         `entry.async_start_reauth(hass)` der dokumentierte Weg, den
@@ -464,7 +449,7 @@ class CrowdergyCoordinator(
                 await self._handle_ws_message(msg)
             except asyncio.CancelledError:
                 raise
-            except Exception as err:  # noqa: BLE001
+            except Exception as err:
                 _LOGGER.exception("Failed to handle SSE event: %s", err)
 
     async def async_init(self) -> None:
@@ -548,7 +533,7 @@ class CrowdergyCoordinator(
     async def _refresh_access_token(self, *, seen_token: str | None = None) -> bool:
         """Single-flight Refresh mit Compare-and-Swap.
 
-        Cluster A Connector (2026-06-09): mehrere parallele 401-Responses
+        Cluster A Connector: mehrere parallele 401-Responses
         konnten vorher jeweils ein eigenes /auth/refresh feuern → das
         Backend invalidiert das alte Refresh-Token, nur einer gewinnt,
         Rest hat ungültige Token → kaskadiertem Logout. Jetzt:
@@ -638,7 +623,7 @@ class CrowdergyCoordinator(
         seen_token = self._access_token
         try:
             await self._refresh_access_token(seen_token=seen_token)
-        except Exception as err:  # noqa: BLE001
+        except Exception as err:
             _LOGGER.debug("Proactive token refresh skipped: %s", err)
 
     async def _authenticated_request(
@@ -655,11 +640,12 @@ class CrowdergyCoordinator(
         response = await self._client.request(
             method, path, headers=self._auth_headers(), **kwargs
         )
-        if response.status_code == 401:
-            if await self._refresh_access_token(seen_token=seen_token):
-                response = await self._client.request(
-                    method, path, headers=self._auth_headers(), **kwargs
-                )
+        if response.status_code == 401 and await self._refresh_access_token(
+            seen_token=seen_token
+        ):
+            response = await self._client.request(
+                method, path, headers=self._auth_headers(), **kwargs
+            )
         return response
 
     async def _patch_telemetry_with_retry(
@@ -708,7 +694,7 @@ class CrowdergyCoordinator(
         return response  # type: ignore[return-value]
 
     async def async_shutdown(self) -> None:
-        # P3 (2026-06-11): super().async_shutdown() stoppt den
+        # P3: super().async_shutdown() stoppt den
         # Scheduled-Refresh + Debouncer der Basisklasse — vorher
         # konnte ein bereits geplanter Tick nach unserem Cleanup
         # noch feuern.
@@ -720,7 +706,7 @@ class CrowdergyCoordinator(
             self._sse_consumer_task.cancel()
             try:
                 await self._sse_consumer_task
-            except (asyncio.CancelledError, Exception):  # noqa: BLE001
+            except (asyncio.CancelledError, Exception):
                 pass
         if self._sse_client is not None:
             await self._sse_client.stop()
@@ -728,19 +714,19 @@ class CrowdergyCoordinator(
             self._heartbeat_task.cancel()
             try:
                 await self._heartbeat_task
-            except (asyncio.CancelledError, Exception):  # noqa: BLE001
+            except (asyncio.CancelledError, Exception):
                 pass
         if self._device_mirror_task and not self._device_mirror_task.done():
             self._device_mirror_task.cancel()
             try:
                 await self._device_mirror_task
-            except (asyncio.CancelledError, Exception):  # noqa: BLE001
+            except (asyncio.CancelledError, Exception):
                 pass
         if self._state_resync_task and not self._state_resync_task.done():
             self._state_resync_task.cancel()
             try:
                 await self._state_resync_task
-            except (asyncio.CancelledError, Exception):  # noqa: BLE001
+            except (asyncio.CancelledError, Exception):
                 pass
         for task in list(self.state.hold_tasks.values()):
             task.cancel()
@@ -757,7 +743,7 @@ class CrowdergyCoordinator(
         self.state.held_charge_mode.clear()
         self.state.held_charge_current.clear()
         self.state.held_charge_phases.clear()
-        # P3 (2026-06-11): `_client` ist bis `async_init()` None —
+        # `_client` ist bis `async_init()` None —
         # ein Shutdown vor/abseits des regulären Setups darf nicht
         # an `None.aclose()` sterben.
         if self._client is not None:
@@ -765,17 +751,8 @@ class CrowdergyCoordinator(
 
     @property
     def last_sse_event_at(self) -> float:
-        """Public Accessor für externe Reader (z.B. binary_sensor) —
-        bleibt als API-Stable-Surface auch nach FEAT-5 Phase-A-Migration
-        auf `self.state.last_sse_event_at`."""
+        """Public Accessor für externe Reader (z.B. binary_sensor)."""
         return self.state.last_sse_event_at
-
-    # FEAT-5 Phase A Finish (2026-06-09): @property-Shims für die alten
-    # Coordinator-State-Dicts entfernt. 47 Call-Sites lesen/schreiben
-    # jetzt direkt auf `self.state.*` (typed accessors auf DeviceStateMirror).
-    # Damit reduziert sich coordinator.py um ~80 Zeilen und das
-    # State-Mirror-Modul ist alleinige Source-of-Truth.
-
 
     async def _bootstrap_active_state(self) -> None:
         """Delegate auf TelemetryComposer (FEAT-5 Phase D, 2026-06-09)."""
@@ -951,7 +928,6 @@ class CrowdergyCoordinator(
             # (heating/wallbox/solar/…) the delta is just the device's
             # consumption (always positive, except solar where the
             # mapped counter is PV-production).
-            #
             # **E2E-Konvention 2026-06-11 (Connector v3.21.3):** für
             # Grid + Battery sind die beiden Counter explizit:
             #   * `entity_energy_total`           = Bezug-Zähler (Grid)
@@ -960,12 +936,10 @@ class CrowdergyCoordinator(
             #   * `entity_energy_discharged_total` = Einspeisung-Zähler (Grid)
             #                                        Laden-Zähler (Battery)
             #     = kWh die AUS DEM HAUS INS Gerät geflossen sind
-            #
             # `delta = in_delta − out_delta` → positiv = Bezug/Entladen
             # (Energie kam ins Haus), negativ = Einspeisung/Laden
             # (Energie ging raus). Backend speichert das signed delta;
             # `kwh_in`-Sum = Bezug, `kwh_out`-Sum = Einspeisung.
-            #
             # **Breaking-Hinweis für Bestand (vor v3.21.3):** die Labels
             # waren vorher generisch („Energy counter (kWh)"), die Math
             # war `out − in`. User müssen ihre Entity-Mappings einmalig
@@ -1038,7 +1012,7 @@ class CrowdergyCoordinator(
             # is_active is the "Crowdergize" consent flag — owned by the
             # backend, NOT derived from any HA entity. We deliberately do
             # not include it in the telemetry payload anymore (the backend
-            # would ignore it anyway since 2026-05-16, but keeping it out
+            # would ignore it anyway, but keeping it out
             # also keeps the payload honest).
             # (#151) Liefert dieses Gerät überhaupt noch Messwerte?
             # Sind Mess-Slots gemappt und steht KEINER davon auf einem

@@ -4,7 +4,6 @@ from __future__ import annotations
 import time
 
 import pytest
-
 from homeassistant.core import HomeAssistant
 from pytest_homeassistant_custom_component.common import (
     MockConfigEntry,
@@ -46,7 +45,7 @@ FRAME = {
 
 
 def test_params_reject_malformed_frames():
-    assert PARAMS == BatteryPvFollowParams("sub", 5.0, 1.0)
+    assert BatteryPvFollowParams("sub", 5.0, 1.0) == PARAMS
     assert BatteryPvFollowParams.from_frame(None) is None
     assert BatteryPvFollowParams.from_frame({"max_kw": 5.0}) is None
     assert BatteryPvFollowParams.from_frame({**PVF, "max_kw": 0}) is None

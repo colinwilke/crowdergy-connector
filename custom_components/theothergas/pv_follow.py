@@ -103,7 +103,7 @@ class PvFollowParams:
         return self.min_current_a * self.kw_per_amp
 
     @classmethod
-    def from_frame(cls, data: dict[str, Any]) -> "PvFollowParams | None":
+    def from_frame(cls, data: dict[str, Any]) -> PvFollowParams | None:
         try:
             phases = data.get("phases")
             return cls(
@@ -231,7 +231,7 @@ def decide(
     if s_kw is None or not plugged:
         run.above_since = run.below_since = None
         return ("stop", None) if charging else ("hold", None)
-    amps = int(math.floor(s_kw / p.kw_per_amp + 1e-9))
+    amps = math.floor(s_kw / p.kw_per_amp + 1e-9)
     amps = max(p.min_current_a, min(p.max_current_a, amps))
     if not charging:
         run.below_since = None
@@ -361,7 +361,7 @@ class PvFollowMixin:
                 return
             try:
                 await self._pv_follow_tick(device_id, run, now)
-            except Exception:  # noqa: BLE001 — der Regler darf nie sterben
+            except Exception:  # der Regler darf nie sterben
                 _LOGGER.exception("pv_follow tick failed for %s", device_id)
 
     def _pv_follow_power_kw(self, entity_id: str, now: float) -> float | None:

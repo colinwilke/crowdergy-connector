@@ -31,7 +31,7 @@ if TYPE_CHECKING:
 
 _LOGGER = logging.getLogger(__name__)
 
-# Loop-Intervalle (Sekunden). Seit #97 (2026-07-02) ist DIES die einzige
+# Loop-Intervalle (Sekunden). Seit #97 ist DIES die einzige
 # Definition — coordinator.py RE-EXPORTIERT die Namen (analog der
 # telemetry_reader-Konstanten), statt eine zweite, von den Loops nie
 # gelesene Kopie zu tragen (Drift-Trap aus dem #21-Split).
@@ -99,7 +99,7 @@ class TelemetryComposer:
     die Mirror-Loops dieselbe Quelle teilen.
     """
 
-    def __init__(self, coord: "CrowdergyCoordinator") -> None:
+    def __init__(self, coord: CrowdergyCoordinator) -> None:
         self.coord = coord
         # Malformed /devices body: WARNING once while it persists, then
         # DEBUG — the bootstrap retries on every refresh tick.
@@ -115,7 +115,7 @@ class TelemetryComposer:
         vorher-on State verlieren. Backend ist Source-of-Truth für beide
         Flags.
 
-        Cluster B Connector (2026-06-09): `cool_state` mit bootstrappen —
+        Cluster B Connector: `cool_state` mit bootstrappen —
         sonst defaultete der Skip-Guard in `_apply_device_state` für
         climate-Entities auf False und ein SSE `is_on=False`-Frame
         kippte die heat-Mode statt cool sauber stehen zu lassen.
@@ -227,7 +227,7 @@ class TelemetryComposer:
                     failed = True
             except asyncio.CancelledError:
                 raise
-            except Exception as err:  # noqa: BLE001
+            except Exception as err:
                 _LOGGER.debug("heartbeat ping failed: %s", err)
                 failed = True
             if failed:
@@ -250,7 +250,7 @@ class TelemetryComposer:
                 await self.mirror_once()
             except asyncio.CancelledError:
                 raise
-            except Exception as err:  # noqa: BLE001
+            except Exception as err:
                 _LOGGER.debug(
                     "device-mirror loop iteration error: %s", err,
                 )
@@ -267,13 +267,13 @@ class TelemetryComposer:
         unsigned `energy_kwh_in/out_delta`-Paar blieb drin → Backend
         re-derivte daraus den signed Δ und zählte ihn erneut).
 
-        CN-5 (2026-06-11): der Mirror bucht auf den EIGENEN Timestamp
+        der Mirror bucht auf den EIGENEN Timestamp
         `_last_mirror_at`. Vorher hat er `_last_send_at` resettet und
         damit den 90-s-Soft-Heartbeat + das 600-s-Hard-Ceiling in
         `_should_send` dauerhaft ausgehebelt (sub-threshold Drift
         wurde nie gemeldet — toter Code seit v3.4.3).
 
-        Telemetrie-Consent-Gate (2026-06-11): das Privacy-Modell
+        Telemetrie-Consent-Gate: das Privacy-Modell
         verspricht „telemetry=false stoppt ALLE Telemetrie-Pushes"
         (services.yaml) — der Mirror re-PATCHt Telemetrie-Payloads
         und muss deshalb genauso gated sein wie `_async_update_data`.
@@ -323,7 +323,7 @@ class TelemetryComposer:
                     )
             except asyncio.CancelledError:
                 raise
-            except Exception as err:  # noqa: BLE001
+            except Exception as err:
                 _LOGGER.debug(
                     "device-mirror PATCH failed for %s: %s",
                     device_id, err,
@@ -338,7 +338,7 @@ class TelemetryComposer:
                 await self.resync_once()
             except asyncio.CancelledError:
                 raise
-            except Exception as err:  # noqa: BLE001
+            except Exception as err:
                 _LOGGER.debug(
                     "state-resync loop iteration error: %s", err,
                 )
@@ -355,7 +355,7 @@ class TelemetryComposer:
         subscribed sein (Netzwerk-Flap, HA-Restart, NAT-Idle). Polling-
         Backstop fängt das innerhalb STATE_RESYNC_INTERVAL ab.
 
-        CN-1 (2026-06-11): früher Skip ohne Remote-Control-Consent —
+        früher Skip ohne Remote-Control-Consent —
         die zentralen Gates in den `_apply_*`-Methoden würden ohnehin
         greifen, aber der ganze Resync existiert NUR um Cloud-State
         re-zuapplyen; ohne Consent ist schon der GET + das Diffing
@@ -424,7 +424,7 @@ class TelemetryComposer:
                     await self.coord._apply_cool_state(
                         device_id, bk_cool,
                     )
-                except Exception:  # noqa: BLE001
+                except Exception:
                     _LOGGER.debug(
                         "state-resync: cool-reapply failed for %s",
                         device_id,
