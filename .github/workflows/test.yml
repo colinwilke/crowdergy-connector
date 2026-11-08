@@ -34,7 +34,7 @@ jobs:
           cache-dependency-path: requirements-test.txt
 
       - name: Install deps
-        run: pip install -r requirements-test.txt ruff
+        run: pip install -r requirements-test.txt ruff==0.16.9
 
       - name: Lint (ruff)
         run: ruff check .
