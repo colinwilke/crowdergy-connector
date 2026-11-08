@@ -13,60 +13,59 @@ from homeassistant.data_entry_flow import section
 from homeassistant.helpers import selector
 
 from .const import (
-    CONF_DEVICE_CONFIG_MODE,
-    CONF_DEVICE_NAME,
-    CONF_DEVICE_TYPE,
-    CONFIG_MODE_CLIMATE,
-    CONFIG_MODE_MANUAL,
-    CONF_ENTITY_CHARGE_MODE,
-    CONF_ENTITY_WALLBOX_CHARGE_CURRENT,
-    CONF_ENTITY_WALLBOX_PHASE_MODE,
-    CONF_VALUE_WALLBOX_PHASE_1,
-    CONF_VALUE_WALLBOX_PHASE_3,
-    CONF_ENTITY_CLIMATE,
-    CONF_ENTITY_WATER_HEATER,
-    CONF_ENTITY_CONTROL,
-    CONF_ENTITY_CONTROL_ECO,
-    ECO_SETPOINT_TYPES,
-    CONF_ENTITY_POWER,
-    CONF_ENTITY_POWER_2,
-    CONF_ENTITY_SOC,
-    CONF_ENTITY_VEHICLE_STATUS,
-    CONF_ENTITY_CURRENT_TEMP,
-    CONF_ENTITY_EFFECTIVE_SETPOINT,
-    CONF_ENTITY_VORLAUF_TEMP,
-    CONF_ENTITY_ENERGY_TOTAL,
-    CONF_ENTITY_ENERGY_DISCHARGED_TOTAL,
-    CONF_ENTITY_HC_PV_POWER,
-    CONF_ENTITY_HC_BATTERY_POWER,
-    CONF_ENTITY_HC_GRID_POWER,
-    CONF_ENTITY_PV_TO_BATTERY_POWER,
-    CONF_INVERT_POWER_SIGN,
-    CONF_ENTITY_CONTROL_HOLD,
-    CONF_VALUE_OFF,
-    CONF_VALUE_ON,
-    CONF_VEHICLE_STATUS_VALUE_PLUGGED,
-    CONF_VEHICLE_STATUS_VALUE_UNPLUGGED,
-    CONF_VEHICLE_STATUS_VALUE_ERROR,
+    CONF_BATTERY_SETPOINT_INVERT_SIGN,
     CONF_CHARGE_MODE_VALUE_LOCK,
     CONF_CHARGE_MODE_VALUE_POWER,
     CONF_CHARGE_MODE_VALUE_SOLAR,
+    CONF_DEVICE_CONFIG_MODE,
+    CONF_DEVICE_NAME,
+    CONF_DEVICE_TYPE,
     CONF_ENTITY_BATTERY_MODE,
+    CONF_ENTITY_BATTERY_POWER_SETPOINT,
+    CONF_ENTITY_CHARGE_MODE,
+    CONF_ENTITY_CLIMATE,
+    CONF_ENTITY_CONTROL,
+    CONF_ENTITY_CONTROL_ECO,
+    CONF_ENTITY_CONTROL_HOLD,
+    CONF_ENTITY_CURRENT_TEMP,
+    CONF_ENTITY_EFFECTIVE_SETPOINT,
+    CONF_ENTITY_ENERGY_DISCHARGED_TOTAL,
+    CONF_ENTITY_ENERGY_TOTAL,
+    CONF_ENTITY_HC_BATTERY_POWER,
+    CONF_ENTITY_HC_GRID_POWER,
+    CONF_ENTITY_HC_PV_POWER,
+    CONF_ENTITY_POWER,
+    CONF_ENTITY_POWER_2,
+    CONF_ENTITY_PV_TO_BATTERY_POWER,
+    CONF_ENTITY_SOC,
+    CONF_ENTITY_VEHICLE_STATUS,
+    CONF_ENTITY_VORLAUF_TEMP,
+    CONF_ENTITY_WALLBOX_CHARGE_CURRENT,
+    CONF_ENTITY_WALLBOX_PHASE_MODE,
+    CONF_ENTITY_WATER_HEATER,
+    CONF_INVERT_POWER_SIGN,
+    CONF_SHARES_HARDWARE_WITH,
     CONF_VALUE_BATTERY_MODE_ACTIVE,
     CONF_VALUE_BATTERY_MODE_PASSIVE,
-    CONF_ENTITY_BATTERY_POWER_SETPOINT,
-    CONF_BATTERY_SETPOINT_INVERT_SIGN,
-    CONF_SHARES_HARDWARE_WITH,
     CONF_VALUE_COOL_ON,
+    CONF_VALUE_OFF,
+    CONF_VALUE_ON,
+    CONF_VALUE_WALLBOX_PHASE_1,
+    CONF_VALUE_WALLBOX_PHASE_3,
+    CONF_VEHICLE_STATUS_VALUE_ERROR,
+    CONF_VEHICLE_STATUS_VALUE_PLUGGED,
+    CONF_VEHICLE_STATUS_VALUE_UNPLUGGED,
+    CONFIG_MODE_CLIMATE,
+    CONFIG_MODE_MANUAL,
+    CONTROLLABLE_TYPES,
+    DEVICE_TYPES,
+    ECO_SETPOINT_TYPES,
     ENTITY_CONTROL_HOLD_ALWAYS,
     ENTITY_CONTROL_HOLD_AUTO,
     ENTITY_CONTROL_HOLD_NEVER,
-    CONTROLLABLE_TYPES,
-    DEVICE_TYPES,
     TEMPERATURE_CONTROL_DOMAINS,
     TEMPERATURE_CONTROL_TYPES,
 )
-
 
 _CONTROLLABLE_TYPES = CONTROLLABLE_TYPES
 
@@ -148,7 +147,6 @@ _READ_FIELDS: dict[str, list[str]] = {
 _BIDIRECTIONAL_TYPES = {"grid", "battery"}
 
 # Entity-selector configs keyed by the CONF_ENTITY_* name.
-#
 # kW/kWh-Typsicherheit (#46): eindeutige Read-Slots tragen zusätzlich
 # einen device_class-Filter, damit der Picker je Slot NUR den passenden
 # Mess-Typ anbietet — Leistungs-Slots (W/kW → device_class="power") zeigen
@@ -249,7 +247,7 @@ _ENTITY_SELECTORS: dict[str, selector.EntitySelector] = {
     CONF_ENTITY_CHARGE_MODE: selector.EntitySelector(
         selector.EntitySelectorConfig(domain=["select", "input_select"])
     ),
-    # Wallbox-only OPTIONAL Ladestrom-Steuerung (2026-06-20). Number-
+    # Wallbox-only OPTIONAL Ladestrom-Steuerung. Number-
     # Entity die den Ladestrom in Ampere setzt (typisch 6–16 A). Kein
     # device_class-Filter (Control-Slot — #46-Regel: nur eindeutige
     # Read-Slots filtern; current-device_class ist nicht überall
@@ -364,7 +362,7 @@ def _preset_required_integrations_label(preset: dict[str, Any]) -> str:
     """Klarnamen-Liste der Integrationen, die dieses Preset braucht.
 
     Quelle: `required_integrations` (alle distinkten Integrationen der
-    entity_map, Backend seit 2026-07-03); Fallback auf den Einzelwert
+    entity_map, Backend); Fallback auf den Einzelwert
     `integration_domain` (Alt-Backend). Jede Domain über
     `entity_mapper.integration_display_name` zum Klarnamen (Slug-Fallback).
     Leerer String, wenn das Preset keine Integration ausweist."""
@@ -567,12 +565,12 @@ def _entities_schema(
         # Lademodus already covers via the Lock option, and users
         # found being asked twice for what looked like the same
         # entity confusing.
-        # Optional Ladestrom-Entity (2026-06-20): mappt der User hier
+        # Optional Ladestrom-Entity: mappt der User hier
         # eine Number-Entity (Ampere), darf der Solver im „An"-Modus mit
         # variablem Strom (6–16 A) laden statt nur volle Leistung; der
         # Connector schreibt den AI-Strom dann hierher. Leer = „An" =
         # volle Leistung (unverändert). Solar/Lock bleiben stromlos.
-        # Optionale Phasen-Select-Entity (2026-07-19): erlaubt der AI
+        # Optionale Phasen-Select-Entity: erlaubt der AI
         # 1-phasiges PV-Dimmen ab ~1,4 kW; die zwei Options-Strings
         # („nur 1"/„nur 3") werden im Lademodus-Werte-Step gemappt.
         control_schema = vol.Schema({
@@ -611,7 +609,7 @@ def _entities_schema(
         # Temp-Entity. Edit-Flow erbt config_mode aus dem stored Wert
         # (Default manual für Legacy v2.x).
         stored_mode = d.get(CONF_DEVICE_CONFIG_MODE)
-        # C1-Auto-Migration (2026-06-01): pre-v3.0 entries hatten kein
+        # C1-Auto-Migration: pre-v3.0 entries hatten kein
         # CONF_DEVICE_CONFIG_MODE. Wenn die gespeicherte entity_control
         # zufällig auf eine climate.* / water_heater.* Entity zeigt,
         # behandeln wir das als CONFIG_MODE_CLIMATE und füllen das
@@ -815,7 +813,7 @@ def _values_schema(
     (optional) → Aus → Hold, weil bei einer Klimaanlage Kühlen der
     primäre Use-Case ist und Heizen sekundär/optional bleibt.
 
-    Temperatur-Modus (2026-07-02): für heating/warmwater mit climate-/
+    Temperatur-Modus: für heating/warmwater mit climate-/
     water_heater-Steuer-Entity sind value_on / value_off ZIEL-
     TEMPERATUREN (°C-NumberSelector aus den Entity-Attributen) statt
     HVAC-Modus-Dropdowns — WPs werden nie hart an/aus geschaltet,
@@ -986,7 +984,7 @@ def _charge_mode_values_schema(
     three fields are optional — modes the user leaves blank simply
     don't get a button in the iOS tile.
 
-    Phasen-Werte (2026-07-19): hat der User im Entity-Step eine
+    Phasen-Werte: hat der User im Entity-Step eine
     Phasen-Select-Entity gemappt, kommen hier die zwei Options-Strings
     für „nur 1-phasig" / „nur 3-phasig" dazu (Dropdown aus DEREN
     Options). Der „Auto"-Wert wird bewusst NICHT gemappt — der

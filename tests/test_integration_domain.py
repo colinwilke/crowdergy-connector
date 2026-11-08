@@ -2,11 +2,11 @@
 from __future__ import annotations
 
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers import entity_registry as er
 from pytest_homeassistant_custom_component.common import (
     MockConfigEntry,
     mock_registry,
 )
-from homeassistant.helpers import entity_registry as er
 
 from custom_components.theothergas.entity_mapper import dominant_integration_domain
 

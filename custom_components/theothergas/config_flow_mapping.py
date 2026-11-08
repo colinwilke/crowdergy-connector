@@ -8,59 +8,57 @@ from __future__ import annotations
 
 from typing import Any
 
-
 from .const import (
-    CONF_DEVICE_ID,
-    CONF_DEVICE_CONFIG_MODE,
-    CONF_DEVICE_NAME,
-    CONF_DEVICE_TYPE,
-    CONFIG_MODE_MANUAL,
-    CONF_ENTITY_CHARGE_MODE,
-    CONF_ENTITY_WALLBOX_CHARGE_CURRENT,
-    CONF_ENTITY_WALLBOX_PHASE_MODE,
-    CONF_VALUE_WALLBOX_PHASE_1,
-    CONF_VALUE_WALLBOX_PHASE_3,
-    CONF_ENTITY_CLIMATE,
-    CONF_ENTITY_WATER_HEATER,
-    CONF_ENTITY_CONTROL,
-    CONF_ENTITY_CONTROL_ECO,
-    CONF_ENTITY_POWER,
-    CONF_ENTITY_POWER_2,
-    CONF_ENTITY_SOC,
-    CONF_ENTITY_VEHICLE_STATUS,
-    CONF_ENTITY_CURRENT_TEMP,
-    CONF_ENTITY_EFFECTIVE_SETPOINT,
-    CONF_ENTITY_VORLAUF_TEMP,
-    CONF_ENTITY_ENERGY_TOTAL,
-    CONF_ENTITY_ENERGY_DISCHARGED_TOTAL,
-    CONF_ENTITY_HC_PV_POWER,
-    CONF_ENTITY_HC_BATTERY_POWER,
-    CONF_ENTITY_HC_GRID_POWER,
-    CONF_ENTITY_PV_TO_BATTERY_POWER,
-    CONF_INVERT_POWER_SIGN,
-    CONF_ENTITY_CONTROL_HOLD,
-    CONF_VALUE_OFF,
-    CONF_VALUE_ON,
-    CONF_VEHICLE_STATUS_VALUE_PLUGGED,
-    CONF_VEHICLE_STATUS_VALUE_UNPLUGGED,
-    CONF_VEHICLE_STATUS_VALUE_ERROR,
+    CONF_BATTERY_SETPOINT_INVERT_SIGN,
     CONF_CHARGE_MODE_VALUE_LOCK,
     CONF_CHARGE_MODE_VALUE_POWER,
     CONF_CHARGE_MODE_VALUE_SOLAR,
+    CONF_DEVICE_CONFIG_MODE,
+    CONF_DEVICE_ID,
+    CONF_DEVICE_NAME,
+    CONF_DEVICE_TYPE,
     CONF_ENTITY_BATTERY_MODE,
-    CONF_VALUE_BATTERY_MODE_ACTIVE,
-    CONF_VALUE_BATTERY_MODE_PASSIVE,
     CONF_ENTITY_BATTERY_POWER_SETPOINT,
-    CONF_BATTERY_SETPOINT_INVERT_SIGN,
+    CONF_ENTITY_CHARGE_MODE,
+    CONF_ENTITY_CLIMATE,
+    CONF_ENTITY_CONTROL,
+    CONF_ENTITY_CONTROL_ECO,
+    CONF_ENTITY_CONTROL_HOLD,
+    CONF_ENTITY_COOL_CONTROL,
+    CONF_ENTITY_CURRENT_TEMP,
+    CONF_ENTITY_EFFECTIVE_SETPOINT,
+    CONF_ENTITY_ENERGY_DISCHARGED_TOTAL,
+    CONF_ENTITY_ENERGY_TOTAL,
+    CONF_ENTITY_HC_BATTERY_POWER,
+    CONF_ENTITY_HC_GRID_POWER,
+    CONF_ENTITY_HC_PV_POWER,
+    CONF_ENTITY_POWER,
+    CONF_ENTITY_POWER_2,
+    CONF_ENTITY_PV_TO_BATTERY_POWER,
+    CONF_ENTITY_SOC,
+    CONF_ENTITY_VEHICLE_STATUS,
+    CONF_ENTITY_VORLAUF_TEMP,
+    CONF_ENTITY_WALLBOX_CHARGE_CURRENT,
+    CONF_ENTITY_WALLBOX_PHASE_MODE,
+    CONF_ENTITY_WATER_HEATER,
+    CONF_INVERT_POWER_SIGN,
     CONF_SHARES_HARDWARE_WITH,
     CONF_SUPPORTS_COOLING,
-    CONF_ENTITY_COOL_CONTROL,
-    CONF_VALUE_COOL_ON,
+    CONF_VALUE_BATTERY_MODE_ACTIVE,
+    CONF_VALUE_BATTERY_MODE_PASSIVE,
     CONF_VALUE_COOL_OFF,
-    ENTITY_CONTROL_HOLD_AUTO,
+    CONF_VALUE_COOL_ON,
+    CONF_VALUE_OFF,
+    CONF_VALUE_ON,
+    CONF_VALUE_WALLBOX_PHASE_1,
+    CONF_VALUE_WALLBOX_PHASE_3,
+    CONF_VEHICLE_STATUS_VALUE_ERROR,
+    CONF_VEHICLE_STATUS_VALUE_PLUGGED,
+    CONF_VEHICLE_STATUS_VALUE_UNPLUGGED,
+    CONFIG_MODE_MANUAL,
     DOMAIN,
+    ENTITY_CONTROL_HOLD_AUTO,
 )
-
 
 # Entity domains where on/off is implicit (turn_on / turn_off services) —
 # no value_on / value_off needs to be typed by the user.
@@ -78,7 +76,7 @@ def _auto_fill_binary_vehicle_status(entity_input: dict[str, Any]) -> None:
     binary_sensor.* ist — bei Binary-Sensors ist on/off die einzige
     sinnvolle Ausprägung, da hat der User nichts zu mappen.
 
-    Häufiger Stolperstein (2026-05-30): HA's UI zeigt für binary
+    Häufiger Stolperstein: HA's UI zeigt für binary
     sensors lokalisierte Labels ("Eingesteckt"/"Ausgesteckt"), aber
     der ROHE state.state ist "on"/"off". User tippten "Eingesteckt"
     in das Mapping-Feld → kein Match im Coordinator → iOS bekommt
@@ -230,7 +228,7 @@ def _build_device_record(
             CONF_ENTITY_CONTROL_HOLD, ENTITY_CONTROL_HOLD_AUTO
         ),
         CONF_ENTITY_CHARGE_MODE: entity_input.get(CONF_ENTITY_CHARGE_MODE, ""),
-        # Wallbox variabler Ladestrom (2026-06-20): die optionale Ampere-
+        # Wallbox variabler Ladestrom: die optionale Ampere-
         # Number-Entity bleibt Connector-lokal (nur das abgeleitete Bool
         # geht ans Backend) und MUSS hier in den persistierten Record —
         # sonst droppt der Submit sie stumm (exakt der v3.28.0-Defekt oben:
@@ -316,10 +314,6 @@ def _build_device_record(
         CONF_VALUE_COOL_OFF: entity_input.get(CONF_VALUE_COOL_OFF, ""),
     }
 
-
-# CN-12 (2026-06-11): das frühere `_delete_device_backend` (Single-
-# Token, ohne 401-Refresh) ist entfernt — der letzte Call-Site
-# (remove_device) läuft längst über `_authenticated_config_request`.
 
 
 def _remove_ha_device(hass, device_id: str) -> None:

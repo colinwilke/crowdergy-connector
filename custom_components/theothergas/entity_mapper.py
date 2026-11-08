@@ -27,15 +27,16 @@ Wichtige Designentscheidungen:
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-# P3 (2026-06-11): `Any` wurde in Signaturen genutzt, war aber nie
+
+# P3: `Any` wurde in Signaturen genutzt, war aber nie
 # importiert — dank `from __future__ import annotations` kein
 # Laufzeitfehler, aber jede Introspektion (get_type_hints) bräche.
 from typing import Any, Literal
 
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers import device_registry as dr, entity_registry as er
+from homeassistant.helpers import device_registry as dr
+from homeassistant.helpers import entity_registry as er
 
-from .http_client import async_create_client
 from .const import (
     CONF_ENTITY_BATTERY_MODE,
     CONF_ENTITY_BATTERY_POWER_SETPOINT,
@@ -56,10 +57,11 @@ from .const import (
     HEURISTIC_ACCEPT,
     HEURISTIC_REJECT,
 )
+from .http_client import async_create_client
 
 # Aliase für besseres Lesen unten — match den Konvention in
 # config_flow.py / coordinator.py.
-# CN-13 (2026-06-11): aircon ergänzt — fehlte hier sowie in
+# aircon ergänzt — fehlte hier sowie in
 # NAME_HINTS und der Sortier-Order.
 DeviceType = Literal[
     "solar", "battery", "wallbox", "grid",
@@ -133,7 +135,9 @@ NAME_HINTS: dict[str, frozenset[str]] = {
     "grid":      frozenset({"grid", "netz", "meter", "zähler", "zaehler", "bezug", "einspeisung"}),
     "heating":   frozenset({"heating", "heat", "heizung", "hp", "wp", "waermepumpe", "warmpump"}),
     "warmwater": frozenset({"warmwater", "ww", "dhw", "warmwasser", "hot_water", "boiler"}),
-    "aircon":    frozenset({"aircon", "ac", "klima", "klimaanlage", "klimaanlagen", "airco", "split"}),
+    "aircon":    frozenset(
+        {"aircon", "ac", "klima", "klimaanlage", "klimaanlagen", "airco", "split"}
+    ),
     "haushalt":  frozenset({"haushalt", "household", "load", "hausverbrauch"}),
 }
 
@@ -371,10 +375,12 @@ def _guess_slot(meta: EntityMeta) -> tuple[str, float] | None:
         if dc == "temperature" and unit in {"°c", "c"}:
             return (CONF_ENTITY_CURRENT_TEMP, 0.85)
         # Vehicle-Status: state-Strings ohne unit, name-token-Hint
-        if dc is None or dc == "":
-            if _has_token(meta, {"status", "vehicle", "car", "auto", "fahrzeug", "state"}):
-                if _has_token(meta, {"wallbox", "wb", "charger", "evse", "ladestation"}):
-                    return (CONF_ENTITY_VEHICLE_STATUS, 0.70)
+        if (
+            not dc
+            and _has_token(meta, {"status", "vehicle", "car", "auto", "fahrzeug", "state"})
+            and _has_token(meta, {"wallbox", "wb", "charger", "evse", "ladestation"})
+        ):
+            return (CONF_ENTITY_VEHICLE_STATUS, 0.70)
         return None
 
     # Switch / input_boolean / light / fan = entity_control
@@ -415,7 +421,10 @@ def _disambiguate_by_name(meta: EntityMeta, types: list[str]) -> list[str]:
     """
     tokens = set(meta.name_tokens)
     # Reihenfolge ist relevant: spezifischere Typen zuerst.
-    priority = ["warmwater", "haushalt", "wallbox", "battery", "solar", "grid", "aircon", "heating", "generic"]
+    priority = [
+        "warmwater", "haushalt", "wallbox", "battery", "solar", "grid", "aircon", "heating",
+        "generic",
+    ]
     for crowdergy_type in priority:
         if crowdergy_type in types and tokens & NAME_HINTS.get(crowdergy_type, frozenset()):
             return [crowdergy_type]
@@ -775,20 +784,20 @@ async def discover_devices_with_llm(
 
 
 __all__ = [
-    "DeviceGroup",
-    "EntityMeta",
     "HEURISTIC_ACCEPT",
     "HEURISTIC_REJECT",
+    "INTEGRATION_DISPLAY_NAMES",
+    "PROVISIONABLE_HELPER_DOMAINS",
+    "DeviceGroup",
+    "EntityMeta",
     "MappingCandidate",
     "classify_entity",
     "collect_entity_metadata",
     "discover_devices",
     "group_candidates_by_device",
-    "INTEGRATION_DISPLAY_NAMES",
     "integration_display_name",
-    "required_integration_domains",
     "required_helper_specs",
-    "PROVISIONABLE_HELPER_DOMAINS",
+    "required_integration_domains",
 ]
 
 # HA-Helfer-Domains, die ein Preset über `required_helpers` portabel
@@ -956,7 +965,7 @@ def dominant_integration_domain(
 ) -> str | None:
     """Häufigste Integration-Domain der Entities (Registry → Config-Entry).
 
-    Box-Mapping-Umbau (2026-06-10): beim Crowd-Contribute wird
+    Box-Mapping-Umbau: beim Crowd-Contribute wird
     mitgespeichert, WELCHE Integration die gemappten Entities liefert —
     nur damit kann die Crowdergy Box ein approved Preset später headless
     nachbauen (Integration provisionieren + Mapping anwenden). Template-/
@@ -982,7 +991,6 @@ def dominant_integration_domain(
 
 
 # ── Registry-Identität für Crowd-Presets (user-namens-unabhängig) ──────
-#
 # Entity-IDs tragen den KUNDENSEITIGEN Gerätenamen als Präfix („Solar"
 # vs „Wechselrichter") — ein Preset mit rohen Entity-IDs löst beim
 # Empfänger nur per Suffix-Heuristik auf. Die Entity-Registry kennt je
@@ -990,7 +998,6 @@ def dominant_integration_domain(
 # `translation_key` (stabiler Integrations-Key des Entity-Typs) und
 # `original_name` (Integrations-Default-Name vor jedem User-Rename).
 # Beide überleben sowohl Geräte- als auch Entity-Umbenennungen.
-#
 # PRIVACY-REGEL: `unique_id` wird BEWUSST NICHT mitgeschickt — der trägt
 # bei vielen Integrationen die Geräte-Seriennummer (installations-
 # identifizierend); translation_key/original_name/platform sind reine
@@ -1161,7 +1168,7 @@ def resolve_preset_entities(
         is_control = slot in CONTROL_SLOT_KEYS
         domain = entity_id.split(".", 1)[0]
 
-        def _accept(candidate: str) -> bool:
+        def _accept(candidate: str, *, slot: str = slot, is_control: bool = is_control) -> bool:
             if is_control and candidate in taken:
                 return False
             resolved[slot] = candidate

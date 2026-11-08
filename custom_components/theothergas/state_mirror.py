@@ -1,19 +1,5 @@
-"""DeviceStateMirror — per-device state-Cache extrahiert aus
-coordinator.py (FEAT-5 Phase A, 2026-06-09).
-
-Phase A des Coordinator-Splits aus dem Multi-Repo-Review 2026-06-09
-Finding #1. Ziel: die acht über die Coordinator-Klasse verstreuten
-State-Dicts in einem testbaren Wrapper konsolidieren, OHNE Verhalten
-zu ändern. Die alten Attribut-Namen bleiben über @property-Shims in
-der Coordinator-Klasse verfügbar, sodass die ~250 bestehenden Read-/
-Write-Sites unverändert weiterlaufen.
-
-Phase B (separater Sprint): pro Cluster (active_state / on_state /
-cool_state / hold-tasks / charge-mode) die Direct-Attribute-Accesses
-durch typed Mirror-Methoden ersetzen (`set_active(id, value)` statt
-`self._active_state[id] = value`).
-
-Memo: `project_connector_coordinator_split_plan_2026_06_09.md`.
+"""DeviceStateMirror — per-Device-Live-State des Coordinators in einem
+testbaren Wrapper (Soll-Zustände, Hold-Tasks, Leases, Uhren, Zähler).
 """
 from __future__ import annotations
 
@@ -27,10 +13,6 @@ class DeviceStateMirror:
     Connector. Authoritative-Quelle bleibt das Backend; der Mirror
     cached die letzten bekannten Werte damit HA-Entities lokal lesen
     können ohne Backend-Roundtrip pro Tick.
-
-    Bewusst KEINE Methods außer den Helper-Konstruktor — Phase A ist
-    reine Storage-Extraktion. Phase B baut die typed-Accessor-API
-    drauf (`set_active`, `get_cool`, …) und migriert Call-Sites.
     """
 
     # Crowdergize-State (= Backend devices.is_active gespiegelt). Mit
@@ -66,7 +48,7 @@ class DeviceStateMirror:
     # im Power-Modus; sonst leer (= volle Leistung / kein Strom-Write).
     held_charge_current: dict[str, int] = field(default_factory=dict)
 
-    # Letzte Wallbox-Phasenzahl (1|3) pro Device (2026-07-19). Vom
+    # Letzte Wallbox-Phasenzahl (1|3) pro Device. Vom
     # Solver im Power-Modus explizit kommandiert (nie „Auto"); der
     # charge_mode_hold_loop schreibt sie zusammen mit Strom + Modus
     # re. Nur gesetzt für Boxen mit gemappter Phasen-Entity.
@@ -86,7 +68,7 @@ class DeviceStateMirror:
     # periodische Re-Write-Logik pausiert.
     last_sse_event_at: float = 0.0
 
-    # (#136, 2026-08-25) Schreib-Circuit-Breaker: je Entity das
+    # Schreib-Circuit-Breaker: je Entity das
     # laufende Stunden-Fenster als (window_start, count). Über
     # WRITE_BREAKER_MAX_PER_HOUR blockt `_write_allowed` jeden
     # weiteren Write bis zur nächsten Stunde.

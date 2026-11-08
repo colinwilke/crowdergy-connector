@@ -49,20 +49,20 @@ from .const import (
     CONF_ENTITY_BATTERY_MODE,
     CONF_ENTITY_BATTERY_POWER_SETPOINT,
     CONF_ENTITY_CHARGE_MODE,
-    CONF_ENTITY_WALLBOX_CHARGE_CURRENT,
     CONF_ENTITY_CONTROL,
     CONF_ENTITY_CONTROL_ECO,
     CONF_ENTITY_CONTROL_HOLD,
     CONF_ENTITY_COOL_CONTROL,
     CONF_ENTITY_CURRENT_TEMP,
+    CONF_ENTITY_EFFECTIVE_SETPOINT,
     CONF_ENTITY_ENERGY_DISCHARGED_TOTAL,
     CONF_ENTITY_ENERGY_TOTAL,
     CONF_ENTITY_POWER,
     CONF_ENTITY_POWER_2,
     CONF_ENTITY_SOC,
     CONF_ENTITY_VEHICLE_STATUS,
-    CONF_ENTITY_EFFECTIVE_SETPOINT,
     CONF_ENTITY_VORLAUF_TEMP,
+    CONF_ENTITY_WALLBOX_CHARGE_CURRENT,
     CONF_INVERT_POWER_SIGN,
     CONF_VALUE_BATTERY_MODE_ACTIVE,
     CONF_VALUE_BATTERY_MODE_PASSIVE,
@@ -161,7 +161,7 @@ PRESET_SLOT_SPEC: dict[str, tuple[PresetSlot, ...]] = {
             CONF_CHARGE_MODE_VALUE_SOLAR,
             "value", False, "Lademodus-Wert „Solaroptimiert“",
         ),
-        # Optional: Ladestrom-Steuerung (2026-06-20). Number-Entity die
+        # Optional: Ladestrom-Steuerung. Number-Entity die
         # den Ladestrom in Ampere (6–16) setzt — wenn gemappt, wählt der
         # AI im „An"-Modus den optimalen Strom statt nur volle Leistung.
         PresetSlot(
@@ -192,7 +192,7 @@ PRESET_SLOT_SPEC: dict[str, tuple[PresetSlot, ...]] = {
         ),
         PresetSlot(CONF_ENTITY_CONTROL_HOLD, "value", False, "Hold-Modus"),
     ),
-    # ── Steuerbare thermische Lasten (#68, 2026-06-18) ──────────────────
+    # ── Steuerbare thermische Lasten ──────────────────
     # Gemeinsames Steuer-Muster: EINE Steuer-Entity (entity_control) +
     # optionale on/off-Werte. value_on/value_off sind OPTIONAL, nicht
     # required — bei binären Steuer-Entities (switch/input_boolean/light/

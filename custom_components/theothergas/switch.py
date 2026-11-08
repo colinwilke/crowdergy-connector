@@ -25,7 +25,7 @@ from .device_registry import get_hub_device_info
 
 _LOGGER = logging.getLogger(__name__)
 
-# Crowdergize-Switch nur für controllable Typen. CN-13 (2026-06-11):
+# Crowdergize-Switch nur für controllable Typen.
 # SSOT in const.py — die lokale Kopie hier hatte `aircon` nicht,
 # Klimaanlagen bekamen deshalb nie einen Crowdergy-AI-Switch.
 _CROWDERGIZE_TYPES = CONTROLLABLE_TYPES

@@ -22,7 +22,6 @@ Test-Mechanik (Sleep-Patch/_StopHold) gespiegelt aus
 from __future__ import annotations
 
 import time
-
 from unittest.mock import patch
 
 from homeassistant.core import HomeAssistant
@@ -44,10 +43,10 @@ from custom_components.theothergas.const import (
     ENTITY_CONTROL_HOLD_AUTO,
 )
 
-from .test_safety_bundle import (  # noqa: F401  (Fixtures/Helfer teilen)
+from .test_safety_bundle import (
+    _SLEEP,
     _breaking_sleep,
     _run_until_stopped,
-    _SLEEP,
     make_coordinator,
 )
 

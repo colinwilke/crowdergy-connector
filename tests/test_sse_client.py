@@ -33,7 +33,7 @@ def _make_client(hass) -> SSEClient:
         hass=hass,
         api_url="http://test",
         get_token=lambda: "fake-token",
-        refresh_token=lambda: _async_true(),
+        refresh_token=_async_true,
     )
 
 
@@ -117,7 +117,7 @@ async def test_token_callback_resolves_lazily(hass):
         hass=hass,
         api_url="http://test",
         get_token=lambda: current_token[0],
-        refresh_token=lambda: _async_true(),
+        refresh_token=_async_true,
     )
     assert client._get_token() == "v1"
     current_token[0] = "v2"

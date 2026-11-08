@@ -31,14 +31,14 @@ from custom_components.theothergas.const import (
     CONF_DEVICE_TYPE,
     CONF_ENTITY_CONTROL,
     CONF_ENTITY_CONTROL_HOLD,
+    CONF_VALUE_OFF,
+    CONF_VALUE_ON,
     DOMAIN,
     ENTITY_CONTROL_HOLD_ALWAYS,
     ENTITY_CONTROL_HOLD_AUTO,
     LOCAL_OVERRIDE_GRACE_S,
     LOCAL_OVERRIDE_HOLD_S,
     WRITE_BREAKER_MAX_PER_HOUR,
-    CONF_VALUE_ON,
-    CONF_VALUE_OFF,
 )
 from custom_components.theothergas.coordinator import CrowdergyCoordinator
 from custom_components.theothergas.state_mirror import DeviceStateMirror

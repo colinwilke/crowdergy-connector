@@ -34,7 +34,10 @@ jobs:
           cache-dependency-path: requirements-test.txt
 
       - name: Install deps
-        run: pip install -r requirements-test.txt
+        run: pip install -r requirements-test.txt ruff
+
+      - name: Lint (ruff)
+        run: ruff check .
 
       - name: Run pytest
         # Die beiden deselektierten sse_client-Tests sind der bekannte

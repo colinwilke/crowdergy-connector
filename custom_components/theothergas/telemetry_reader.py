@@ -25,8 +25,8 @@ from typing import Any
 from .const import (
     CONF_DEVICE_ID,
     CONF_DEVICE_TYPE,
-    CONF_ENTITY_CLIMATE,
     CONF_ENTITY_CHARGE_MODE,
+    CONF_ENTITY_CLIMATE,
     CONF_ENTITY_CONTROL,
     CONF_ENTITY_COOL_CONTROL,
     CONF_ENTITY_CURRENT_TEMP,
@@ -56,7 +56,6 @@ from .const import (
     is_temperature_control,
     temperature_control_value,
 )
-
 
 PER_DEVICE_HEARTBEAT_INTERVAL = 90.0
 """Soft-Heartbeat (2026-06-01+, C7): nach 90 s wird ein PATCH gesendet
@@ -95,16 +94,13 @@ SEND_THRESHOLDS: dict[str, float] = {
 }
 
 # ── Solver-only Extra-Field-Registry (v3.3+) ─────────────────────────
-#
 # Pro Gerätetyp: Liste von (payload_key, conf_key, reader) Tupeln. Pro
 # Tick liest der Coordinator jede mappte Entity, packt das Resultat in
 # `payload["extra"]`. Backend filtert + validiert serverseitig
 # (app/mpc/solver_fields.py) — Single Source of Truth bleibt dort.
-#
 # Neues Solver-Feld hier hinzufügen → fertig connector-seitig. Sobald
 # der Backend-Registry-Eintrag steht, fließt das Feld pro Telemetry-
 # Tick durch zum Solver.
-#
 # `reader` muss eine der Reader-Methoden auf der Coordinator-Klasse
 # sein (siehe `_compose_extra`). "temp" → liest °C-Sensoren oder die
 # `current_temperature` aus climate-Attributen; "power" → liest einen
@@ -262,10 +258,7 @@ class TelemetryReaderMixin:
         slots = self._measurement_slot_entities(dev, current_temp_entity)
         if not slots:
             return None
-        for _slot, entity_id in slots:
-            if self._entity_delivers(entity_id):
-                return True
-        return False
+        return any(self._entity_delivers(entity_id) for _slot, entity_id in slots)
 
     def _measurement_slot_entities(
         self, dev: dict[str, Any], current_temp_entity: str = "",
@@ -481,10 +474,10 @@ class TelemetryReaderMixin:
         # Send unterscheidet — sonst hat der 90s-Tick nichts Neues zu
         # erzählen und wir warten auf den Hard-Ceiling. Spart auf
         # truly-quiet Geräten ~6.7× HTTP-Calls.
-        if age >= PER_DEVICE_HEARTBEAT_INTERVAL:
-            if self._payload_hash(payload) != self._last_sent_hash.get(device_id):
-                return True
-        return False
+        return (
+            age >= PER_DEVICE_HEARTBEAT_INTERVAL
+            and self._payload_hash(payload) != self._last_sent_hash.get(device_id)
+        )
 
     def _read_energy_kwh(self, entity_id: str) -> float | None:
         """Read a `total_increasing` HA energy sensor as kWh.
@@ -560,7 +553,7 @@ class TelemetryReaderMixin:
     def _read_string(self, entity_id: str) -> str | None:
         """Read an entity state as the raw `state.state` string.
 
-        C4 (2026-06-01): docstring previously claimed a friendly_value
+        C4: docstring previously claimed a friendly_value
         fallback, but the code never read attributes. The raw state IS
         the right thing — friendly_value would have masked the raw
         token the user's HA Frontend translates per locale, which

@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import asyncio
 import time
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from types import SimpleNamespace
 
 from homeassistant.core import HomeAssistant
@@ -17,6 +17,7 @@ from pytest_homeassistant_custom_component.common import (
     async_mock_service,
 )
 
+from custom_components.theothergas import coordinator as coordinator_mod
 from custom_components.theothergas.const import (
     CONF_CHARGE_MODE_VALUE_LOCK,
     CONF_CHARGE_MODE_VALUE_POWER,
@@ -30,7 +31,6 @@ from custom_components.theothergas.const import (
     DOMAIN,
     OPT_CONSENT_REMOTE_CONTROL,
 )
-from custom_components.theothergas import coordinator as coordinator_mod
 from custom_components.theothergas.coordinator import CrowdergyCoordinator
 from custom_components.theothergas.pv_follow import (
     PV_FOLLOW_MIN_ON_S,
@@ -61,7 +61,7 @@ PARAMS = PvFollowParams.from_frame(FRAME)
 
 def test_surplus_counts_filling_passive_battery():
     """Feldfall 2026-09-27: Export 3,6 kW, Akku lädt 2,8 kW bei 92 %."""
-    kw = dict(grid_kw=-3.6, box_kw=0.0, running=False)
+    kw = {"grid_kw": -3.6, "box_kw": 0.0, "running": False}
     assert surplus_kw(PARAMS, batteries=[(-2.8, 92.0)], **kw) == 6.4
     # Akku noch nicht voll genug → Akku-Vorrang, nur der Export zählt
     assert surplus_kw(PARAMS, batteries=[(-2.8, 70.0)], **kw) == 3.6
@@ -169,8 +169,8 @@ def test_idle_draw_is_stopped_or_adopted_after_the_stop_delay():
 
 def test_state_age_prefers_last_reported():
     now = 10_000.0
-    old = datetime.fromtimestamp(now - 900, tz=timezone.utc)
-    fresh = datetime.fromtimestamp(now - 10, tz=timezone.utc)
+    old = datetime.fromtimestamp(now - 900, tz=UTC)
+    fresh = datetime.fromtimestamp(now - 10, tz=UTC)
     assert state_age_s(SimpleNamespace(last_reported=fresh, last_updated=old), now) == 10
     assert state_age_s(SimpleNamespace(last_updated=old), now) == 900
     assert state_age_s(SimpleNamespace(), now) is None
@@ -317,7 +317,7 @@ async def test_frozen_grid_sensor_stops_running_box(hass: HomeAssistant):
         if entity_id == "sensor.wb_power":
             return SimpleNamespace(
                 state=st.state, attributes=st.attributes,
-                last_reported=datetime.fromtimestamp(later - 5, tz=timezone.utc),
+                last_reported=datetime.fromtimestamp(later - 5, tz=UTC),
             )
         return st
 

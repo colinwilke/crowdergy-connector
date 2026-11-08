@@ -14,69 +14,69 @@ from homeassistant.helpers import selector
 from .const import (
     CONF_ACCESS_TOKEN,
     CONF_API_URL,
+    CONF_BATTERY_SETPOINT_INVERT_SIGN,
+    CONF_CHARGE_MODE_VALUE_LOCK,
+    CONF_CHARGE_MODE_VALUE_POWER,
+    CONF_CHARGE_MODE_VALUE_SOLAR,
     CONF_CITY,
-    CONF_DEVICE_ID,
     CONF_DEVICE_CONFIG_MODE,
+    CONF_DEVICE_ID,
     CONF_DEVICE_NAME,
     CONF_DEVICE_TYPE,
     CONF_DEVICES,
-    CONFIG_MODE_CLIMATE,
-    CONFIG_MODE_MANUAL,
     CONF_DISTRICT,
-    CONF_ENTITY_OUTDOOR_TEMP,
     CONF_EMAIL,
+    CONF_ENTITY_BATTERY_MODE,
+    CONF_ENTITY_BATTERY_POWER_SETPOINT,
     CONF_ENTITY_CHARGE_MODE,
     CONF_ENTITY_CLIMATE,
-    CONF_ENTITY_WATER_HEATER,
     CONF_ENTITY_CONTROL,
+    CONF_ENTITY_CONTROL_HOLD,
+    CONF_ENTITY_COOL_CONTROL,
+    CONF_ENTITY_CURRENT_TEMP,
+    CONF_ENTITY_ENERGY_DISCHARGED_TOTAL,
+    CONF_ENTITY_ENERGY_TOTAL,
+    CONF_ENTITY_OUTDOOR_TEMP,
     CONF_ENTITY_POWER,
     CONF_ENTITY_POWER_2,
     CONF_ENTITY_SOC,
     CONF_ENTITY_VEHICLE_STATUS,
-    CONF_ENTITY_CURRENT_TEMP,
-    CONF_ENTITY_ENERGY_TOTAL,
-    CONF_ENTITY_ENERGY_DISCHARGED_TOTAL,
+    CONF_ENTITY_WALLBOX_PHASE_MODE,
+    CONF_ENTITY_WATER_HEATER,
     CONF_PAIRING_CODE,
     CONF_REFRESH_TOKEN,
     CONF_REGION,
-    GERMAN_STATES,
+    CONF_SETUP_MODE,
+    CONF_SHARES_HARDWARE_WITH,
     CONF_USER_ID,
-    CONF_ENTITY_CONTROL_HOLD,
-    CONF_VALUE_OFF,
-    CONF_VALUE_ON,
-    CONF_VEHICLE_STATUS_VALUE_PLUGGED,
-    CONF_VEHICLE_STATUS_VALUE_UNPLUGGED,
-    CONF_VEHICLE_STATUS_VALUE_ERROR,
-    CONF_CHARGE_MODE_VALUE_LOCK,
-    CONF_CHARGE_MODE_VALUE_POWER,
-    CONF_CHARGE_MODE_VALUE_SOLAR,
-    CONF_ENTITY_WALLBOX_PHASE_MODE,
-    CONF_VALUE_WALLBOX_PHASE_1,
-    CONF_VALUE_WALLBOX_PHASE_3,
-    CONF_ENTITY_BATTERY_MODE,
     CONF_VALUE_BATTERY_MODE_ACTIVE,
     CONF_VALUE_BATTERY_MODE_PASSIVE,
-    CONF_ENTITY_BATTERY_POWER_SETPOINT,
-    CONF_BATTERY_SETPOINT_INVERT_SIGN,
-    CONF_SHARES_HARDWARE_WITH,
-    CONF_ENTITY_COOL_CONTROL,
-    CONF_VALUE_COOL_ON,
     CONF_VALUE_COOL_OFF,
-    CONF_SETUP_MODE,
-    SETUP_MODE_AUTO,
-    SETUP_MODE_MANUAL,
-    HEURISTIC_ACCEPT,
-    MAPPING_LLM_ENABLED,
-    ENTITY_CONTROL_HOLD_AUTO,
+    CONF_VALUE_COOL_ON,
+    CONF_VALUE_OFF,
+    CONF_VALUE_ON,
+    CONF_VALUE_WALLBOX_PHASE_1,
+    CONF_VALUE_WALLBOX_PHASE_3,
+    CONF_VEHICLE_STATUS_VALUE_ERROR,
+    CONF_VEHICLE_STATUS_VALUE_PLUGGED,
+    CONF_VEHICLE_STATUS_VALUE_UNPLUGGED,
+    CONFIG_MODE_CLIMATE,
+    CONFIG_MODE_MANUAL,
     CONTROLLABLE_TYPES,
     DEFAULT_API_URL,
     DEVICE_TYPES,
     DOMAIN,
+    ENTITY_CONTROL_HOLD_AUTO,
+    GERMAN_STATES,
+    HEURISTIC_ACCEPT,
+    MAPPING_LLM_ENABLED,
+    SETUP_MODE_AUTO,
+    SETUP_MODE_MANUAL,
     USER_AGENT,
 )
 from .device_field_spec import build_payload
-from .http_client import async_create_client
 from .entity_mapper import DeviceGroup, discover_devices, discover_devices_with_llm
+from .http_client import async_create_client
 from .preset_spec import (
     PRESET_CAPABLE_TYPES,
     extract_preset_maps,
@@ -87,7 +87,29 @@ _LOGGER = logging.getLogger(__name__)
 
 
 # ── Helpers extracted to sibling modules (#50 god-file split) ──────────────
-from .config_flow_schemas import (
+from .config_flow_mapping import (
+    _apply_climate_first,
+    _auto_fill_binary_vehicle_status,
+    _build_device_record,
+    _flatten_sections,
+    _is_binary_entity,
+    _remove_ha_device,
+)
+from .config_flow_presets import (
+    CONFIG_MODE_TYPES,
+    _apply_preset_config_mode,
+    _picked_preset_maps,
+    _preset_entities_defaults,
+    _preset_step_defaults,
+    _preset_suggests_battery_control,
+)
+
+# Re-exported (defined in config_flow_schemas) so `config_flow._ENTITY_SELECTORS`
+# stays the documented SSOT access point (#46) and the selector-contract tests
+# keep importing it from here.
+from .config_flow_schemas import (  # noqa: F401
+    _ENTITY_SELECTORS,
+    _READ_FIELDS,
     DEVICE_TYPE_LABELS_DE,
     _battery_values_schema,
     _charge_mode_values_schema,
@@ -100,32 +122,9 @@ from .config_flow_schemas import (
     _vehicle_status_schema,
     _vendor_preset_pick_schema,
 )
-# Re-exported (defined in config_flow_schemas) so `config_flow._ENTITY_SELECTORS`
-# stays the documented SSOT access point (#46) and the selector-contract tests
-# keep importing it from here.
-from .config_flow_schemas import (  # noqa: F401
-    _ENTITY_SELECTORS,
-    _READ_FIELDS,
-)
-from .config_flow_presets import (
-    CONFIG_MODE_TYPES,
-    _apply_preset_config_mode,
-    _picked_preset_maps,
-    _preset_entities_defaults,
-    _preset_step_defaults,
-    _preset_suggests_battery_control,
-)
-from .config_flow_mapping import (
-    _apply_climate_first,
-    _auto_fill_binary_vehicle_status,
-    _build_device_record,
-    _flatten_sections,
-    _is_binary_entity,
-    _remove_ha_device,
-)
 
 # Device types that the Crowdergy app can switch on/off through the
-# user-mapped entity_control. CN-13 (2026-06-11): SSOT liegt jetzt in
+# user-mapped entity_control. SSOT liegt jetzt in
 # const.py (CONTROLLABLE_TYPES); Alias bleibt für die ~10 Call-Sites.
 _CONTROLLABLE_TYPES = CONTROLLABLE_TYPES
 
@@ -144,7 +143,7 @@ async def _fetch_vendor_presets(
     backend-seitig). Bei Netzwerk-/Backend-Fehler: leere Liste, der
     aufrufende Step skipt den Picker und geht direkt zu device_entities.
 
-    CN-12 (2026-06-11): läuft über `_authenticated_config_request`
+    läuft über `_authenticated_config_request`
     (401-Refresh + Client-Bau im Executor statt im Event-Loop). Im
     Options-Flow `entry` übergeben; im Initial-Flow (vor Entry-
     Existenz) explizite `api_url`/`token`-Credentials.
@@ -163,7 +162,7 @@ async def _fetch_vendor_presets(
     presets = (data.get("presets") or []) if isinstance(data, dict) else []
     if not isinstance(presets, list):
         return []
-    # CN-14 (2026-06-11): Pflichtkeys defensiv prüfen — ein Preset
+    # Pflichtkeys defensiv prüfen — ein Preset
     # ohne vendor/model crasht sonst den Picker
     # (`_vendor_preset_pick_schema` indiziert beide hart).
     out: list[dict[str, Any]] = []
@@ -217,12 +216,12 @@ async def _register_device(
 ) -> dict[str, Any]:
     """Register a device on the backend and return the full device dict.
 
-    Payload-Konstruktion läuft seit 2026-06-03 über das zentrale
+    Payload-Konstruktion läuft über das zentrale
     `device_field_spec.SPEC` — siehe `device_field_spec.py`. Beide
     Pfade (POST hier, PUT in `_update_device_backend`) konsumieren
     dieselbe Spec, damit Field-Drift ausgeschlossen ist.
 
-    CN-12 (2026-06-11): POST läuft über `_authenticated_config_request`
+    POST läuft über `_authenticated_config_request`
     (401-Refresh + Client-Bau im Executor). `entry=None` + explizite
     Credentials nur für den Initial-Flow vor Entry-Existenz.
     """
@@ -256,7 +255,7 @@ async def _update_device_backend(
     device_name: str,
     entity_input: dict[str, Any] | None = None,
 ) -> None:
-    """PUT eines Devices ans Backend. Payload kommt seit 2026-06-03
+    """PUT eines Devices ans Backend. Payload kommt
     aus dem zentralen `device_field_spec.SPEC` — vorher hatte die
     Update-Funktion ihre eigene Conditional-Liste, die mit der
     Create-Liste auseinandergedriftet ist (siehe Bug-Audit-Bericht
@@ -264,7 +263,7 @@ async def _update_device_backend(
     ans Backend; aircon `included_in_haushalt` fiel beim Edit
     silent auf False).
 
-    CN-12 (2026-06-11): PUT über `_authenticated_config_request`.
+    PUT über `_authenticated_config_request`.
     """
     payload = build_payload(
         mode="update",
@@ -331,7 +330,9 @@ async def _resolve_location_defaults(hass) -> dict[str, str]:
                 return str(value)
         return ""
 
-    district = _pick(["suburb", "city_district", "borough", "quarter", "neighbourhood", "residential"])
+    district = _pick(
+        ["suburb", "city_district", "borough", "quarter", "neighbourhood", "residential"]
+    )
     city = _pick(["city", "town", "village", "municipality"])
     region = _pick(["state", "region"])
 
@@ -410,7 +411,7 @@ async def _authenticated_config_request(
     short-lived). Persists rotated tokens back into the config
     entry so the next call starts from the new pair.
 
-    CN-12 (2026-06-11): `entry=None` + explizite `api_url`/
+    `entry=None` + explizite `api_url`/
     `access_token` für Flows VOR Entry-Existenz (Initial-Flow).
     Dort kein 401-Retry — der Token ist Sekunden alt und ein
     Refresh würde das Token-Paar rotieren, ohne dass es irgendwo
@@ -480,13 +481,13 @@ class CrowdergyConfigFlow(ConfigFlow, domain=DOMAIN):
         self._pending_config_mode: str = CONFIG_MODE_MANUAL
         # Entity-mapping kept between step 2 and step 3 (values).
         self._pending_entity_input: dict[str, Any] | None = None
-        # FEAT-1 v0.1 (2026-06-09): wenn der User im
+        # FEAT-1 v0.1: wenn der User im
         # `vendor_preset_pick`-Step ein Crowd-Beitrag-Preset
         # übernimmt, landen die Entity-IDs hier und füllen den
         # `device_entities`-Step als Suggested-Defaults vor. None =
         # User skipped Preset oder es gab keine.
         self._pending_preset_entity_map: dict[str, str] | None = None
-        # Mapping-Store (2026-06-11): value_map des gewählten Presets —
+        # Mapping-Store: value_map des gewählten Presets —
         # integrationsspezifische Werte (Select-Optionen, Flags) als
         # Defaults für die nachgelagerten Werte-Steps.
         self._pending_preset_value_map: dict[str, str] | None = None
@@ -541,7 +542,7 @@ class CrowdergyConfigFlow(ConfigFlow, domain=DOMAIN):
 
             if not errors and tokens is not None:
                 user_id = str(tokens.get("user_id", "") or "")
-                # P3 (2026-06-11): unique_id = user_id → derselbe Account
+                # P3: unique_id = user_id → derselbe Account
                 # kann kein Duplikat-Entry werden (Token-Tausch = Reauth).
                 if user_id:
                     await self.async_set_unique_id(user_id)
@@ -609,7 +610,7 @@ class CrowdergyConfigFlow(ConfigFlow, domain=DOMAIN):
             return self.async_abort(reason="invalid_provision_data")
 
         await self.async_set_unique_id(data[CONF_USER_ID])
-        # CN-2 (2026-06-11): Re-Pairing-Pfad (Entry existiert schon).
+        # Re-Pairing-Pfad (Entry existiert schon).
         # Vorher liefen nur die Token-/URL-Updates über
         # `_abort_if_unique_id_configured(updates=...)` — die frisch
         # erfassten Consent-Flags aus dem Box-Wizard gingen verloren
@@ -645,7 +646,7 @@ class CrowdergyConfigFlow(ConfigFlow, domain=DOMAIN):
     async def async_step_reauth(
         self, entry_data: dict[str, Any]
     ) -> ConfigFlowResult:
-        """CN-11 (2026-06-11): Reauth-Einstieg. Getriggert vom SSE-
+        """CN-11: Reauth-Einstieg. Getriggert vom SSE-
         Client via `entry.async_start_reauth(hass)` wenn das Token-
         Paar nach SSE_AUTH_FAILURE_LIMIT 401-Zyklen endgültig tot ist."""
         return await self.async_step_reauth_confirm()
@@ -653,7 +654,7 @@ class CrowdergyConfigFlow(ConfigFlow, domain=DOMAIN):
     async def async_step_reauth_confirm(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
-        """Reauth per Pairing-Code (#39, 2026-06-16): der User erzeugt in
+        """Reauth per Pairing-Code: der User erzeugt in
         der App einen frischen Code (funktioniert für Sign-in-with-Apple +
         widerrufene Sessions). Ein Code für ein ANDERES Konto wird
         abgelehnt (`reauth_account_mismatch`) ohne fremde Tokens zu
@@ -790,8 +791,14 @@ class CrowdergyConfigFlow(ConfigFlow, domain=DOMAIN):
                     vol.Required(CONF_SETUP_MODE, default=SETUP_MODE_AUTO): selector.SelectSelector(
                         selector.SelectSelectorConfig(
                             options=[
-                                {"value": SETUP_MODE_AUTO, "label": "Auto-Setup — Geräte automatisch erkennen"},
-                                {"value": SETUP_MODE_MANUAL, "label": "Manuell — Geräte selbst anlegen"},
+                                {
+                                    "value": SETUP_MODE_AUTO,
+                                    "label": "Auto-Setup — Geräte automatisch erkennen",
+                                },
+                                {
+                                    "value": SETUP_MODE_MANUAL,
+                                    "label": "Manuell — Geräte selbst anlegen",
+                                },
                             ],
                             mode=selector.SelectSelectorMode.LIST,
                             translation_key=CONF_SETUP_MODE,
@@ -819,7 +826,7 @@ class CrowdergyConfigFlow(ConfigFlow, domain=DOMAIN):
                 )
             else:
                 groups = await discover_devices(self.hass)
-        except Exception:   # noqa: BLE001 — Heuristik darf den Flow nie blockieren
+        except Exception:  # Heuristik darf den Flow nie blockieren
             _LOGGER.exception("Auto-Discover failed, falling back to manual flow")
             groups = []
 
@@ -949,7 +956,7 @@ class CrowdergyConfigFlow(ConfigFlow, domain=DOMAIN):
                 vol.Optional(dtype, default=section_defaults)
             ] = section(vol.Schema(section_schema), {"collapsed": False})
 
-            confidence_pct = int(round(group.avg_confidence * 100))
+            confidence_pct = round(group.avg_confidence * 100)
             marker = "✓" if group.avg_confidence >= HEURISTIC_ACCEPT else "?"
             type_label = DEVICE_TYPE_LABELS_DE.get(dtype, dtype)
             summary_lines.append(
@@ -1023,7 +1030,7 @@ class CrowdergyConfigFlow(ConfigFlow, domain=DOMAIN):
     async def async_step_vendor_preset_pick(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
-        """FEAT-1 v0.1 (2026-06-09): zeigt verfügbare Hersteller-Presets
+        """FEAT-1 v0.1: zeigt verfügbare Hersteller-Presets
         für den aktuellen Device-Type. User wählt entweder ein Preset
         (Entity-IDs werden im nächsten Step vorausgefüllt) oder
         „Manuell konfigurieren" → klassischer Flow."""
@@ -1127,7 +1134,7 @@ class CrowdergyConfigFlow(ConfigFlow, domain=DOMAIN):
             )
             return await self._dispatch_post_entities(entity_input)
 
-        # FEAT-1 v0.1 (2026-06-09): wenn der User im vorigen Step ein
+        # FEAT-1 v0.1: wenn der User im vorigen Step ein
         # Hersteller-Preset ausgewählt hat, sind die Entity-IDs in
         # `_pending_preset_entity_map` und werden als Suggested-Defaults
         # ans Schema übergeben. _entities_schema rendert sie als
@@ -1257,7 +1264,7 @@ class CrowdergyConfigFlow(ConfigFlow, domain=DOMAIN):
             entity_input[CONF_CHARGE_MODE_VALUE_SOLAR] = user_input.get(
                 CONF_CHARGE_MODE_VALUE_SOLAR, ""
             )
-            # Phasen-Werte (2026-07-19): nur relevant wenn die Phasen-
+            # Phasen-Werte: nur relevant wenn die Phasen-
             # Entity gemappt ist; leere Strings sind sonst harmlos.
             entity_input[CONF_VALUE_WALLBOX_PHASE_1] = user_input.get(
                 CONF_VALUE_WALLBOX_PHASE_1, ""
@@ -1517,11 +1524,11 @@ class CrowdergyOptionsFlow(OptionsFlow):
         self._edit_pending_type: str | None = None
         self._edit_pending_name: str | None = None
         self._edit_pending_entity_input: dict[str, Any] | None = None
-        # FEAT-1 Sprint C v0.1 (2026-06-09): scratch für Crowd-
+        # FEAT-1 Sprint C v0.1: scratch für Crowd-
         # Contribution-Step. Hält die device_id zwischen Device-Picker-
         # Step und dem Vendor/Model-Form-Step.
         self._contribute_target_id: str | None = None
-        # FEAT-1 v0.2 (2026-06-09): Vendor-Preset-Pickup auch im
+        # FEAT-1 v0.2: Vendor-Preset-Pickup auch im
         # Options-Flow-Add. Spiegel der entsprechenden Attrs im
         # CrowdergyConfigFlow — Picker zeigt Presets aus dem Backend,
         # gewählte Entity-IDs landen als suggested_values im
@@ -1539,7 +1546,7 @@ class CrowdergyOptionsFlow(OptionsFlow):
     async def async_step_init(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
-        # FEAT-1 v0.3 (2026-06-09): „Grundeinstellungen" als Top-
+        # FEAT-1 v0.3: „Grundeinstellungen" als Top-
         # Eintrag (Ort + Außentemp gebündelt, ersetzt
         # edit_outdoor_temp). Reihenfolge: erst Grundkonfig, dann
         # Devices, dann Crowd-Beitrag.
@@ -1556,7 +1563,6 @@ class CrowdergyOptionsFlow(OptionsFlow):
         )
 
     # ── Crowd-Contribution (FEAT-1 Sprint C, 2026-06-09) ───────────────────
-    #
     # User submittet ein bereits konfiguriertes Device als Vendor-Preset.
     # v0.2 (Mapping-Store 2026-06-11): alle preset-fähigen Typen aus dem
     # Mapping-Dictionary (preset_spec.PRESET_SLOT_SPEC) statt solar-only.
@@ -1602,7 +1608,7 @@ class CrowdergyOptionsFlow(OptionsFlow):
         options = {
             d[CONF_DEVICE_ID]: (
                 f"{d.get(CONF_DEVICE_NAME, d[CONF_DEVICE_ID])} "
-                f"({DEVICE_TYPE_LABELS_DE.get(d.get(CONF_DEVICE_TYPE, ''), d.get(CONF_DEVICE_TYPE, ''))})"
+                f"({DEVICE_TYPE_LABELS_DE.get(d.get(CONF_DEVICE_TYPE, ''), d.get(CONF_DEVICE_TYPE, ''))})"  # noqa: E501
             )
             for d in candidates
         }
@@ -1647,7 +1653,7 @@ class CrowdergyOptionsFlow(OptionsFlow):
             if dev is None:
                 return self.async_abort(reason="contribute_device_missing")
 
-            # Mapping-Store (2026-06-11): Slot-Extraktion strikt über
+            # Mapping-Store: Slot-Extraktion strikt über
             # die Spec (preset_spec.PRESET_SLOT_SPEC, Vertrag:
             # docs/crowd-preset-store.md) — entity_map (Entity-Slots) +
             # value_map (integrationsspezifische Werte/Flags). Nichts
@@ -1706,7 +1712,7 @@ class CrowdergyOptionsFlow(OptionsFlow):
             identity_map = entity_identity_map(self.hass, entity_map)
             if identity_map:
                 payload["entity_identity_map"] = identity_map
-            # CN-12 (2026-06-11): über `_authenticated_config_request`
+            # über `_authenticated_config_request`
             # (401-Refresh + Client-Bau im Executor). CN-14: auch das
             # JSON-Parsing defensiv — ValueError landet im selben
             # User-Fehlerpfad statt den Flow zu crashen.
@@ -1743,7 +1749,7 @@ class CrowdergyOptionsFlow(OptionsFlow):
     async def async_step_edit_base_settings(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
-        """FEAT-1 v0.3 (2026-06-09): „Grundeinstellungen" — kombiniert
+        """FEAT-1 v0.3: „Grundeinstellungen" — kombiniert
         Ort (district / city / region) und Außentemperatur-Sensor in
         einem Step. Ersetzt das vorige `edit_outdoor_temp` und macht
         den Ort nachträglich editierbar (der frühere Onboarding-Flow
@@ -2030,7 +2036,7 @@ class CrowdergyOptionsFlow(OptionsFlow):
             entity_input[CONF_CHARGE_MODE_VALUE_SOLAR] = user_input.get(
                 CONF_CHARGE_MODE_VALUE_SOLAR, ""
             )
-            # Phasen-Werte (2026-07-19): nur relevant wenn die Phasen-
+            # Phasen-Werte: nur relevant wenn die Phasen-
             # Entity gemappt ist; leere Strings sind sonst harmlos.
             entity_input[CONF_VALUE_WALLBOX_PHASE_1] = user_input.get(
                 CONF_VALUE_WALLBOX_PHASE_1, ""
@@ -2196,7 +2202,7 @@ class CrowdergyOptionsFlow(OptionsFlow):
         )
 
     async def _persist_devices(self, devices: list[dict[str, Any]]) -> None:
-        """CN-7 (2026-06-11): Geräteliste SOFORT nach jeder Add/Edit/
+        """CN-7: Geräteliste SOFORT nach jeder Add/Edit/
         Remove-Operation in den Entry schreiben + Reload (Muster:
         `box_add_device`). Vorher persistierte erst der „Fertig"-Step
         einen Flow-Start-Snapshot — Dialog-Abbruch nach einer Operation
@@ -2277,7 +2283,10 @@ class CrowdergyOptionsFlow(OptionsFlow):
         options = [
             selector.SelectOptionDict(
                 value=d[CONF_DEVICE_ID],
-                label=f"{d[CONF_DEVICE_NAME]} ({DEVICE_TYPE_LABELS_DE.get(d[CONF_DEVICE_TYPE], d[CONF_DEVICE_TYPE])})",
+                label=(
+                    f"{d[CONF_DEVICE_NAME]} "
+                    f"({DEVICE_TYPE_LABELS_DE.get(d[CONF_DEVICE_TYPE], d[CONF_DEVICE_TYPE])})"
+                ),
             )
             for d in self._devices
         ]
@@ -2464,7 +2473,7 @@ class CrowdergyOptionsFlow(OptionsFlow):
             entity_input[CONF_CHARGE_MODE_VALUE_SOLAR] = user_input.get(
                 CONF_CHARGE_MODE_VALUE_SOLAR, ""
             )
-            # Phasen-Werte (2026-07-19): nur relevant wenn die Phasen-
+            # Phasen-Werte: nur relevant wenn die Phasen-
             # Entity gemappt ist; leere Strings sind sonst harmlos.
             entity_input[CONF_VALUE_WALLBOX_PHASE_1] = user_input.get(
                 CONF_VALUE_WALLBOX_PHASE_1, ""
@@ -2736,7 +2745,11 @@ class CrowdergyOptionsFlow(OptionsFlow):
             errors["base"] = "cannot_connect"
             return self.async_show_form(
                 step_id="edit_device_entities",
-                data_schema=_entities_schema(device_type, defaults=target, config_mode=target.get(CONF_DEVICE_CONFIG_MODE) or CONFIG_MODE_MANUAL),
+                data_schema=_entities_schema(
+                    device_type,
+                    defaults=target,
+                    config_mode=target.get(CONF_DEVICE_CONFIG_MODE) or CONFIG_MODE_MANUAL,
+                ),
                 description_placeholders={
                     "device_type": DEVICE_TYPE_LABELS_DE.get(device_type, device_type),
                     "device_name": device_name,
@@ -2784,7 +2797,10 @@ class CrowdergyOptionsFlow(OptionsFlow):
         options = [
             selector.SelectOptionDict(
                 value=d[CONF_DEVICE_ID],
-                label=f"{d[CONF_DEVICE_NAME]} ({DEVICE_TYPE_LABELS_DE.get(d[CONF_DEVICE_TYPE], d[CONF_DEVICE_TYPE])})",
+                label=(
+                    f"{d[CONF_DEVICE_NAME]} "
+                    f"({DEVICE_TYPE_LABELS_DE.get(d[CONF_DEVICE_TYPE], d[CONF_DEVICE_TYPE])})"
+                ),
             )
             for d in self._devices
         ]
@@ -2807,7 +2823,7 @@ class CrowdergyOptionsFlow(OptionsFlow):
     async def async_step_done(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
-        # CN-7 (2026-06-11): reiner Menü-Exit. Persistenz + Reload
+        # reiner Menü-Exit. Persistenz + Reload
         # passieren seit CN-7 unmittelbar nach jeder Add/Edit/Remove-
         # Operation (`_persist_devices`) — der frühere Snapshot-
         # Writeback hier hat zwischenzeitliche Änderungen anderer

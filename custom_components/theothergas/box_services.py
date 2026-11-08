@@ -108,9 +108,9 @@ def _get_entry(hass: HomeAssistant) -> ConfigEntry:
         raise HomeAssistantError(
             "no Crowdergy config entry — pair the box first (provision_box)"
         )
-    # CN-9 (2026-06-11): vorher blind entries[0] — bei mehreren
-    # Entries (sollte auf einer Box nie passieren) wäre das ein
-    # stilles Raten auf den falschen Account. Eindeutigkeit erzwingen.
+    # Bei mehreren Entries (sollte auf einer Box nie passieren) wäre
+    # entries[0] ein stilles Raten auf den falschen Account —
+    # Eindeutigkeit erzwingen.
     if len(entries) > 1:
         raise HomeAssistantError(
             "multiple Crowdergy config entries found — box services "
@@ -167,7 +167,7 @@ def async_register_box_services(hass: HomeAssistant) -> None:
             raise HomeAssistantError(
                 f"preset lookup failed: {response.status_code}"
             )
-        # CN-14 (2026-06-11): Server-Antwort defensiv parsen — kaputtes
+        # Server-Antwort defensiv parsen — kaputtes
         # JSON / unerwartete Shapes dürfen den Service nicht mit einem
         # rohen Traceback crashen, und Presets ohne vendor/model würden
         # downstream (GUI-Picker, config_flow-Schema) hart indexiert.
@@ -226,7 +226,7 @@ def async_register_box_services(hass: HomeAssistant) -> None:
                 f"backend device registration failed: {response.status_code}"
             )
 
-        # CN-14 (2026-06-11): json() + `id` defensiv — Antwort ohne id
+        # json() + `id` defensiv — Antwort ohne id
         # hieße ein Device, das backend-seitig existiert, lokal aber
         # nie ankommt; sauberer Fehler statt KeyError-Traceback.
         try:

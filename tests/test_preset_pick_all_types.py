@@ -206,7 +206,10 @@ async def test_climate_control_on_warmwater_stays_manual(hass: HomeAssistant):
 def test_preset_config_mode_per_type():
     assert _preset_config_mode("heating", {"entity_control": "climate.wp"}) == CONFIG_MODE_CLIMATE
     assert _preset_config_mode("aircon", {"entity_control": "climate.ac"}) == CONFIG_MODE_CLIMATE
-    assert _preset_config_mode("warmwater", {"entity_control": "water_heater.w"}) == CONFIG_MODE_CLIMATE
+    assert (
+        _preset_config_mode("warmwater", {"entity_control": "water_heater.w"})
+        == CONFIG_MODE_CLIMATE
+    )
     assert _preset_config_mode("heating", {"entity_control": "select.sg"}) == CONFIG_MODE_MANUAL
     assert _preset_config_mode("heating", {}) == CONFIG_MODE_MANUAL
 

@@ -35,8 +35,9 @@ Pro Feld zwei Regeln (`on_create` + `on_update`):
 """
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any, Callable
+from typing import Any
 
 from .const import (
     CONF_CHARGE_MODE_VALUE_LOCK,
@@ -50,8 +51,6 @@ from .const import (
     CONF_ENTITY_COOL_CONTROL,
     CONF_ENTITY_WALLBOX_CHARGE_CURRENT,
     CONF_ENTITY_WALLBOX_PHASE_MODE,
-    CONF_VALUE_WALLBOX_PHASE_1,
-    CONF_VALUE_WALLBOX_PHASE_3,
     CONF_REGION,
     CONF_SHARES_HARDWARE_WITH,
     CONF_SUPPORTS_COOLING,
@@ -60,9 +59,10 @@ from .const import (
     CONF_VALUE_COOL_OFF,
     CONF_VALUE_COOL_ON,
     CONF_VALUE_OFF,
+    CONF_VALUE_WALLBOX_PHASE_1,
+    CONF_VALUE_WALLBOX_PHASE_3,
     CONTROLLABLE_TYPES,
 )
-
 
 # ── DeviceField ──────────────────────────────────────────────────────────────
 
@@ -118,7 +118,7 @@ def _compute_supports_charge_current(
 def _compute_supports_phase_switching(
     entity_input: dict[str, Any], dtype: str
 ) -> bool:
-    """1/3-Phasen-Umschalt-Capability (2026-07-19) = Phasen-Select-Entity
+    """1/3-Phasen-Umschalt-Capability = Phasen-Select-Entity
     UND beide Options-Strings („nur 1"/„nur 3") UND die Ladestrom-Entity
     gemappt. Alle drei nötig: ohne Werte kann der Connector das
     `phases`-Command-Feld nicht anwenden, ohne Ladestrom gibt es keinen
@@ -255,7 +255,7 @@ SPEC: tuple[DeviceField, ...] = (
         on_create="always", on_update="always",
     ),
 
-    # Wallbox-Ladestrom-Capability (2026-06-20): abgeleitetes Bool ob
+    # Wallbox-Ladestrom-Capability: abgeleitetes Bool ob
     # der User eine Ladestrom-Number-Entity gemappt hat. `always` in
     # beide Richtungen — Clearen der Entity sendet False → Backend
     # fällt auf die Binär-Box (volle Leistung) zurück.
@@ -265,7 +265,7 @@ SPEC: tuple[DeviceField, ...] = (
         on_create="always", on_update="always",
         compute=_compute_supports_charge_current,
     ),
-    # 1/3-Phasen-Umschalt-Capability (2026-07-19): abgeleitetes Bool ob
+    # 1/3-Phasen-Umschalt-Capability: abgeleitetes Bool ob
     # Phasen-Entity + beide Werte + Ladestrom-Entity gemappt sind.
     # `always` in beide Richtungen — Clearen sendet False → Backend
     # fällt auf den 3-Phasen-Floor (~4,1 kW) zurück.
