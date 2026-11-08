@@ -2633,23 +2633,6 @@ class CrowdergyOptionsFlow(OptionsFlow):
         config_mode = (
             target.get(CONF_DEVICE_CONFIG_MODE) or CONFIG_MODE_MANUAL
         )
-        # v3.4.7 + v3.4.8 Legacy-/Reparatur-Auto-Migration: zwei Fälle
-        # sind hier dasselbe Symptom:
-        #   1) pre-v3.0-Entries hatten kein CONF_DEVICE_CONFIG_MODE
-        #      gespeichert → falsy
-        #   2) post-v3.0 Bug bis v3.4.7: Edit-Save überschrieb MODE auf
-        #      "manual" weil entity_input das Feld nicht trug → truthy
-        #      aber semantisch falsch
-        # In beiden Fällen: wenn entity_control auf climate.* zeigt, ist
-        # das Device tatsächlich climate-mode → cool-Feld muss in den
-        # Values-Step rein. _entities_schema macht die identische
-        # Migration für den Entity-Step (line 442-461).
-        if config_mode != CONFIG_MODE_CLIMATE:
-            legacy_ctrl = entity_control or target.get(CONF_ENTITY_CONTROL, "")
-            if isinstance(legacy_ctrl, str) and legacy_ctrl.startswith(
-                "climate."
-            ):
-                config_mode = CONFIG_MODE_CLIMATE
         # aircon: cooling immer aktiv. heating: nur im Climate-Mode.
         include_cooling = device_type == "aircon" or (
             device_type == "heating" and config_mode == CONFIG_MODE_CLIMATE

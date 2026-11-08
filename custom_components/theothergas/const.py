@@ -300,10 +300,6 @@ CONF_SHARES_HARDWARE_WITH = "shares_hardware_with_device_id"
 #                      that hold fine; rescues those that don't.
 # "never"            — write once, leave it alone. For low-traffic
 #                      Modbus setups; assumes the device sticks.
-# Legacy `auto` values stored in old config entries collapse to
-# `always` at load time (see `_start_hold`) — we used to have a
-# release-after-stable-checks third mode but it never paid off
-# against the simple-and-safe periodic rewrite.
 CONF_ENTITY_CONTROL_HOLD = "entity_control_hold"
 # Drei Modi für die Steuer-Entitäts-Hold-Loop (gilt für entity_control
 # bei heating/warmwater/generic und für entity_charge_mode bei wallbox/
