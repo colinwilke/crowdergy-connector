@@ -1808,7 +1808,7 @@ class CrowdergyOptionsFlow(OptionsFlow):
                 await _push_location_backend(
                     self.hass, self._entry, device_ids, new_data,
                 )
-            except Exception:  # noqa: BLE001 — surfaced as form error
+            except Exception:  # surfaced as form error, never blocks the save
                 _LOGGER.warning(
                     "Location saved locally but not synced to backend",
                     exc_info=True,
