@@ -278,6 +278,30 @@ async def _update_device_backend(
     response.raise_for_status()
 
 
+async def _push_location_backend(
+    hass, entry, device_ids: list[str], location: dict[str, str],
+) -> None:
+    """PUT district/city/region onto every existing backend device.
+
+    The SPEC sends the location only on create (`on_update="skip"`), so
+    devices created before the location was saved keep an empty one
+    forever — and the Crowdwerk aggregates drop devices without a
+    location. The backend PUT is partial (`exclude_unset`), so only
+    these three fields change.
+    """
+    payload = {
+        "district": location.get(CONF_DISTRICT, ""),
+        "city": location.get(CONF_CITY, ""),
+        "region": location.get(CONF_REGION, ""),
+    }
+    for device_id in device_ids:
+        response = await _authenticated_config_request(
+            hass, entry, "PUT", f"/api/v1/devices/{device_id}",
+            json=payload,
+        )
+        response.raise_for_status()
+
+
 async def _resolve_location_defaults(hass) -> dict[str, str]:
     """Best-effort defaults for the district/city/region form fields.
 
@@ -1759,6 +1783,7 @@ class CrowdergyOptionsFlow(OptionsFlow):
         Hauptmenü. Leeres outdoor-temp-Feld setzt das Mapping zurück
         → Backend nutzt Open-Meteo-Fallback für deinen Stadtteil.
         """
+        errors: dict[str, str] = {}
         if user_input is not None:
             new_data = {
                 **self._entry.data,
@@ -1772,7 +1797,25 @@ class CrowdergyOptionsFlow(OptionsFlow):
             self.hass.config_entries.async_update_entry(
                 self._entry, data=new_data,
             )
-            return await self.async_step_init()
+            # Existing devices got their location at create time only —
+            # push the saved one so the backend never lags the entry.
+            device_ids = [
+                d[CONF_DEVICE_ID]
+                for d in new_data.get(CONF_DEVICES, [])
+                if d.get(CONF_DEVICE_ID)
+            ]
+            try:
+                await _push_location_backend(
+                    self.hass, self._entry, device_ids, new_data,
+                )
+            except Exception:  # noqa: BLE001 — surfaced as form error
+                _LOGGER.warning(
+                    "Location saved locally but not synced to backend",
+                    exc_info=True,
+                )
+                errors["base"] = "cannot_connect"
+            else:
+                return await self.async_step_init()
 
         current_district = self._entry.data.get(CONF_DISTRICT, "")
         current_city = self._entry.data.get(CONF_CITY, "")
@@ -1806,6 +1849,7 @@ class CrowdergyOptionsFlow(OptionsFlow):
         region_key, region_selector = _region_selector_field(current_region)
         return self.async_show_form(
             step_id="edit_base_settings",
+            errors=errors,
             data_schema=vol.Schema(
                 {
                     _str_field(CONF_DISTRICT, current_district): str,
