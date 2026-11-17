@@ -789,6 +789,7 @@ class CommandDispatcherMixin:
             # übernimmt PV-Native-Priority.
             self._cancel_charge_mode_hold(device_id)
             self._stop_battery_pv_follow(device_id, reason="AI aus")
+            self._stop_battery_load_follow(device_id, reason="AI aus")
             await self._apply_battery_setpoint(
                 device_id, "passive", 0.0,
             )
@@ -926,6 +927,9 @@ class CommandDispatcherMixin:
                     device_id, COMMAND_LEASE_TTL_S,
                 )
                 self._stop_battery_pv_follow(device_id, reason="Lease abgelaufen")
+                self._stop_battery_load_follow(
+                    device_id, reason="Lease abgelaufen",
+                )
                 await self._apply_battery_setpoint(device_id, "passive", 0.0)
             elif dev_type == "wallbox":
                 solar_value = (
