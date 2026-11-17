@@ -15,6 +15,7 @@ from homeassistant.core import Event, HomeAssistant, callback
 from homeassistant.helpers.event import async_track_state_change_event
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 
+from .battery_load_follow import BatteryLoadFollowMixin
 from .battery_pv_follow import BatteryPvFollowMixin
 from .command_dispatcher import CommandDispatcherMixin
 from .const import (
@@ -210,6 +211,7 @@ def _jwt_exp(token: str) -> float | None:
 class CrowdergyCoordinator(
     PvFollowMixin,
     BatteryPvFollowMixin,
+    BatteryLoadFollowMixin,
     CommandDispatcherMixin,
     TelemetryReaderMixin,
     DataUpdateCoordinator[dict[str, dict[str, Any]]],
@@ -737,6 +739,7 @@ class CrowdergyCoordinator(
         # #292: lokale PV-Regler.
         self._cancel_pv_follow_all()
         self._cancel_battery_pv_follow_all()
+        self._cancel_battery_load_follow_all()
         for task in list(self.state.charge_mode_lease_tasks.values()):
             task.cancel()
         self.state.charge_mode_lease_tasks.clear()

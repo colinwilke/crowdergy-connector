@@ -37,6 +37,7 @@ import time
 from dataclasses import dataclass
 from typing import Any
 
+from .battery_load_follow import BatteryLoadFollowParams
 from .const import CONF_DEVICE_TYPE
 
 _LOGGER = logging.getLogger(__name__)
@@ -165,12 +166,24 @@ class BatteryPvFollowMixin:
     async def _handle_battery_command(
         self, device_id: str, data: dict[str, Any]
     ) -> None:
-        """Akku-``set_charge_mode``: mit ``pv_follow`` Regler starten bzw.
-        erneuern, sonst einen laufenden Regler beenden. Danach den
+        """Akku-``set_charge_mode``: mit ``pv_follow`` (Laden) bzw.
+        ``load_follow`` (Entladen, backend#495) den lokalen Regler starten
+        bzw. erneuern, sonst einen laufenden Regler beenden. Danach den
         Befehl wie gehabt anwenden."""
         mode = data.get("mode") or "passive"
         raw_sp = data.get("setpoint_kw")
         setpoint_kw = float(raw_sp) if raw_sp is not None else 0.0
+        load_params = (
+            BatteryLoadFollowParams.from_frame(data.get("load_follow"))
+            if mode == "discharge" else None
+        )
+        if load_params is not None:
+            self._stop_battery_pv_follow(device_id, reason="Solver-Dispatch")
+            await self._start_battery_load_follow(
+                device_id, load_params, abs(setpoint_kw),
+            )
+            return
+        self._stop_battery_load_follow(device_id, reason="Solver-Dispatch")
         params = (
             BatteryPvFollowParams.from_frame(data.get("pv_follow"))
             if mode == "charge" else None
