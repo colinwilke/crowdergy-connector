@@ -23,6 +23,7 @@ import httpx
 from .const import (
     CHARGE_MODE_HOLD_INITIAL_DELAY,
     CHARGE_MODE_HOLD_INTERVAL,
+    CHARGE_MODE_HOLD_MAX_BACKOFF,
     COMMAND_LEASE_TTL_S,
     CONF_BATTERY_SETPOINT_INVERT_SIGN,
     CONF_CHARGE_MODE_VALUE_SOLAR,
@@ -697,8 +698,29 @@ class CommandDispatcherMixin:
                 )
                 ok = False
         except Exception as err:
-            _LOGGER.exception("set_charge_mode service call failed: %s", err)
+            # Ein nicht antwortendes Ziel-Gerät scheitert bei jedem
+            # Hold-Tick erneut: nur der erste Fehlschlag einer Serie
+            # trägt den Traceback, Folgefehler sind ein Einzeiler.
+            streak = self.state.charge_mode_fail_streak.get(device_id, 0) + 1
+            self.state.charge_mode_fail_streak[device_id] = streak
+            if streak == 1:
+                _LOGGER.exception(
+                    "set_charge_mode service call failed: %s", err
+                )
+            else:
+                _LOGGER.warning(
+                    "set_charge_mode service call still failing for %s "
+                    "(%d in a row): %s", entity_id, streak, err,
+                )
             ok = False
+        else:
+            if domain in ("select", "input_select", "number", "input_number"):
+                streak = self.state.charge_mode_fail_streak.pop(device_id, 0)
+                if streak:
+                    _LOGGER.warning(
+                        "set_charge_mode: %s reachable again after %d "
+                        "failed writes", entity_id, streak,
+                    )
 
         if schedule_hold:
             self._start_charge_mode_hold(device_id)
@@ -848,6 +870,7 @@ class CommandDispatcherMixin:
         self.state.held_charge_mode.pop(device_id, None)
         self.state.held_charge_current.pop(device_id, None)
         self.state.held_charge_phases.pop(device_id, None)
+        self.state.charge_mode_fail_streak.pop(device_id, None)
         task = self.state.charge_mode_hold_tasks.pop(device_id, None)
         if task is not None and not task.done():
             task.cancel()
@@ -1019,7 +1042,11 @@ class CommandDispatcherMixin:
                     charge_current_a=held_current,
                     charge_phases=held_phases,
                 )
-                await asyncio.sleep(CHARGE_MODE_HOLD_INTERVAL)
+                streak = self.state.charge_mode_fail_streak.get(device_id, 0)
+                await asyncio.sleep(min(
+                    CHARGE_MODE_HOLD_INTERVAL * 2 ** min(streak, 10),
+                    CHARGE_MODE_HOLD_MAX_BACKOFF,
+                ))
         except asyncio.CancelledError:
             raise
         except Exception:

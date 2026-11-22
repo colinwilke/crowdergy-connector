@@ -421,6 +421,11 @@ HOLD_POLL_INTERVAL = 30
 # debounce-after-write rhythm stays consistent.
 CHARGE_MODE_HOLD_INITIAL_DELAY = 10
 CHARGE_MODE_HOLD_INTERVAL = 15
+# Schlägt der Modus-Write fehl (Ziel-Gerät antwortet nicht), verdoppelt
+# der Hold seinen Abstand je Fehlschlag bis zu diesem Deckel, statt im
+# 15-s-Takt gegen ein totes Gerät zu schreiben. Der erste gelungene
+# Write setzt die Kadenz zurück.
+CHARGE_MODE_HOLD_MAX_BACKOFF = 300
 
 # v2.4.2: safety guard. If no SSE event (ping or data) has arrived in
 # this many seconds, the hold-loop assumes Crowdergy is offline or

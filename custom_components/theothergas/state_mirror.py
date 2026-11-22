@@ -41,6 +41,11 @@ class DeviceStateMirror:
     # für den charge_mode_hold_loop.
     held_charge_mode: dict[str, str] = field(default_factory=dict)
 
+    # Aufeinanderfolgende fehlgeschlagene Modus-Writes pro Device. Steuert
+    # den Backoff des charge_mode_hold_loop und die Log-Drosselung in
+    # `_apply_charge_mode`; der erste gelungene Write löscht den Eintrag.
+    charge_mode_fail_streak: dict[str, int] = field(default_factory=dict)
+
     # Letzter Wallbox-Ladestrom (ganze Ampere) pro Device, den der
     # Solver im „An"/Power-Modus gewählt hat. Wird vom charge_mode_hold_
     # loop zusammen mit dem Modus re-geschrieben (manche Boxen resetten

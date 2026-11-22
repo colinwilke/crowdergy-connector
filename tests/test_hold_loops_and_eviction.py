@@ -42,6 +42,9 @@ from pytest_homeassistant_custom_component.common import (
 )
 
 from custom_components.theothergas.const import (
+    CHARGE_MODE_HOLD_INITIAL_DELAY,
+    CHARGE_MODE_HOLD_INTERVAL,
+    CHARGE_MODE_HOLD_MAX_BACKOFF,
     COMMAND_LEASE_TTL_S,
     CONF_CHARGE_MODE_VALUE_SOLAR,
     CONF_DEVICE_ID,
@@ -775,3 +778,95 @@ async def test_sse_command_with_ai_on_still_holds(hass: HomeAssistant):
     assert len(calls) == 1
     assert coord.state.held_charge_mode["w1"] == "Power Mode"
     coord._start_charge_mode_hold.assert_called_once_with("w1")
+
+
+# ════════════════════════════════════════════════════════════════════
+# Fehlgeschlagene Modus-Writes: Backoff im Hold + gedrosseltes Log.
+# Feldfall: die Ziel-API antwortete stundenlang nicht, der Hold schrieb
+# im 15-s-Takt weiter und loggte je Tick einen vollen Traceback.
+# ════════════════════════════════════════════════════════════════════
+
+
+def _recording_sleep(delays: list, max_calls: int):
+    state = {"n": 0}
+
+    async def _sleep(delay):
+        delays.append(delay)
+        state["n"] += 1
+        if state["n"] >= max_calls:
+            raise _StopHold
+
+    return _sleep
+
+
+async def test_charge_mode_hold_loop_backs_off_while_writes_fail(
+    hass: HomeAssistant,
+):
+    """Jeder Fehlschlag verdoppelt den Abstand bis zum Deckel; ein
+    gelungener Write stellt die 15-s-Kadenz wieder her."""
+    coord = make_coordinator(hass, [])
+    coord.state.held_charge_mode["w1"] = "Lock Mode"
+    coord.state.last_sse_event_at = time.time()
+    outcomes = iter([False] * 6 + [True])
+
+    async def _apply(device_id, *_a, **_kw):
+        if next(outcomes):
+            coord.state.charge_mode_fail_streak.pop(device_id, None)
+        else:
+            coord.state.charge_mode_fail_streak[device_id] = (
+                coord.state.charge_mode_fail_streak.get(device_id, 0) + 1
+            )
+
+    coord._apply_charge_mode = _apply
+    delays: list = []
+
+    with patch(_SLEEP, _recording_sleep(delays, 8)):
+        await _run_until_stopped(coord._charge_mode_hold_loop("w1"))
+
+    assert delays == [
+        CHARGE_MODE_HOLD_INITIAL_DELAY, 30, 60, 120, 240,
+        CHARGE_MODE_HOLD_MAX_BACKOFF, CHARGE_MODE_HOLD_MAX_BACKOFF,
+        CHARGE_MODE_HOLD_INTERVAL,
+    ]
+
+
+async def test_apply_charge_mode_logs_traceback_only_for_first_failure(
+    hass: HomeAssistant, caplog,
+):
+    """Erster Fehlschlag einer Serie: ERROR mit Traceback. Folgefehler:
+    WARNING-Einzeiler. Erster Erfolg: Serie gelöscht, Rückkehr gemeldet."""
+    coord = make_coordinator(hass, [_wallbox_device()])
+    coord.state.active_state["w1"] = True
+    coord.state.last_sse_event_at = time.time()
+    fail = {"on": True}
+
+    async def _select_option(call):
+        if fail["on"]:
+            raise RuntimeError("Timeout when calling resource")
+
+    hass.services.async_register("select", "select_option", _select_option)
+
+    with caplog.at_level("DEBUG"):
+        assert await coord._apply_charge_mode(
+            "w1", "Lock Mode", schedule_hold=False) is False
+        assert await coord._apply_charge_mode(
+            "w1", "Lock Mode", schedule_hold=False) is False
+        assert coord.state.charge_mode_fail_streak["w1"] == 2
+        fail["on"] = False
+        assert await coord._apply_charge_mode(
+            "w1", "Lock Mode", schedule_hold=False) is True
+
+    failed = [r for r in caplog.records if "service call" in r.getMessage()]
+    assert [(r.levelname, bool(r.exc_info)) for r in failed] == [
+        ("ERROR", True), ("WARNING", False),
+    ]
+    assert "w1" not in coord.state.charge_mode_fail_streak
+    assert any("reachable again after 2" in r.getMessage()
+               for r in caplog.records)
+
+
+def test_cancel_charge_mode_hold_clears_fail_streak(hass: HomeAssistant):
+    coord = make_coordinator(hass, [])
+    coord.state.charge_mode_fail_streak["w1"] = 4
+    coord._cancel_charge_mode_hold("w1")
+    assert "w1" not in coord.state.charge_mode_fail_streak

@@ -744,6 +744,7 @@ class CrowdergyCoordinator(
             task.cancel()
         self.state.charge_mode_lease_tasks.clear()
         self.state.held_charge_mode.clear()
+        self.state.charge_mode_fail_streak.clear()
         self.state.held_charge_current.clear()
         self.state.held_charge_phases.clear()
         # `_client` ist bis `async_init()` None —
