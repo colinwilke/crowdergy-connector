@@ -48,6 +48,9 @@ Menschen lesen Ziele, Entscheidungen und Ergebnisse — keine Arbeitsschritte.
   andere merged Colin.
 - **Wochenbericht** sonntags: live gegangen · wartet auf Merge · wartet auf
   Entscheidung · Auffälligkeiten im Feld.
+- **Chat mit Colin/Udo:** nur die Essenz — was getan ist und was von ihnen
+  gebraucht wird. Keine Arbeitsschritte, keine Routine-Checks, keine
+  Wartezustände (CI, Reviews); Rückfragen als Auswahl-Dialog.
 
 ## Zusammenarbeit (Colin + Udo, seit 2026-09-04)
 
