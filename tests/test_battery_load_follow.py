@@ -108,8 +108,19 @@ def test_between_stop_threshold_and_minimum_holds_the_minimum():
 
 def test_restart_needs_buffer_over_the_window():
     run = _run(setpoint_kw=0.0)
-    assert _feed(run, [0.6] * 6) == [None] * 6  # unter min + Puffer
+    assert _feed(run, [0.55] * 6) == [None] * 6  # unter Stopp + Puffer
     assert _feed(run, [0.8] * 5, t0=2000.0)[-1] == 0.8
+
+
+def test_restart_between_stop_threshold_and_minimum_power():
+    """Feld 22.11.: Stopp-Schwelle 0,23 kW, Hauslast 0,45 kW, Mindest-
+    leistung 0,5 kW. Nach einem Stopp muss der Regler wieder anlaufen —
+    mit der Mindestleistung."""
+    params = BatteryLoadFollowParams.from_frame({**LF, "stop_below_kw": 0.23})
+    run = _run(setpoint_kw=0.0, params=params)
+    assert _feed(run, [0.45] * 5)[-1] == 0.5
+    run = _run(setpoint_kw=0.0, params=params)
+    assert _feed(run, [0.30] * 6) == [None] * 6  # in der Hysterese
 
 
 def test_missing_measurement_stops_at_once_and_restarts_the_window():
