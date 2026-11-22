@@ -16,10 +16,41 @@ Verträge: `docs/crowd-preset-store.md`, `docs/house-consumption-chart.md`,
 | Verträge/Specs | `<repo>/docs/` | contract-first bei Cross-Repo-Änderungen |
 | Historie | `git log`, PRs, geschlossene Issues, Release-Notes | nicht in Markdown wiederholen |
 
-Wer im Code oder in Markdown einen offenen Punkt findet: Issue im
-Backend-Repo anlegen, nicht hier notieren (dieses Repo ist **public** —
+Wer im Code oder in Markdown einen offenen Punkt findet: ein Kommentar im
+Fundus der Kategorie (s. Arbeitsmodell), kein eigenes Issue und keine Notiz (dieses Repo ist **public** —
 keine internen Details in eigenen Issues/PR-Texten). Alte Backlog-Nummern
 in Kommentaren: Mapping in colinwilke/crowdergy-backend#257.
+
+## Arbeitsmodell (seit 2026-11-22)
+
+Menschen lesen Ziele, Entscheidungen und Ergebnisse — keine Arbeitsschritte.
+
+- **Kurs:** höchstens 3 Ziele je sechs Wochen in colinwilke/crowdergy-backend#530. Begonnen wird nur, was
+  auf ein Kurs-Ziel einzahlt oder ein Feldfehler ist.
+- **Fundus statt Issue:** Befund, Idee oder Aufräumarbeit = **ein Kommentar**
+  im Sammel-Issue „Fundus NN …“ der Kategorie (colinwilke/crowdergy-backend#519–#529, Label `Fundus`): ein
+  Satz Wirkung + Beleg. Ein eigenes Issue entsteht nur, wenn ein Mensch es
+  anlegt, ein Feldfehler gerade einen Testhaushalt trifft oder Colin eine
+  Fundus-Zeile befördert.
+- **Pflichtkopf jedes Issues** (Vorlage im Backend-Repo,
+  `.github/ISSUE_TEMPLATE/`): Was merkt der Nutzer · Vorschlag ·
+  Entscheidung · Aufwand/Risiko · Beleg — in Alltagssprache; Technik
+  darunter in `<details>`. Titel = Wirkung, ≤ 80 Zeichen.
+- **Entscheidungen an Colin:** Label `Entscheidung`, mit Optionen,
+  Empfehlung und Folge von „nichts tun“; höchstens 5 offen.
+- **Obergrenzen:** Label `Jetzt` ≤ 10 Issues. Warten mehr als 5 PRs auf
+  Colin, beginnt Claude nichts Neues, sondern macht die wartenden merge-reif.
+- **PRs beginnen mit der Ergebnis-Karte**
+  (`.github/pull_request_template.md`): Nutzerwirkung, Beleg, Risiko,
+  Zurückdrehen.
+- **Auto-Merge:** in von Colin gestarteten Sessions darf Claude bei grünem
+  CI selbst mergen, wenn der PR **ausschließlich** Doku (`*.md`) oder Tests (`tests/`) ändert. Alles
+  andere merged Colin.
+- **Wochenbericht** sonntags: live gegangen · wartet auf Merge · wartet auf
+  Entscheidung · Auffälligkeiten im Feld.
+- **Chat mit Colin/Udo:** nur die Essenz — was getan ist und was von ihnen
+  gebraucht wird. Keine Arbeitsschritte, keine Routine-Checks, keine
+  Wartezustände (CI, Reviews); Rückfragen als Auswahl-Dialog.
 
 ## Zusammenarbeit (Colin + Udo, seit 2026-09-04)
 
