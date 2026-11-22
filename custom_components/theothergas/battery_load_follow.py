@@ -19,7 +19,9 @@ Regeln:
   * Läuft: Setpoint ``min(Mittel, max_kw)``, mindestens ``min_kw``. Fällt
     das Mittel unter ``stop_below_kw`` (Default ``min_kw``), geht er auf
     Setpoint 0 (Aktiv-Modus: hält, entlädt nicht). Steht: Start mit
-    Mittel ≥ ``min_kw`` + Puffer.
+    Mittel ≥ ``stop_below_kw`` + Puffer — dieselbe Schwelle, die ihn
+    angehalten hat, plus Hysterese; nicht ``min_kw``, sonst bliebe er bei
+    einer Last zwischen Stopp-Schwelle und Mindestleistung stehen.
   * Fehlt eine Messung oder ist sie eingefroren: sofort Setpoint 0, das
     Fenster beginnt neu.
   * Schreibt über `_apply_battery_setpoint` — Consent, Write-Breaker und
@@ -47,7 +49,8 @@ BATTERY_LOAD_FOLLOW_INTERVAL_S = 15.0
 # Mittelungs-Fenster des Defizits: der Regler folgt einer Last, die anhält,
 # nicht einem einzelnen Messwert.
 BATTERY_LOAD_FOLLOW_AVG_S = 60.0
-BATTERY_LOAD_FOLLOW_START_BUFFER_KW = 0.2
+# Hysterese über der Stopp-Schwelle für den Wiederanlauf.
+BATTERY_LOAD_FOLLOW_START_BUFFER_KW = 0.1
 BATTERY_LOAD_FOLLOW_STEP_KW = 0.05
 BATTERY_LOAD_FOLLOW_WRITE_STEP_KW = 0.1
 # Das Backend erneuert die Freigabe jeden Solver-Tick (15 min).
@@ -149,8 +152,8 @@ def decide_discharge(
     if mean is None:
         return None
     if not run.running:
-        if mean >= p.min_kw + BATTERY_LOAD_FOLLOW_START_BUFFER_KW:
-            target = _grid(min(mean, p.max_kw))
+        if mean >= p.stop_below_kw + BATTERY_LOAD_FOLLOW_START_BUFFER_KW:
+            target = _grid(min(max(mean, p.min_kw), p.max_kw))
             return target if target > 0.0 else None
         return None
     if mean < p.stop_below_kw:
