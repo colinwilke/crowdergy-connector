@@ -65,6 +65,28 @@ from .preset_spec import PRESET_VALUE_SLOTS
 
 _BERLIN = ZoneInfo("Europe/Berlin")
 
+# Kanäle der Schreibzähler (`write_counts`-Telemetrie): Rollenname des
+# geschriebenen Slots, nie eine Entity-ID. Form ^[a-z][a-z0-9_]{0,31}$,
+# höchstens 16 je Gerät; `starts`/`current_changes` sind reserviert.
+WRITE_CHANNEL_CONTROL = "control"
+WRITE_CHANNEL_COOL_CONTROL = "cool_control"
+WRITE_CHANNEL_ECO = "eco"
+WRITE_CHANNEL_CHARGE_MODE = "charge_mode"
+WRITE_CHANNEL_CHARGE_CURRENT = "charge_current"
+WRITE_CHANNEL_CHARGE_PHASES = "charge_phases"
+WRITE_CHANNEL_BATTERY_MODE = "battery_mode"
+WRITE_CHANNEL_BATTERY_SETPOINT = "battery_setpoint"
+WRITE_CHANNELS: tuple[str, ...] = (
+    WRITE_CHANNEL_CONTROL,
+    WRITE_CHANNEL_COOL_CONTROL,
+    WRITE_CHANNEL_ECO,
+    WRITE_CHANNEL_CHARGE_MODE,
+    WRITE_CHANNEL_CHARGE_CURRENT,
+    WRITE_CHANNEL_CHARGE_PHASES,
+    WRITE_CHANNEL_BATTERY_MODE,
+    WRITE_CHANNEL_BATTERY_SETPOINT,
+)
+
 
 
 _LOGGER = logging.getLogger(__name__)
@@ -602,6 +624,7 @@ class CommandDispatcherMixin:
                     phase_entity, phase_value, int(charge_phases),
                 )
                 try:
+                    self._count_write(device_id, WRITE_CHANNEL_CHARGE_PHASES)
                     await self.hass.services.async_call(
                         phase_domain, "select_option",
                         {"entity_id": phase_entity, "option": phase_value},
@@ -635,17 +658,15 @@ class CommandDispatcherMixin:
                     current_entity, int(charge_current_a),
                 )
                 try:
+                    # (#135) Ampere gegen die Grenzen der Number-Entity
+                    # klemmen (Box-Rating).
+                    current_value = int(self._clamp_write_value(
+                        current_entity, cur_domain, float(charge_current_a),
+                    ))
+                    self._count_write(device_id, WRITE_CHANNEL_CHARGE_CURRENT)
                     await self.hass.services.async_call(
                         cur_domain, "set_value",
-                        {
-                            "entity_id": current_entity,
-                            # (#135) Ampere gegen die Grenzen der
-                            # Number-Entity klemmen (Box-Rating).
-                            "value": int(self._clamp_write_value(
-                                current_entity, cur_domain,
-                                float(charge_current_a),
-                            )),
-                        },
+                        {"entity_id": current_entity, "value": current_value},
                         blocking=True,
                     )
                 except Exception as err:
@@ -660,6 +681,7 @@ class CommandDispatcherMixin:
                 # gleiche Bezugsgroesse wie beim entity_control, damit die
                 # Wirkungs-Kontrolle fuer ALLE Geraetetypen dieselbe ist.
                 self.state.last_written_value[device_id] = str(mode)
+                self._count_write(device_id, WRITE_CHANNEL_CHARGE_MODE)
                 await self.hass.services.async_call(
                     domain, "select_option",
                     {"entity_id": entity_id, "option": mode},
@@ -686,6 +708,7 @@ class CommandDispatcherMixin:
                     entity_id, domain, value, device_id=device_id,
                 )
                 self.state.last_written_value[device_id] = str(value)
+                self._count_write(device_id, WRITE_CHANNEL_CHARGE_MODE)
                 await self.hass.services.async_call(
                     domain, "set_value",
                     {"entity_id": entity_id, "value": value},
@@ -1073,6 +1096,38 @@ class CommandDispatcherMixin:
         new_data[device_id] = new_bucket
         self.async_set_updated_data(new_data)
 
+    # ── Schreibzähler (rein beobachtend) ────────────────────
+
+    def _count_write(self, device_id: str | None, channel: str) -> None:
+        """Zählt EINEN Service-Call, der gleich an Home Assistant abgesetzt
+        wird, im Tageszähler des Geräts (`state.write_counts`, Kanal =
+        Rollenname). Steht unmittelbar vor jedem `services.async_call`
+        dieses Moduls — was ein Idempotenz-Guard, der Circuit-Breaker oder
+        ein Budget vorher abfängt, kommt hier nie an. Ein Call, der danach
+        eine Exception wirft, bleibt gezählt: er wurde abgesetzt.
+
+        Rein beobachtend: entscheidet nichts und darf nie einen Write
+        verhindern — ein Fehler im Zähler wird geschluckt."""
+        if not device_id:
+            return
+        try:
+            self.state.count_write(
+                device_id, channel, datetime.now(_BERLIN).date().isoformat(),
+            )
+        except Exception:  # der Zähler darf keinen Write kosten
+            _LOGGER.debug("write counter failed for %s/%s", device_id, channel)
+
+    def _count_regulator_action(self, device_id: str, key: str) -> None:
+        """Zählt eine geschriebene Aktion des lokalen PV-Reglers der
+        Wallbox (`starts` / `current_changes`). Gleiche Zusage wie
+        `_count_write`: rein beobachtend, nie ein Fehlerpfad."""
+        try:
+            self.state.count_regulator_action(
+                device_id, key, datetime.now(_BERLIN).date().isoformat(),
+            )
+        except Exception:
+            _LOGGER.debug("regulator counter failed for %s/%s", device_id, key)
+
     # ── Sicherheitsbündel #135/#136/#140 ────────────────────
 
     def _write_allowed(self, device_id: str, entity_id: str) -> bool:
@@ -1416,7 +1471,7 @@ class CommandDispatcherMixin:
             )
             await self._write_entity_control(
                 cool_entity, domain, raw_value, cool_on, verbose=True,
-                device_id=device_id,
+                device_id=device_id, channel=WRITE_CHANNEL_COOL_CONTROL,
             )
             return
         # Climate-domain single-entity fallback: heating and cooling
@@ -1467,6 +1522,8 @@ class CommandDispatcherMixin:
             if not self._write_allowed(device_id, heat_entity):  # (#136)
                 return
             try:
+                # Der Kühl-Modus geht auf die Steuer-Entity selbst.
+                self._count_write(device_id, WRITE_CHANNEL_CONTROL)
                 await self.hass.services.async_call(
                     "climate", "set_hvac_mode",
                     {"entity_id": heat_entity, "hvac_mode": mode},
@@ -1544,6 +1601,7 @@ class CommandDispatcherMixin:
                     device_id, current_mode, passive_val,
                 )
                 try:
+                    self._count_write(device_id, WRITE_CHANNEL_BATTERY_MODE)
                     await self.hass.services.async_call(
                         mode_entity.split(".", 1)[0], "select_option",
                         {"entity_id": mode_entity, "option": passive_val},
@@ -1583,6 +1641,7 @@ class CommandDispatcherMixin:
                     device_id, setpoint_entity, target_w, mode, invert,
                 )
                 try:
+                    self._count_write(device_id, WRITE_CHANNEL_BATTERY_SETPOINT)
                     await self.hass.services.async_call(
                         setpoint_entity.split(".", 1)[0], "set_value",
                         {"entity_id": setpoint_entity, "value": target_w},
@@ -1607,6 +1666,7 @@ class CommandDispatcherMixin:
                 device_id, current_mode, active_val,
             )
             try:
+                self._count_write(device_id, WRITE_CHANNEL_BATTERY_MODE)
                 await self.hass.services.async_call(
                     mode_entity.split(".", 1)[0], "select_option",
                     {"entity_id": mode_entity, "option": active_val},
@@ -1715,6 +1775,7 @@ class CommandDispatcherMixin:
         *,
         verbose: bool,
         device_id: str | None = None,
+        channel: str = WRITE_CHANNEL_CONTROL,
     ) -> None:
         """Single domain-dispatched write to a HA entity_control entity.
         Shared by the apply-on-transition path (`_apply_device_state`,
@@ -1730,6 +1791,9 @@ class CommandDispatcherMixin:
         Breaker scharf (Zähler je Entity/Stunde) und stempelt den
         eigenen Write für die #140-Übersteuerungs-Erkennung. Alle
         Produktions-Caller reichen ihn durch.
+
+        `channel`: Kanal des Schreibzählers für diesen Slot (`control`,
+        für die eigene Kühl-Entity `cool_control`) — rein beobachtend.
         """
         if device_id is not None and not self._write_allowed(
             device_id, entity_id
@@ -1760,6 +1824,7 @@ class CommandDispatcherMixin:
                         "on", "true", "1", "yes", "an",
                     )
                     service = "turn_on" if want_on else "turn_off"
+                self._count_write(device_id, channel)
                 await self.hass.services.async_call(
                     domain, service, {"entity_id": entity_id}, blocking=True,
                 )
@@ -1773,19 +1838,21 @@ class CommandDispatcherMixin:
                     )
                 return
             if domain in ("number", "input_number"):
+                # (#135) gegen die Entity-Grenzen klemmen — der
+                # Config-Flow begrenzt nur die EINGABE, nicht was
+                # berechnet/konfiguriert ankommt.
+                number_value = self._clamp_write_value(
+                    entity_id, domain, float(raw_value),
+                    device_id=device_id,
+                )
+                self._count_write(device_id, channel)
                 await self.hass.services.async_call(
                     domain, "set_value",
-                    {"entity_id": entity_id,
-                     # (#135) gegen die Entity-Grenzen klemmen — der
-                     # Config-Flow begrenzt nur die EINGABE, nicht was
-                     # berechnet/konfiguriert ankommt.
-                     "value": self._clamp_write_value(
-                         entity_id, domain, float(raw_value),
-                         device_id=device_id,
-                     )},
+                    {"entity_id": entity_id, "value": number_value},
                     blocking=True,
                 )
             elif domain in ("select", "input_select"):
+                self._count_write(device_id, channel)
                 await self.hass.services.async_call(
                     domain, "select_option",
                     {"entity_id": entity_id, "option": str(raw_value)},
@@ -1799,18 +1866,20 @@ class CommandDispatcherMixin:
                     # set_temperature. Die WP entscheidet Laufzeit/Takten
                     # selbst; es gibt in diesem Modus KEIN hartes
                     # set_hvac_mode("off") / set_operation_mode("off").
+                    # (#135) min_temp/max_temp der Entity gewinnen über
+                    # den konfigurierten Zielwert.
+                    temperature = self._clamp_write_value(
+                        entity_id, domain, float(raw_value),
+                        device_id=device_id,
+                    )
+                    self._count_write(device_id, channel)
                     await self.hass.services.async_call(
                         domain, "set_temperature",
-                        {"entity_id": entity_id,
-                         # (#135) min_temp/max_temp der Entity gewinnen
-                         # über den konfigurierten Zielwert.
-                         "temperature": self._clamp_write_value(
-                             entity_id, domain, float(raw_value),
-                             device_id=device_id,
-                         )},
+                        {"entity_id": entity_id, "temperature": temperature},
                         blocking=True,
                     )
                 elif domain == "climate":
+                    self._count_write(device_id, channel)
                     await self.hass.services.async_call(
                         domain, "set_hvac_mode",
                         {"entity_id": entity_id, "hvac_mode": str(raw_value)},
@@ -1823,6 +1892,7 @@ class CommandDispatcherMixin:
                     # "electric" / "off" — the user maps these via
                     # value_on / value_off in the device_values step just
                     # like with climate.
+                    self._count_write(device_id, channel)
                     await self.hass.services.async_call(
                         domain, "set_operation_mode",
                         {"entity_id": entity_id, "operation_mode": str(raw_value)},
@@ -1948,6 +2018,7 @@ class CommandDispatcherMixin:
             )
         self._note_own_value(eco_entity, value, before=actual, written=True)
         try:
+            self._count_write(device_id, WRITE_CHANNEL_ECO)
             await self.hass.services.async_call(
                 domain, service, data, blocking=True,
             )

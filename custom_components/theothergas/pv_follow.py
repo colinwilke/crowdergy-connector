@@ -57,6 +57,7 @@ from .const import (
     CONF_INVERT_POWER_SIGN,
     SSE_STALE_THRESHOLD_S,
 )
+from .state_mirror import WRITE_COUNT_CURRENT_CHANGES, WRITE_COUNT_STARTS
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -511,6 +512,12 @@ class PvFollowMixin:
                 run.charging = True
                 run.switched_at = now
             run.amps = amps
+            # Schreibzähler (rein beobachtend): die Aktion ist geschrieben.
+            self._count_regulator_action(
+                device_id,
+                WRITE_COUNT_STARTS if action == "start"
+                else WRITE_COUNT_CURRENT_CHANGES,
+            )
         elif action == "stop":
             _LOGGER.warning(
                 "pv_follow %s: stop (Überschuss %s kW, gesteckt=%s)",

@@ -4,7 +4,15 @@ testbaren Wrapper (Soll-Zustände, Hold-Tasks, Leases, Uhren, Zähler).
 from __future__ import annotations
 
 import asyncio
+import copy
 from dataclasses import dataclass, field
+from typing import Any
+
+# Zähler des lokalen PV-Reglers einer Wallbox im Tagesbericht
+# `write_counts`: geschriebene Ladestarts und Stromänderungen.
+WRITE_COUNT_STARTS = "starts"
+WRITE_COUNT_CURRENT_CHANGES = "current_changes"
+WRITE_COUNT_REGULATOR_KEYS = (WRITE_COUNT_STARTS, WRITE_COUNT_CURRENT_CHANGES)
 
 
 @dataclass
@@ -146,3 +154,40 @@ class DeviceStateMirror:
         default_factory=dict
     )
     day_budget_logged: set[str] = field(default_factory=set)
+
+    # Schreibzähler je Gerät und Berlin-Kalendertag (rein beobachtend,
+    # kein Budget, kein Guard): device_id → {"day": ISO-Datum,
+    # "channels": {Kanal: Anzahl}, optional "starts" /
+    # "current_changes" (lokaler PV-Regler der Wallbox)}. Kanal ist der
+    # Rollenname des geschriebenen Slots, nie eine Entity-ID. Kumulativ
+    # für den Tag, nur im Arbeitsspeicher — ein Neustart beginnt bei 0.
+    write_counts: dict[str, dict[str, Any]] = field(default_factory=dict)
+
+    def _write_count_record(self, device_id: str, day: str) -> dict[str, Any]:
+        rec = self.write_counts.get(device_id)
+        if rec is None or rec.get("day") != day:
+            # Erster Write des Geräts oder Tageswechsel: neuer Tag, bei 0.
+            rec = self.write_counts[device_id] = {"day": day, "channels": {}}
+        return rec
+
+    def count_write(self, device_id: str, channel: str, day: str) -> None:
+        """Einen abgesetzten Service-Call auf `channel` zählen."""
+        channels = self._write_count_record(device_id, day)["channels"]
+        channels[channel] = channels.get(channel, 0) + 1
+
+    def count_regulator_action(self, device_id: str, key: str, day: str) -> None:
+        """Eine geschriebene Aktion des lokalen PV-Reglers zählen
+        (`key` ∈ WRITE_COUNT_REGULATOR_KEYS). Ab der ersten Aktion des
+        Tages stehen beide Zähler im Bericht — der andere mit 0."""
+        if key not in WRITE_COUNT_REGULATOR_KEYS:
+            raise ValueError(f"unknown regulator counter: {key}")
+        rec = self._write_count_record(device_id, day)
+        for name in WRITE_COUNT_REGULATOR_KEYS:
+            rec.setdefault(name, 0)
+        rec[key] += 1
+
+    def write_counts_snapshot(self, device_id: str) -> dict[str, Any] | None:
+        """Kopie des Tagesstands in der Form des Telemetrie-Felds
+        `write_counts`, oder None, wenn für das Gerät nichts gezählt ist."""
+        rec = self.write_counts.get(device_id)
+        return None if rec is None else copy.deepcopy(rec)
