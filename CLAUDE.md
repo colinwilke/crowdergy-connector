@@ -180,6 +180,14 @@ Kuration bleiben im Backend, Box-Know-how im privaten Box-Repo.
   `_with_effect_slot()` an **jedem** Steuer-Typ; gemeldet wird erst, was
   `CONTROL_EFFECT_MIN_MISMATCH_S` anhält; unlesbarer Sensor = keine
   Aussage.
+- **Schreibzähler (rein beobachtend):** vor jedem `services.async_call`
+  steht `_count_write(device_id, <Kanal>)` — Kanal = Rollenname aus
+  `WRITE_CHANNELS`, nie eine Entity-ID; neue Schreibstellen nur in
+  `command_dispatcher.py` (Wächter: `tests/test_write_counts.py`). Der
+  Zähler entscheidet nichts und darf nie einen Write kosten. Der
+  Tagesstand geht als kumulatives `write_counts` im Telemetrie-PATCH mit
+  (eigene 5-min-Uhr in `_should_send`, nicht im Mirror, nicht im
+  Payload-Hash).
 - **Schreib-Circuit-Breaker** `_write_allowed` (500/h je Entity) sitzt an
   jedem Write-Pfad. **Übersteuerungs-Erkennung nur im AUTO-Hold**
   (ALWAYS ist für Auto-Reset-Register): Drift ohne eigenen Write in
