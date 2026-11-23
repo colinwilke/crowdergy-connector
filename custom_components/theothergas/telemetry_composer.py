@@ -87,6 +87,14 @@ _DELTA_FIELDS = frozenset(
 )
 
 
+# The mirror only refreshes the freshness clock, so it also leaves out
+# the cumulative write counters (`write_counts`). They are no Δ — resending
+# the same value would be harmless — but a replay of an older value that
+# reaches the backend after a newer one reads there as a counter reset and
+# would be added on top. Only the telemetry tick reports them, serialised.
+_MIRROR_SKIP_FIELDS = _DELTA_FIELDS | {"write_counts"}
+
+
 class TelemetryComposer:
     """Owns die langlebigen Background-Tasks die Telemetry zum Backend
     pushen (Heartbeat, Device-Mirror) bzw. Backend-State zurücklesen
@@ -294,7 +302,7 @@ class TelemetryComposer:
                 continue
             mirror = {
                 k: v for k, v in last_payload.items()
-                if k not in _DELTA_FIELDS
+                if k not in _MIRROR_SKIP_FIELDS
             }
             # v3.26.0: skip Mirror, wenn Device backend-seitig weg ist
             if device_id in self.coord._backend_gone_device_ids:

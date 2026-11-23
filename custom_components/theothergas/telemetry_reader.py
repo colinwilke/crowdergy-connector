@@ -18,9 +18,12 @@ keep working.
 from __future__ import annotations
 
 import json
+import logging
 import math
 import time
+from datetime import datetime
 from typing import Any
+from zoneinfo import ZoneInfo
 
 from .const import (
     CONF_DEVICE_ID,
@@ -57,6 +60,10 @@ from .const import (
     temperature_control_value,
 )
 
+_LOGGER = logging.getLogger(__name__)
+
+_BERLIN = ZoneInfo("Europe/Berlin")
+
 PER_DEVICE_HEARTBEAT_INTERVAL = 90.0
 """Soft-Heartbeat (2026-06-01+, C7): nach 90 s wird ein PATCH gesendet
 WENN der payload-Hash sich seit dem letzten Send verändert hat (z.B.
@@ -82,6 +89,17 @@ lassen. Per-Device-Frische auf iOS-Seite kommt NICHT von hier — das
 Pre-v3.4.3 hat hier ein falscher Kommentar suggeriert dass der 25-s
 user-level Heartbeat die device-tiles frisch hält — der refresht aber
 nur `connector_last_seen`, nicht das per-Device telemetry-Timestamp."""
+
+WRITE_COUNTS_FIELD = "write_counts"
+"""Telemetrie-Feld der Schreibzähler (kumulative Tageswerte je Kanal,
+rein beobachtend). Vertrag: Backend `docs/device-write-counts.md`."""
+
+WRITE_COUNTS_REPORT_INTERVAL_S = 300.0
+"""Ein geänderter Schreibzähler allein löst höchstens alle 5 min einen
+PATCH aus. Er fährt in jedem ohnehin fälligen PATCH mit; nur wenn sonst
+keiner fällig wird (ruhendes Gerät, dessen Hold weiterschreibt), meldet
+diese Uhr den neuen Stand. Bewusst kein kategorisches Feld: ein Hold
+zählt alle 15–30 s weiter und würde sonst jeden Tick einen PATCH kosten."""
 
 # Per-field "changed enough to be worth a row" thresholds. When NO
 # field crosses these AND the per-device heartbeat hasn't expired,
@@ -346,8 +364,44 @@ class TelemetryReaderMixin:
         """Stable content-hash für payload-dedup (C7). `json.dumps` mit
         sort_keys + default=str für mixed-type Stabilität; built-in
         hash() ist OK weil wir nur identity-vs-difference brauchen,
-        keine kryptografische Eigenschaft."""
-        return hash(json.dumps(payload, sort_keys=True, default=str))
+        keine kryptografische Eigenschaft.
+
+        Die Schreibzähler (`write_counts`) bleiben außen vor: sie haben
+        in `_should_send` ihre eigene, langsamere Uhr und dürfen den
+        90-s-Soft-Heartbeat nicht auslösen."""
+        return hash(json.dumps(
+            {k: v for k, v in payload.items() if k != WRITE_COUNTS_FIELD},
+            sort_keys=True, default=str,
+        ))
+
+    def _write_counts_field(self, device_id: str) -> dict[str, Any] | None:
+        """Tagesstand der Schreibzähler dieses Geräts für den Telemetrie-
+        PATCH, oder None (= Feld weglassen, „keine Aussage“).
+
+        Gesendet wird der kumulative Stand des laufenden Berlin-Tages.
+        Ohne Schreibzugriff heute gibt es keinen Eintrag und damit kein
+        Feld. Steht noch der Vortag im Zähler (seit Mitternacht kein
+        Write), geht sein Schluss-Stand genau einmal raus, falls er noch
+        nicht gemeldet ist, und wird dann verworfen.
+
+        Ein Fehler hier kostet nie die Messwerte des Ticks: dann fehlt
+        nur das Feld."""
+        try:
+            snapshot = self.state.write_counts_snapshot(device_id)
+            if snapshot is None:
+                return None
+            today = datetime.now(_BERLIN).date().isoformat()
+            if snapshot.get("day") != today:
+                reported = (self._last_sent_payload.get(device_id) or {}).get(
+                    WRITE_COUNTS_FIELD
+                )
+                if snapshot == reported:
+                    self.state.write_counts.pop(device_id, None)
+                    return None
+            return snapshot
+        except Exception:
+            _LOGGER.debug("write counters unreadable for %s", device_id)
+            return None
 
     def _clamped_target(
         self, entity_id: str, domain: str, raw_value: Any
@@ -470,6 +524,15 @@ class TelemetryReaderMixin:
         ):
             if payload.get(key) != prev.get(key):
                 return True
+        # Schreibzähler: ein neuer Stand ist nach
+        # WRITE_COUNTS_REPORT_INTERVAL_S eine Row wert — bis dahin fährt
+        # er nur in einem aus anderem Grund fälligen PATCH mit.
+        if (
+            age >= WRITE_COUNTS_REPORT_INTERVAL_S
+            and payload.get(WRITE_COUNTS_FIELD) is not None
+            and payload.get(WRITE_COUNTS_FIELD) != prev.get(WRITE_COUNTS_FIELD)
+        ):
+            return True
         # Soft heartbeat NUR wenn der payload-Hash sich vom letzten
         # Send unterscheidet — sonst hat der 90s-Tick nichts Neues zu
         # erzählen und wir warten auf den Hard-Ceiling. Spart auf

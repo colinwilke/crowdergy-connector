@@ -80,6 +80,8 @@ from .telemetry_reader import (  # noqa: F401
     IDENTICAL_HEARTBEAT_INTERVAL,
     PER_DEVICE_HEARTBEAT_INTERVAL,
     SEND_THRESHOLDS,
+    WRITE_COUNTS_FIELD,
+    WRITE_COUNTS_REPORT_INTERVAL_S,
     TelemetryReaderMixin,
 )
 
@@ -1128,6 +1130,15 @@ class CrowdergyCoordinator(
                 payload["control_ineffective"] = (
                     self._effective_setpoint_mismatch(dev)
                 )
+
+            # Schreibzähler (rein beobachtend): kumulativer Tagesstand je
+            # Kanal, nur wenn heute geschrieben wurde — ein fehlendes
+            # Feld heißt „keine Aussage“. Betriebsdatum wie
+            # `write_breaker`/`local_override`, fährt im selben PATCH.
+            # `extra="forbid"` am Backend ⇒ Backend VOR Connector-Release.
+            write_counts = self._write_counts_field(device_id)
+            if write_counts is not None:
+                payload[WRITE_COUNTS_FIELD] = write_counts
 
             # Solver-only + Chart-only extras (Vorlauf-Temp, HC-Flow-
             # Sensoren #42, …). JSONB-Bag im Backend; UI bekommt davon
