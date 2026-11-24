@@ -55,14 +55,14 @@ from .const import (
     OPT_CONSENT_TELEMETRY,
 )
 from .pv_follow import (  # noqa: F401 — re-export für Tests (coordinator.<NAME>)
+    PV_FOLLOW_ADJUST_DELAY_S,
+    PV_FOLLOW_ADJUST_UP_MIN_A,
     PV_FOLLOW_INTERVAL_S,
     PV_FOLLOW_MIN_OFF_S,
     PV_FOLLOW_MIN_ON_S,
     PV_FOLLOW_REFRESH_TIMEOUT_S,
     PV_FOLLOW_SENSOR_STALE_S,
     PV_FOLLOW_START_DELAY_S,
-    PV_FOLLOW_ADJUST_DELAY_S,
-    PV_FOLLOW_ADJUST_UP_MIN_A,
     PV_FOLLOW_STOP_DELAY_S,
     PV_FOLLOW_WRITE_RETRY_S,
     PvFollowMixin,
