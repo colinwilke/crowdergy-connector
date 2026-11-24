@@ -51,6 +51,20 @@ Datei ist Ist-Zustand, kein Changelog.
   (#140). Beide Zustände gehen als `write_breaker`/`local_override`
   in die Telemetrie (Backend `/me/health`; Backend MUSS zuerst
   deployed sein — `extra="forbid"`).
+- **Schreibzähler `write_counts`** (rein beobachtend, kein Budget, kein
+  Guard): `command_dispatcher._count_write` zählt jeden an HA abgesetzten
+  Service-Call je Gerät, Kanal (`control`, `cool_control`, `eco`,
+  `charge_mode`, `charge_current`, `charge_phases`, `battery_mode`,
+  `battery_setpoint`) und Berlin-Tag in `DeviceStateMirror.write_counts`
+  (Arbeitsspeicher; Neustart und Tageswechsel beginnen bei 0). Der lokale
+  PV-Regler der Wallbox zählt zusätzlich geschriebene `starts` /
+  `current_changes`. Der Telemetrie-Tick sendet den kumulativen Tagesstand
+  als Feld `write_counts` — nur wenn heute geschrieben wurde; ein
+  geänderter Stand fährt in jedem fälligen PATCH mit und löst allein
+  höchstens alle `WRITE_COUNTS_REPORT_INTERVAL_S` (5 min) einen aus. Der
+  Mirror sendet das Feld nicht. Vertrag: Backend
+  `docs/device-write-counts.md` (Backend MUSS zuerst deployed sein —
+  `extra="forbid"`).
 - **WP-Temperatur-Modus** (heating/warmwater, 2026-07-02): sind
   value_on/value_off NUMERISCH und `entity_control` climate/
   water_heater, schreibt `_apply_device_state` via `set_temperature`

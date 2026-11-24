@@ -17,7 +17,18 @@ from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 
 from .battery_load_follow import BatteryLoadFollowMixin
 from .battery_pv_follow import BatteryPvFollowMixin
-from .command_dispatcher import CommandDispatcherMixin
+from .command_dispatcher import (  # noqa: F401 — re-export (coordinator.<NAME>)
+    WRITE_CHANNEL_BATTERY_MODE,
+    WRITE_CHANNEL_BATTERY_SETPOINT,
+    WRITE_CHANNEL_CHARGE_CURRENT,
+    WRITE_CHANNEL_CHARGE_MODE,
+    WRITE_CHANNEL_CHARGE_PHASES,
+    WRITE_CHANNEL_CONTROL,
+    WRITE_CHANNEL_COOL_CONTROL,
+    WRITE_CHANNEL_ECO,
+    WRITE_CHANNELS,
+    CommandDispatcherMixin,
+)
 from .const import (
     CONF_ACCESS_TOKEN,
     CONF_API_URL,
@@ -54,6 +65,11 @@ from .pv_follow import (  # noqa: F401 — re-export für Tests (coordinator.<NA
     PV_FOLLOW_WRITE_RETRY_S,
     PvFollowMixin,
 )
+from .state_mirror import (  # noqa: F401 — re-export (coordinator.<NAME>)
+    WRITE_COUNT_CURRENT_CHANGES,
+    WRITE_COUNT_REGULATOR_KEYS,
+    WRITE_COUNT_STARTS,
+)
 
 # #21 Phase-C: read/compose/decide helpers live in telemetry_reader now.
 # Re-export the module-level constants so existing `coordinator.<NAME>`
@@ -64,6 +80,8 @@ from .telemetry_reader import (  # noqa: F401
     IDENTICAL_HEARTBEAT_INTERVAL,
     PER_DEVICE_HEARTBEAT_INTERVAL,
     SEND_THRESHOLDS,
+    WRITE_COUNTS_FIELD,
+    WRITE_COUNTS_REPORT_INTERVAL_S,
     TelemetryReaderMixin,
 )
 
@@ -1112,6 +1130,15 @@ class CrowdergyCoordinator(
                 payload["control_ineffective"] = (
                     self._effective_setpoint_mismatch(dev)
                 )
+
+            # Schreibzähler (rein beobachtend): kumulativer Tagesstand je
+            # Kanal, nur wenn heute geschrieben wurde — ein fehlendes
+            # Feld heißt „keine Aussage“. Betriebsdatum wie
+            # `write_breaker`/`local_override`, fährt im selben PATCH.
+            # `extra="forbid"` am Backend ⇒ Backend VOR Connector-Release.
+            write_counts = self._write_counts_field(device_id)
+            if write_counts is not None:
+                payload[WRITE_COUNTS_FIELD] = write_counts
 
             # Solver-only + Chart-only extras (Vorlauf-Temp, HC-Flow-
             # Sensoren #42, …). JSONB-Bag im Backend; UI bekommt davon
