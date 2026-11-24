@@ -61,6 +61,8 @@ from .pv_follow import (  # noqa: F401 — re-export für Tests (coordinator.<NA
     PV_FOLLOW_REFRESH_TIMEOUT_S,
     PV_FOLLOW_SENSOR_STALE_S,
     PV_FOLLOW_START_DELAY_S,
+    PV_FOLLOW_ADJUST_DELAY_S,
+    PV_FOLLOW_ADJUST_UP_MIN_A,
     PV_FOLLOW_STOP_DELAY_S,
     PV_FOLLOW_WRITE_RETRY_S,
     PvFollowMixin,

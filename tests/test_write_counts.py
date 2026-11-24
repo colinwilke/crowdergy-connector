@@ -62,7 +62,10 @@ from custom_components.theothergas.const import (
     WRITE_BREAKER_MAX_PER_HOUR,
 )
 from custom_components.theothergas.coordinator import CrowdergyCoordinator
-from custom_components.theothergas.pv_follow import PV_FOLLOW_START_DELAY_S
+from custom_components.theothergas.pv_follow import (
+    PV_FOLLOW_ADJUST_DELAY_S,
+    PV_FOLLOW_START_DELAY_S,
+)
 from custom_components.theothergas.state_mirror import DeviceStateMirror
 from custom_components.theothergas.telemetry_composer import TelemetryComposer
 from custom_components.theothergas.telemetry_reader import (
@@ -716,10 +719,14 @@ async def test_pv_follow_counts_starts_and_current_changes(hass: HomeAssistant):
         "current_changes": 0,
     }
 
-    # Mehr Überschuss → Stromänderung 9 A → 10 A.
-    pvf._field(hass, grid=-1.0, box=6.2, bat=0.0, soc=92.0)
+    # Mehr Überschuss, der anhält → Stromänderung 9 A → 11 A.
+    pvf._field(hass, grid=-1.4, box=6.2, bat=0.0, soc=92.0)
     await coord._pv_follow_tick("wb", run, t0 + PV_FOLLOW_START_DELAY_S + 15)
-    assert [c.data["value"] for c in currents] == [9, 10]
+    assert [c.data["value"] for c in currents] == [9]
+    await coord._pv_follow_tick(
+        "wb", run, t0 + PV_FOLLOW_START_DELAY_S + 15 + PV_FOLLOW_ADJUST_DELAY_S,
+    )
+    assert [c.data["value"] for c in currents] == [9, 11]
     assert coord.state.write_counts_snapshot("wb") == {
         "day": _today(),
         "channels": {"charge_current": 2, "charge_mode": 2},
@@ -728,7 +735,9 @@ async def test_pv_follow_counts_starts_and_current_changes(hass: HomeAssistant):
     }
 
     # Gleicher Überschuss → hold: kein Call, kein Zähler.
-    await coord._pv_follow_tick("wb", run, t0 + PV_FOLLOW_START_DELAY_S + 30)
+    await coord._pv_follow_tick(
+        "wb", run, t0 + PV_FOLLOW_START_DELAY_S + 30 + PV_FOLLOW_ADJUST_DELAY_S,
+    )
     assert len(currents) == 2 and len(modes) == 2
     assert coord.state.write_counts_snapshot("wb")["current_changes"] == 1
 

@@ -33,6 +33,8 @@ from custom_components.theothergas.const import (
 )
 from custom_components.theothergas.coordinator import CrowdergyCoordinator
 from custom_components.theothergas.pv_follow import (
+    PV_FOLLOW_ADJUST_DELAY_S,
+    PV_FOLLOW_ADJUST_UP_MIN_A,
     PV_FOLLOW_MIN_ON_S,
     PV_FOLLOW_SENSOR_STALE_S,
     PV_FOLLOW_START_DELAY_S,
@@ -118,16 +120,113 @@ def test_running_box_follows_and_stops_with_hysteresis():
         params=PARAMS, refreshed_at=0.0, charging=True, amps=9,
         switched_at=t0 - PV_FOLLOW_MIN_ON_S,
     )
-    # zwischen min und min + Puffer läuft sie weiter, auf 6 A
-    assert decide(run, 4.3, True, t0) == ("adjust", 6)
+    # zwischen min und min + Puffer läuft sie weiter, auf 6 A — sobald
+    # die Abweichung die Verzögerung hält
+    assert decide(run, 4.3, True, t0) == ("hold", None)
+    t1 = t0 + PV_FOLLOW_ADJUST_DELAY_S
+    assert decide(run, 4.3, True, t1) == ("adjust", 6)
     run.amps = 6
-    assert decide(run, 4.3, True, t0 + 15) == ("hold", None)
+    assert decide(run, 4.3, True, t1 + 15) == ("hold", None)
     # unter min: erst nach der Stopp-Verzögerung
-    assert decide(run, 3.0, True, t0 + 30) == ("hold", None)
-    assert decide(run, 3.0, True, t0 + 30 + PV_FOLLOW_STOP_DELAY_S) == ("stop", None)
+    assert decide(run, 3.0, True, t1 + 30) == ("hold", None)
+    assert decide(run, 3.0, True, t1 + 30 + PV_FOLLOW_STOP_DELAY_S) == ("stop", None)
     # Ampere gedeckelt
     run = PvFollowRun(params=PARAMS, refreshed_at=0.0, charging=True, amps=6)
-    assert decide(run, 20.0, True, t0) == ("adjust", 16)
+    assert decide(run, 20.0, True, t0) == ("hold", None)
+    assert decide(run, 20.0, True, t0 + PV_FOLLOW_ADJUST_DELAY_S) == ("adjust", 16)
+
+
+def _running(amps: int | None = 9) -> PvFollowRun:
+    return PvFollowRun(
+        params=PARAMS, refreshed_at=0.0, charging=True, amps=amps,
+        switched_at=0.0,
+    )
+
+
+def _kw(amps: float) -> float:
+    return amps * PARAMS.kw_per_amp + 0.01
+
+
+def test_current_rises_only_from_two_amps_that_hold():
+    assert PV_FOLLOW_ADJUST_UP_MIN_A == 2
+    t0 = 50_000.0
+    run = _running(9)
+    # +1 A: nie eine Änderung, egal wie lange
+    assert decide(run, _kw(10), True, t0) == ("hold", None)
+    assert decide(run, _kw(10), True, t0 + 3600) == ("hold", None)
+    # +2 A: erst nach der Verzögerung
+    assert decide(run, _kw(11), True, t0 + 3600) == ("hold", None)
+    assert decide(
+        run, _kw(11), True, t0 + 3600 + PV_FOLLOW_ADJUST_DELAY_S - 1
+    ) == ("hold", None)
+    assert decide(
+        run, _kw(11), True, t0 + 3600 + PV_FOLLOW_ADJUST_DELAY_S
+    ) == ("adjust", 11)
+
+
+def test_current_rise_takes_the_sustained_level_not_the_peak():
+    t0 = 50_000.0
+    run = _running(6)
+    assert decide(run, _kw(14), True, t0) == ("hold", None)
+    assert decide(run, _kw(9), True, t0 + 30) == ("hold", None)
+    assert decide(run, _kw(16), True, t0 + PV_FOLLOW_ADJUST_DELAY_S) == ("adjust", 9)
+
+
+def test_short_peak_or_dip_restarts_the_wait():
+    t0 = 50_000.0
+    run = _running(9)
+    assert decide(run, _kw(12), True, t0) == ("hold", None)
+    # zurück in die Totzone: Wartezeit beginnt neu
+    assert decide(run, _kw(10), True, t0 + 60) == ("hold", None)
+    assert decide(run, _kw(12), True, t0 + 75) == ("hold", None)
+    assert decide(run, _kw(12), True, t0 + PV_FOLLOW_ADJUST_DELAY_S) == ("hold", None)
+    assert decide(
+        run, _kw(12), True, t0 + 75 + PV_FOLLOW_ADJUST_DELAY_S
+    ) == ("adjust", 12)
+    # Richtungswechsel hoch → runter: ebenfalls neu
+    run = _running(9)
+    assert decide(run, _kw(12), True, t0) == ("hold", None)
+    assert decide(run, _kw(8), True, t0 + 80) == ("hold", None)
+    assert decide(run, _kw(8), True, t0 + PV_FOLLOW_ADJUST_DELAY_S) == ("hold", None)
+    assert decide(
+        run, _kw(8), True, t0 + 80 + PV_FOLLOW_ADJUST_DELAY_S
+    ) == ("adjust", 8)
+
+
+def test_current_falls_from_one_amp_and_follows_the_latest_value():
+    t0 = 50_000.0
+    run = _running(9)
+    assert decide(run, _kw(8), True, t0) == ("hold", None)
+    assert decide(run, _kw(7), True, t0 + PV_FOLLOW_ADJUST_DELAY_S) == ("adjust", 7)
+
+
+def test_surplus_around_a_step_does_not_flip_the_current():
+    """Überschuss pendelt um eine Ampere-Stufe: ohne Totzone wäre das eine
+    Stromänderung je Tick."""
+    t0 = 50_000.0
+    run = _running(9)
+    writes = 0
+    for i in range(240):  # eine Stunde im 15-s-Takt
+        s = _kw(10) if i % 2 else _kw(9) - 0.02
+        action, amps = decide(run, s, True, t0 + 15 * i)
+        if action == "adjust":
+            writes += 1
+            run.amps = amps
+    assert writes <= 1 and run.amps in (8, 9)
+
+
+def test_adopted_box_gets_its_first_current_at_once():
+    run = _running(None)
+    assert decide(run, _kw(9), True, 50_000.0) == ("adjust", 9)
+
+
+def test_pending_change_is_dropped_when_surplus_falls_below_min():
+    t0 = 50_000.0
+    run = _running(9)
+    assert decide(run, _kw(12), True, t0) == ("hold", None)
+    assert decide(run, 3.0, True, t0 + 30) == ("hold", None)
+    assert run.adjust_since is None
+    assert decide(run, _kw(12), True, t0 + PV_FOLLOW_ADJUST_DELAY_S) == ("hold", None)
 
 
 def test_missing_measurement_or_unplugged_stops_at_once():
@@ -427,3 +526,51 @@ async def test_ai_off_ends_controller_without_write(hass: HomeAssistant, monkeyp
 
     assert "wb" not in coord._pv_follow_runs()
     assert modes == [] and currents == []
+
+
+async def test_current_change_leaves_mode_alone_when_box_shows_it(hass: HomeAssistant):
+    coord = make_coordinator(hass)
+    coord.state.last_sse_event_at = time.time()
+    _field(hass, grid=-3.6, box=0.0, bat=-2.8, soc=92.0)
+    currents = async_mock_service(hass, "number", "set_value")
+    modes = async_mock_service(hass, "select", "select_option")
+
+    run = await _start(coord)
+    t0 = time.time()
+    await coord._pv_follow_tick("wb", run, t0)
+    t1 = t0 + PV_FOLLOW_START_DELAY_S
+    await coord._pv_follow_tick("wb", run, t1)
+    assert [c.data["option"] for c in modes] == ["An"]
+
+    # Mehr Überschuss (11 A), die Box zeigt den Lademodus „An".
+    _field(hass, grid=-1.4, box=6.2, bat=0.0, soc=92.0)
+    hass.states.async_set("select.wb_mode", "An")
+    await coord._pv_follow_tick("wb", run, t1 + 15)
+    assert [c.data["value"] for c in currents] == [9]
+    await coord._pv_follow_tick("wb", run, t1 + 15 + PV_FOLLOW_ADJUST_DELAY_S)
+    assert [c.data["value"] for c in currents] == [9, 11]
+    assert len(modes) == 1 and run.amps == 11
+    # Direkt danach keine zweite Änderung aus der alten Wartezeit.
+    _field(hass, grid=-2.8, box=7.6, bat=0.0, soc=92.0)
+    hass.states.async_set("select.wb_mode", "An")
+    await coord._pv_follow_tick("wb", run, t1 + 30 + PV_FOLLOW_ADJUST_DELAY_S)
+    assert len(currents) == 2
+
+
+async def test_current_change_rewrites_mode_when_box_left_it(hass: HomeAssistant):
+    coord = make_coordinator(hass)
+    coord.state.last_sse_event_at = time.time()
+    _field(hass, grid=-3.6, box=0.0, bat=-2.8, soc=92.0)
+    async_mock_service(hass, "number", "set_value")
+    modes = async_mock_service(hass, "select", "select_option")
+
+    run = await _start(coord)
+    t0 = time.time()
+    await coord._pv_follow_tick("wb", run, t0)
+    t1 = t0 + PV_FOLLOW_START_DELAY_S
+    await coord._pv_follow_tick("wb", run, t1)
+    # Die Box zeigt weiter „Solar" (_field): der Modus wird mitgeschrieben.
+    _field(hass, grid=-1.4, box=6.2, bat=0.0, soc=92.0)
+    await coord._pv_follow_tick("wb", run, t1 + 15)
+    await coord._pv_follow_tick("wb", run, t1 + 15 + PV_FOLLOW_ADJUST_DELAY_S)
+    assert [c.data["option"] for c in modes] == ["An", "An"]

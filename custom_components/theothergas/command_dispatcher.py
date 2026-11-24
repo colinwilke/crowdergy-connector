@@ -505,8 +505,14 @@ class CommandDispatcherMixin:
         schedule_hold: bool = True,
         charge_current_a: int | None = None,
         charge_phases: int | None = None,
+        skip_unchanged: bool = False,
     ) -> bool:
         """Write the device's configured entity_charge_mode entity.
+
+        `skip_unchanged=True` (current change of the local PV controller):
+        phase and mode are not written again when their entity already
+        shows the requested option — only the current changes there. A
+        select that shows anything else is written as before.
 
         Two domains supported:
           * `select` / `input_select` — `select.select_option` with the
@@ -616,7 +622,15 @@ class CommandDispatcherMixin:
                 if int(charge_phases) == 1
                 else dev.get(CONF_VALUE_WALLBOX_PHASE_3, "")
             ) or ""
-            if phase_entity and phase_value:
+            if (
+                skip_unchanged and phase_entity and phase_value
+                and self._read_string(phase_entity) == phase_value
+            ):
+                _LOGGER.debug(
+                    "set_charge_mode: %s already %s — not written again",
+                    phase_entity, phase_value,
+                )
+            elif phase_entity and phase_value:
                 phase_domain = phase_entity.split(".", 1)[0]
                 _LOGGER.log(
                     log_level,
@@ -676,7 +690,18 @@ class CommandDispatcherMixin:
                     )
                     ok = False
         try:
-            if domain in ("select", "input_select"):
+            if (
+                skip_unchanged and ok
+                and domain in ("select", "input_select")
+                and self._read_string(entity_id) == mode
+            ):
+                # The box already sits in this mode; `last_written_value`
+                # keeps the value of the write that put it there.
+                _LOGGER.debug(
+                    "set_charge_mode: %s already %s — not written again",
+                    entity_id, mode,
+                )
+            elif domain in ("select", "input_select"):
                 # (#152) Auch der Lademodus ist ein kommandierter Zustand —
                 # gleiche Bezugsgroesse wie beim entity_control, damit die
                 # Wirkungs-Kontrolle fuer ALLE Geraetetypen dieselbe ist.
