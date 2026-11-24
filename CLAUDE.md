@@ -41,8 +41,8 @@ Menschen lesen Ziele, Entscheidungen und Ergebnisse — keine Arbeitsschritte.
 - **Obergrenzen:** Label `Jetzt` ≤ 10 Issues. Warten mehr als 5 PRs auf
   Colin, beginnt Claude nichts Neues, sondern macht die wartenden merge-reif.
 - **Status der Jetzt-Liste:** jedes `Jetzt`-Issue trägt genau ein Label
-  `Status: …` — `offen` (nicht begonnen) · `in Arbeit` · `wartet auf Colin`
-  (Handlung oder Entscheidung) · `bereit` (PR grün, wartet aufs
+  `Status: …` — `offen` (nicht begonnen) · `in Arbeit` · `wartet auf Mensch`
+  (Handlung oder Entscheidung von Colin oder Udo) · `bereit` (PR grün, wartet aufs
   Live-Nehmen) · `live` (deployt, Wirkung noch nicht belegt) ·
   `Feldmessung` (live, Messung läuft; mit Beleg schließen). Wer den
   Zustand ändert, tauscht das Label im selben Zug.
