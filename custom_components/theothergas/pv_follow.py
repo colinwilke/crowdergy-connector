@@ -20,6 +20,11 @@ Regeln:
   * Start nach `PV_FOLLOW_START_DELAY_S` mit ``S ≥ min_kw + Puffer``,
     Stopp nach `PV_FOLLOW_STOP_DELAY_S` mit ``S < min_kw``;
     Mindestlaufzeit / Mindestpause gegen Takten.
+  * Der Ladestrom einer laufenden Box ändert sich erst, wenn die
+    Abweichung `PV_FOLLOW_ADJUST_DELAY_S` anhält: nach oben ab
+    `PV_FOLLOW_ADJUST_UP_MIN_A`, nach unten ab 1 A (ein zu hoher Strom
+    ist Netzbezug, ein zu niedriger nur Einspeisung). Jede Stromänderung
+    ist ein Schreibzugriff auf die Box.
   * Fehlt eine Messung, ist sie eingefroren (älter als
     `PV_FOLLOW_SENSOR_STALE_S`) oder ist das Auto nicht gesteckt: kein
     Start, eine laufende Box stoppt sofort.
@@ -66,6 +71,15 @@ PV_FOLLOW_START_DELAY_S = 60.0
 PV_FOLLOW_STOP_DELAY_S = 180.0
 PV_FOLLOW_MIN_ON_S = 300.0
 PV_FOLLOW_MIN_OFF_S = 120.0
+# Current changes of a running box. Every change is a write to the box
+# (some store it in non-volatile memory), and `amps` is a floor of the
+# measured surplus, so a surplus hovering around a step boundary would
+# otherwise flip the current every tick. A change is written only after
+# the deviation held for PV_FOLLOW_ADJUST_DELAY_S. Upward it needs at
+# least PV_FOLLOW_ADJUST_UP_MIN_A; downward one ampere is enough — too
+# much current is grid import, too little is only export.
+PV_FOLLOW_ADJUST_DELAY_S = 90.0
+PV_FOLLOW_ADJUST_UP_MIN_A = 2
 # > Stale-Failsafe des Backends (45 min), damit der Regler einen
 # Solver-Ausfall überbrückt, bis der Failsafe die Freigabe erneuert.
 PV_FOLLOW_REFRESH_TIMEOUT_S = 3600.0
@@ -140,6 +154,12 @@ class PvFollowRun:
     draw_since: float | None = None
     # No write before this timestamp (back-off after a failed write).
     retry_at: float = 0.0
+    # Pending current change of a running box: direction (+1 / −1, 0 =
+    # none), since when the deviation holds, and for an increase the
+    # lowest target seen in that window (the sustained level, not a peak).
+    adjust_dir: int = 0
+    adjust_since: float | None = None
+    adjust_floor_a: int | None = None
 
 
 def surplus_kw(
@@ -226,16 +246,21 @@ def decide(
     """Pure Regler-Entscheidung. Returns ``(action, amps)`` mit action ∈
     ``start`` / ``adjust`` / ``stop`` / ``hold``. Mutiert die Timer im
     ``run`` (nicht ``charging``/``amps`` — das macht der Aufrufer nach
-    dem Write)."""
+    dem Write).
+
+    A pending current change stays pending after ``adjust`` is returned,
+    so a failed write asks again; the caller clears it after the write."""
     p = run.params
     charging = bool(run.charging)
     if s_kw is None or not plugged:
         run.above_since = run.below_since = None
+        _clear_adjust(run)
         return ("stop", None) if charging else ("hold", None)
     amps = math.floor(s_kw / p.kw_per_amp + 1e-9)
     amps = max(p.min_current_a, min(p.max_current_a, amps))
     if not charging:
         run.below_since = None
+        _clear_adjust(run)
         if s_kw >= p.min_kw + p.start_buffer_kw:
             if run.above_since is None:
                 run.above_since = now
@@ -249,6 +274,7 @@ def decide(
         return "hold", None
     run.above_since = None
     if s_kw < p.min_kw:
+        _clear_adjust(run)
         if run.below_since is None:
             run.below_since = now
         if (
@@ -258,9 +284,35 @@ def decide(
             return "stop", None
         return "hold", None
     run.below_since = None
-    if amps != run.amps:
+    if run.amps is None:
+        # Adopted box: the first write establishes our current.
+        _clear_adjust(run)
         return "adjust", amps
-    return "hold", None
+    delta = amps - run.amps
+    if delta >= PV_FOLLOW_ADJUST_UP_MIN_A:
+        direction = 1
+    elif delta < 0:
+        direction = -1
+    else:
+        _clear_adjust(run)
+        return "hold", None
+    if run.adjust_dir != direction or run.adjust_since is None:
+        run.adjust_dir = direction
+        run.adjust_since = now
+        run.adjust_floor_a = amps
+    elif direction > 0 and run.adjust_floor_a is not None:
+        run.adjust_floor_a = min(run.adjust_floor_a, amps)
+    if now - run.adjust_since < PV_FOLLOW_ADJUST_DELAY_S:
+        return "hold", None
+    if direction > 0 and run.adjust_floor_a is not None:
+        amps = run.adjust_floor_a
+    return "adjust", amps
+
+
+def _clear_adjust(run: PvFollowRun) -> None:
+    run.adjust_dir = 0
+    run.adjust_since = None
+    run.adjust_floor_a = None
 
 
 class PvFollowMixin:
@@ -503,6 +555,9 @@ class PvFollowMixin:
             ok = await self._apply_charge_mode(
                 device_id, power_value, schedule_hold=False,
                 charge_current_a=amps, charge_phases=p.phases,
+                # A current change leaves phase and mode alone when the
+                # box already shows them.
+                skip_unchanged=action == "adjust",
             )
             if not ok:
                 # Nothing committed: the next eligible tick retries.
@@ -512,6 +567,7 @@ class PvFollowMixin:
                 run.charging = True
                 run.switched_at = now
             run.amps = amps
+            _clear_adjust(run)
             # Schreibzähler (rein beobachtend): die Aktion ist geschrieben.
             self._count_regulator_action(
                 device_id,

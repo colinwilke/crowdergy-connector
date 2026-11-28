@@ -56,6 +56,9 @@ from custom_components.theothergas.const import (
     DOMAIN,
     ENTITY_CONTROL_HOLD_ALWAYS,
     ENTITY_CONTROL_HOLD_AUTO,
+    HOLD_INITIAL_DELAY,
+    HOLD_POLL_INTERVAL,
+    HOLD_REWRITE_MAX_BACKOFF,
     OPT_CONSENT_REMOTE_CONTROL,
     SSE_STALE_THRESHOLD_S,
 )
@@ -870,3 +873,175 @@ def test_cancel_charge_mode_hold_clears_fail_streak(hass: HomeAssistant):
     coord.state.charge_mode_fail_streak["w1"] = 4
     coord._cancel_charge_mode_hold("w1")
     assert "w1" not in coord.state.charge_mode_fail_streak
+
+
+# ════════════════════════════════════════════════════════════════════
+# Wiederhol-Schreibzugriffe begrenzen (Schreibzähler aus dem Feld)
+# ════════════════════════════════════════════════════════════════════
+
+
+def _go_e_like_wallbox(hold: str | None = None) -> dict:
+    dev = {
+        CONF_DEVICE_ID: "w1",
+        CONF_DEVICE_TYPE: "wallbox",
+        CONF_ENTITY_CHARGE_MODE: "select.lademodus",
+        CONF_ENTITY_WALLBOX_CHARGE_CURRENT: "number.ladestrom",
+    }
+    if hold is not None:
+        dev[CONF_ENTITY_CONTROL_HOLD] = hold
+    return dev
+
+
+async def _run_charge_hold(coord, ticks: int) -> AsyncMock:
+    coord.state.last_sse_event_at = time.time()
+    coord._apply_charge_mode = AsyncMock()
+    with patch(_SLEEP, _breaking_sleep(ticks)):
+        await _run_until_stopped(coord._charge_mode_hold_loop("w1"))
+    return coord._apply_charge_mode
+
+
+async def test_charge_mode_hold_auto_writes_nothing_while_box_shows_mode(
+    hass: HomeAssistant,
+):
+    coord = make_coordinator(hass, [_go_e_like_wallbox()])
+    coord.state.held_charge_mode["w1"] = "Lock Mode"
+    hass.states.async_set("select.lademodus", "Lock Mode")
+    apply = await _run_charge_hold(coord, 6)
+    apply.assert_not_awaited()
+
+
+async def test_charge_mode_hold_auto_rewrites_when_box_shows_other_mode(
+    hass: HomeAssistant,
+):
+    coord = make_coordinator(hass, [_go_e_like_wallbox()])
+    coord.state.held_charge_mode["w1"] = "Lock Mode"
+    hass.states.async_set("select.lademodus", "Solar Pure Mode")
+    apply = await _run_charge_hold(coord, 3)
+    assert apply.await_count == 2
+
+
+async def test_charge_mode_hold_auto_checks_current_too(hass: HomeAssistant):
+    coord = make_coordinator(hass, [_go_e_like_wallbox()])
+    coord.state.held_charge_mode["w1"] = "Power"
+    coord.state.held_charge_current["w1"] = 9
+    hass.states.async_set("select.lademodus", "Power")
+    hass.states.async_set("number.ladestrom", "9.0", {"min": 6, "max": 16})
+    apply = await _run_charge_hold(coord, 4)
+    apply.assert_not_awaited()
+    hass.states.async_set("number.ladestrom", "6.0", {"min": 6, "max": 16})
+    apply = await _run_charge_hold(coord, 2)
+    apply.assert_awaited_once()
+
+
+async def test_charge_mode_hold_always_keeps_rewriting(hass: HomeAssistant):
+    coord = make_coordinator(
+        hass, [_go_e_like_wallbox(ENTITY_CONTROL_HOLD_ALWAYS)],
+    )
+    coord.state.held_charge_mode["w1"] = "Lock Mode"
+    hass.states.async_set("select.lademodus", "Lock Mode")
+    apply = await _run_charge_hold(coord, 4)
+    assert apply.await_count == 3
+
+
+async def test_charge_mode_hold_keeps_rewriting_into_helpers(hass: HomeAssistant):
+    """Ein Helfer zeigt immer den zuletzt geschriebenen Wert — das sagt
+    nichts über das Gerät dahinter."""
+    dev = _go_e_like_wallbox()
+    dev[CONF_ENTITY_CHARGE_MODE] = "input_select.lademodus"
+    coord = make_coordinator(hass, [dev])
+    coord.state.held_charge_mode["w1"] = "Lock Mode"
+    hass.states.async_set("input_select.lademodus", "Lock Mode")
+    apply = await _run_charge_hold(coord, 4)
+    assert apply.await_count == 3
+
+
+async def test_charge_mode_hold_rewrites_when_box_is_unreadable(
+    hass: HomeAssistant,
+):
+    coord = make_coordinator(hass, [_go_e_like_wallbox()])
+    coord.state.held_charge_mode["w1"] = "Lock Mode"
+    hass.states.async_set("select.lademodus", "unavailable")
+    apply = await _run_charge_hold(coord, 3)
+    assert apply.await_count == 2
+
+
+async def test_hold_loop_auto_slows_down_when_value_is_not_taken_over(
+    hass: HomeAssistant,
+):
+    """Die Entity zeigt nach jedem Write weiter den alten Wert: der Abstand
+    verdoppelt sich je Write bis zum Deckel statt alle 30 s zu schreiben."""
+    coord = make_coordinator(hass, [_heating_switch_device(ENTITY_CONTROL_HOLD_AUTO)])
+    coord.state.active_state["d1"] = True
+    coord.state.last_sse_event_at = time.time()
+    hass.states.async_set("switch.kessel", "off")
+    calls = async_mock_service(hass, "switch", "turn_on")
+    delays: list = []
+    # Die Abweichung gilt hier nicht als Nutzer-Eingriff (#140).
+    coord._is_foreign_drift = lambda *_a, **_kw: False
+
+    with patch(_SLEEP, _recording_sleep(delays, 10)):
+        await _run_until_stopped(
+            coord._hold_loop("d1", "switch.kessel", "on", "switch", True,
+                             ENTITY_CONTROL_HOLD_AUTO)
+        )
+
+    assert delays == [
+        HOLD_INITIAL_DELAY, 30, 60, 120, 240, 480, 960, 1920,
+        HOLD_REWRITE_MAX_BACKOFF, HOLD_REWRITE_MAX_BACKOFF,
+    ]
+    assert len(calls) == 9
+
+
+async def test_hold_loop_auto_returns_to_30s_once_value_holds(
+    hass: HomeAssistant,
+):
+    coord = make_coordinator(hass, [_heating_switch_device(ENTITY_CONTROL_HOLD_AUTO)])
+    coord.state.active_state["d1"] = True
+    coord.state.last_sse_event_at = time.time()
+    coord._is_foreign_drift = lambda *_a, **_kw: False
+    hass.states.async_set("switch.kessel", "off")
+    async_mock_service(hass, "switch", "turn_on")
+    delays: list = []
+    state = {"n": 0}
+
+    async def _sleep(delay):
+        delays.append(delay)
+        state["n"] += 1
+        if state["n"] == 4:
+            hass.states.async_set("switch.kessel", "on")
+        if state["n"] == 6:
+            hass.states.async_set("switch.kessel", "off")
+        if state["n"] >= 8:
+            raise _StopHold
+
+    with patch(_SLEEP, _sleep):
+        await _run_until_stopped(
+            coord._hold_loop("d1", "switch.kessel", "on", "switch", True,
+                             ENTITY_CONTROL_HOLD_AUTO)
+        )
+
+    assert delays == [
+        HOLD_INITIAL_DELAY, 30, 60, 120,
+        HOLD_POLL_INTERVAL, HOLD_POLL_INTERVAL,
+        30, 60,
+    ]
+
+
+async def test_hold_loop_always_never_slows_down(hass: HomeAssistant):
+    coord = make_coordinator(
+        hass, [_heating_switch_device(ENTITY_CONTROL_HOLD_ALWAYS)],
+    )
+    coord.state.active_state["d1"] = True
+    coord.state.last_sse_event_at = time.time()
+    hass.states.async_set("switch.kessel", "off")
+    calls = async_mock_service(hass, "switch", "turn_on")
+    delays: list = []
+
+    with patch(_SLEEP, _recording_sleep(delays, 6)):
+        await _run_until_stopped(
+            coord._hold_loop("d1", "switch.kessel", "on", "switch", True,
+                             ENTITY_CONTROL_HOLD_ALWAYS)
+        )
+
+    assert delays == [HOLD_INITIAL_DELAY] + [HOLD_POLL_INTERVAL] * 5
+    assert len(calls) == 5

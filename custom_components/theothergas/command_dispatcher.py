@@ -52,6 +52,7 @@ from .const import (
     ENTITY_CONTROL_HOLD_NEVER,
     HOLD_INITIAL_DELAY,
     HOLD_POLL_INTERVAL,
+    HOLD_REWRITE_MAX_BACKOFF,
     LOCAL_OVERRIDE_GRACE_S,
     LOCAL_OVERRIDE_HOLD_S,
     OPT_CONSENT_REMOTE_CONTROL,
@@ -505,8 +506,14 @@ class CommandDispatcherMixin:
         schedule_hold: bool = True,
         charge_current_a: int | None = None,
         charge_phases: int | None = None,
+        skip_unchanged: bool = False,
     ) -> bool:
         """Write the device's configured entity_charge_mode entity.
+
+        `skip_unchanged=True` (current change of the local PV controller):
+        phase and mode are not written again when their entity already
+        shows the requested option — only the current changes there. A
+        select that shows anything else is written as before.
 
         Two domains supported:
           * `select` / `input_select` — `select.select_option` with the
@@ -616,7 +623,15 @@ class CommandDispatcherMixin:
                 if int(charge_phases) == 1
                 else dev.get(CONF_VALUE_WALLBOX_PHASE_3, "")
             ) or ""
-            if phase_entity and phase_value:
+            if (
+                skip_unchanged and phase_entity and phase_value
+                and self._read_string(phase_entity) == phase_value
+            ):
+                _LOGGER.debug(
+                    "set_charge_mode: %s already %s — not written again",
+                    phase_entity, phase_value,
+                )
+            elif phase_entity and phase_value:
                 phase_domain = phase_entity.split(".", 1)[0]
                 _LOGGER.log(
                     log_level,
@@ -676,7 +691,18 @@ class CommandDispatcherMixin:
                     )
                     ok = False
         try:
-            if domain in ("select", "input_select"):
+            if (
+                skip_unchanged and ok
+                and domain in ("select", "input_select")
+                and self._read_string(entity_id) == mode
+            ):
+                # The box already sits in this mode; `last_written_value`
+                # keeps the value of the write that put it there.
+                _LOGGER.debug(
+                    "set_charge_mode: %s already %s — not written again",
+                    entity_id, mode,
+                )
+            elif domain in ("select", "input_select"):
                 # (#152) Auch der Lademodus ist ein kommandierter Zustand —
                 # gleiche Bezugsgroesse wie beim entity_control, damit die
                 # Wirkungs-Kontrolle fuer ALLE Geraetetypen dieselbe ist.
@@ -1006,6 +1032,60 @@ class CommandDispatcherMixin:
         finally:
             self.state.charge_mode_lease_tasks.pop(device_id, None)
 
+    def _charge_mode_already_set(
+        self,
+        device_id: str,
+        mode: str,
+        charge_current_a: int | None,
+        charge_phases: int | None,
+    ) -> bool:
+        """AUTO hold only: True when mode, current and phase entities all
+        show the held values, so the hold tick has nothing to write.
+
+        False — i.e. write as before — for `always`, for an unknown
+        device, for an unreadable entity, and for HA helpers
+        (`input_select` / `input_number`): a helper always shows what was
+        last written into it, which says nothing about the device behind
+        it (inverters that reset their mode when not refreshed are driven
+        through such helpers)."""
+        dev = next(
+            (d for d in self.devices if d.get(CONF_DEVICE_ID) == device_id),
+            None,
+        )
+        if dev is None:
+            return False
+        hold = dev.get(CONF_ENTITY_CONTROL_HOLD) or ENTITY_CONTROL_HOLD_AUTO
+        if hold != ENTITY_CONTROL_HOLD_AUTO:
+            return False
+        checks: list[tuple[str, Any]] = [
+            (dev.get(CONF_ENTITY_CHARGE_MODE, "") or "", mode),
+        ]
+        if charge_current_a is not None:
+            current_entity = dev.get(CONF_ENTITY_WALLBOX_CHARGE_CURRENT, "") or ""
+            if current_entity:
+                checks.append((current_entity, int(self._clamp_write_value(
+                    current_entity, current_entity.split(".", 1)[0],
+                    float(charge_current_a), warn=False,
+                ))))
+        if charge_phases is not None:
+            phase_entity = dev.get(CONF_ENTITY_WALLBOX_PHASE_MODE, "") or ""
+            phase_value = (
+                dev.get(CONF_VALUE_WALLBOX_PHASE_1, "")
+                if int(charge_phases) == 1
+                else dev.get(CONF_VALUE_WALLBOX_PHASE_3, "")
+            ) or ""
+            if phase_entity and phase_value:
+                checks.append((phase_entity, phase_value))
+        for entity_id, expected in checks:
+            domain = entity_id.split(".", 1)[0]
+            if domain not in ("select", "number"):
+                return False
+            if not self._states_match(
+                self._read_string(entity_id), expected, domain,
+            ):
+                return False
+        return True
+
     async def _charge_mode_hold_loop(self, device_id: str) -> None:
         """Re-write the last commanded charge_mode every
         CHARGE_MODE_HOLD_INTERVAL seconds. Bails when the held value
@@ -1060,6 +1140,13 @@ class CommandDispatcherMixin:
                     return
                 held_current = self.state.held_charge_current.get(device_id)
                 held_phases = self.state.held_charge_phases.get(device_id)
+                if self._charge_mode_already_set(
+                    device_id, mode, held_current, held_phases,
+                ):
+                    # AUTO: the device shows what we commanded — nothing
+                    # to re-write (every write may land in flash).
+                    await asyncio.sleep(CHARGE_MODE_HOLD_INTERVAL)
+                    continue
                 await self._apply_charge_mode(
                     device_id, mode, schedule_hold=False,
                     charge_current_a=held_current,
@@ -2109,6 +2196,8 @@ class CommandDispatcherMixin:
             # propagate before the first rewrite (avoids a duplicate
             # service call back-to-back).
             await asyncio.sleep(HOLD_INITIAL_DELAY)
+            # AUTO: consecutive re-writes the entity did not take over.
+            unheld = 0
             while True:
                 if not self.state.active_state.get(device_id, False):
                     return
@@ -2154,6 +2243,7 @@ class CommandDispatcherMixin:
                     self._note_own_value(entity_id, expected)
                     # AUTO + state stimmt → skip. Spart Service-Calls
                     # und Piep-Bestätigungen bei AC.
+                    unheld = 0
                     await asyncio.sleep(HOLD_POLL_INTERVAL)
                     continue
                 if (
@@ -2186,7 +2276,27 @@ class CommandDispatcherMixin:
                     entity_id, domain, value, on, verbose=False,
                     device_id=device_id,
                 )
-                await asyncio.sleep(HOLD_POLL_INTERVAL)
+                if hold_mode != ENTITY_CONTROL_HOLD_AUTO or expected is None:
+                    # ALWAYS re-writes blind by design; without an
+                    # expected state nothing can be compared.
+                    await asyncio.sleep(HOLD_POLL_INTERVAL)
+                    continue
+                # AUTO: the entity did not show the commanded value. Each
+                # further re-write that changes nothing doubles the wait.
+                unheld += 1
+                delay = min(
+                    HOLD_POLL_INTERVAL * 2 ** min(unheld - 1, 10),
+                    HOLD_REWRITE_MAX_BACKOFF,
+                )
+                if unheld == 3:
+                    _LOGGER.warning(
+                        "hold: %s does not take over the commanded value "
+                        "(%r, shows %r) after %d re-writes — slowing down "
+                        "to at most one re-write per %d min",
+                        entity_id, expected, actual, unheld,
+                        HOLD_REWRITE_MAX_BACKOFF // 60,
+                    )
+                await asyncio.sleep(delay)
         except asyncio.CancelledError:
             raise
         except Exception:

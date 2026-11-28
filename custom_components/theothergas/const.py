@@ -412,6 +412,12 @@ CONF_ENTITY_PV_TO_BATTERY_POWER = "entity_pv_to_battery_power"
 # cycles (Kostal's is 60 s).
 HOLD_INITIAL_DELAY = 10
 HOLD_POLL_INTERVAL = 30
+# AUTO hold: a re-write that the entity does not take over (it still
+# shows another value at the next tick) doubles the wait before the next
+# one, up to this cap — a value the device refuses is not hammered in
+# every 30 s. The first tick on which the entity shows the commanded
+# value restores the 30 s cadence; a new command starts a fresh hold.
+HOLD_REWRITE_MAX_BACKOFF = 3600
 
 # v2.4: separate, tighter hold cadence for the charge-mode entity
 # (input_select for battery Lademodus + wallbox Lademodus). User-

@@ -194,6 +194,12 @@ Kuration bleiben im Backend, Box-Know-how im privaten Box-Repo.
   Tagesstand geht als kumulatives `write_counts` im Telemetrie-PATCH mit
   (eigene 5-min-Uhr in `_should_send`, nicht im Mirror, nicht im
   Payload-Hash).
+- **Hold schreibt nur bei Abweichung (AUTO):** der Lademodus-Hold lässt
+  den Takt aus, wenn Modus, Strom und Phase an echten `select`-/
+  `number`-Entities schon stehen (`_charge_mode_already_set`); Helfer
+  (`input_*`) und ALWAYS schreiben blind weiter — ein Helfer zeigt immer
+  den letzten Write, nicht das Gerät. Der Steuer-Hold verdoppelt den
+  Abstand je nicht übernommenem Re-Write bis `HOLD_REWRITE_MAX_BACKOFF`.
 - **Schreib-Circuit-Breaker** `_write_allowed` (500/h je Entity) sitzt an
   jedem Write-Pfad. **Übersteuerungs-Erkennung nur im AUTO-Hold**
   (ALWAYS ist für Auto-Reset-Register): Drift ohne eigenen Write in
