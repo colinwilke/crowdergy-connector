@@ -418,6 +418,12 @@ HOLD_POLL_INTERVAL = 30
 # every 30 s. The first tick on which the entity shows the commanded
 # value restores the 30 s cadence; a new command starts a fresh hold.
 HOLD_REWRITE_MAX_BACKOFF = 3600
+# ALWAYS hold on a temperature setpoint of a heating / hot-water device:
+# the blind refresh of a value the entity already shows happens at most
+# once per this interval. These registers sit in the heat pump's
+# controller; a refresh every 30 s is ~2900 writes a day. A visible
+# deviation and a new command are still written at once.
+ALWAYS_SETPOINT_REFRESH_S = 3600
 
 # v2.4: separate, tighter hold cadence for the charge-mode entity
 # (input_select for battery Lademodus + wallbox Lademodus). User-

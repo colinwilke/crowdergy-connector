@@ -193,7 +193,7 @@
           "value_on": "Examples: SG-Ready \"Raised\", thermostat \"heat\", switch \"on\", target temperature \"55\".",
           "value_off": "Examples: SG-Ready \"Lock\", thermostat \"off\", switch \"off\", target temperature \"40\".",
           "value_cool_on": "Only for devices with a cooling function, e.g. thermostat \"cool\". Empty = no cooling.",
-          "entity_control_hold": "Auto/Always: rewrite every 30 s — keeps devices that silently revert. Once only: for devices that trigger an action on every write."
+          "entity_control_hold": "Auto: rewrite only when the device shows another value. Always: rewrite regularly even if the value is already set — only for devices that silently revert. Once only: for devices that trigger an action on every write."
         },
         "submit": "Next"
       },
@@ -214,7 +214,7 @@
           "charge_mode_value_solar": "Option that follows the solar surplus (e.g. \"Solar\", \"Eco\").",
           "value_wallbox_phase_1": "Option that forces 1-phase charging (e.g. \"nur 1\").",
           "value_wallbox_phase_3": "Option that forces 3-phase charging (e.g. \"nur 3\"). Do not map \"auto\".",
-          "entity_control_hold": "Auto/Always: rewrite every 30 s. Once only: write once."
+          "entity_control_hold": "Auto: rewrite only on a deviation. Always: rewrite regularly. Once only: write once."
         },
         "submit": "Next"
       },
@@ -294,8 +294,8 @@
       },
       "entity_control_hold": {
         "options": {
-          "auto": "Auto (every 30 s)",
-          "always": "Always (every 30 s)",
+          "auto": "Auto (only on a deviation)",
+          "always": "Always (rewrite regularly)",
           "never": "Write once only"
         }
       }
@@ -474,7 +474,7 @@
           "value_on": "Examples: SG-Ready \"Raised\", thermostat \"heat\", switch \"on\", target temperature \"55\".",
           "value_off": "Examples: SG-Ready \"Lock\", thermostat \"off\", switch \"off\", target temperature \"40\".",
           "value_cool_on": "Only for devices with a cooling function, e.g. thermostat \"cool\". Empty = no cooling.",
-          "entity_control_hold": "Auto/Always: rewrite every 30 s. Once only: write once."
+          "entity_control_hold": "Auto: rewrite only on a deviation. Always: rewrite regularly. Once only: write once."
         }
       },
       "add_device_charge_mode_values": {
@@ -494,7 +494,7 @@
           "charge_mode_value_solar": "Option that follows the solar surplus (e.g. \"Solar\", \"Eco\").",
           "value_wallbox_phase_1": "Option that forces 1-phase charging (e.g. \"nur 1\").",
           "value_wallbox_phase_3": "Option that forces 3-phase charging (e.g. \"nur 3\"). Do not map \"auto\".",
-          "entity_control_hold": "Auto/Always: rewrite every 30 s. Once only: write once."
+          "entity_control_hold": "Auto: rewrite only on a deviation. Always: rewrite regularly. Once only: write once."
         },
         "submit": "Next"
       },
@@ -646,7 +646,7 @@
           "value_on": "Examples: SG-Ready \"Raised\", thermostat \"heat\", switch \"on\", target temperature \"55\".",
           "value_off": "Examples: SG-Ready \"Lock\", thermostat \"off\", switch \"off\", target temperature \"40\".",
           "value_cool_on": "Only for devices with a cooling function, e.g. thermostat \"cool\". Empty = no cooling.",
-          "entity_control_hold": "Auto/Always: rewrite every 30 s. Once only: write once."
+          "entity_control_hold": "Auto: rewrite only on a deviation. Always: rewrite regularly. Once only: write once."
         }
       },
       "edit_device_charge_mode_values": {
@@ -667,7 +667,7 @@
           "charge_mode_value_solar": "Option that follows the solar surplus (e.g. \"Solar\", \"Eco\").",
           "value_wallbox_phase_1": "Option that forces 1-phase charging (e.g. \"nur 1\").",
           "value_wallbox_phase_3": "Option that forces 3-phase charging (e.g. \"nur 3\"). Do not map \"auto\".",
-          "entity_control_hold": "Auto/Always: rewrite every 30 s. Once only: write once."
+          "entity_control_hold": "Auto: rewrite only on a deviation. Always: rewrite regularly. Once only: write once."
         }
       },
       "edit_device_battery_values": {
@@ -735,8 +735,8 @@
       },
       "entity_control_hold": {
         "options": {
-          "auto": "Auto (every 30 s)",
-          "always": "Always (every 30 s)",
+          "auto": "Auto (only on a deviation)",
+          "always": "Always (rewrite regularly)",
           "never": "Write once only"
         }
       }

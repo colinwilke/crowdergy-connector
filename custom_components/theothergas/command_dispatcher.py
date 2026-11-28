@@ -21,6 +21,7 @@ from zoneinfo import ZoneInfo
 import httpx
 
 from .const import (
+    ALWAYS_SETPOINT_REFRESH_S,
     CHARGE_MODE_HOLD_INITIAL_DELAY,
     CHARGE_MODE_HOLD_INTERVAL,
     CHARGE_MODE_HOLD_MAX_BACKOFF,
@@ -1308,6 +1309,23 @@ class CommandDispatcherMixin:
             )
         )
 
+    def _is_temperature_setpoint(self, device_id: str, entity_id: str) -> bool:
+        """Is `entity_id` a temperature setpoint of a heating / hot-water
+        device — a setpoint register in the sense of the day budget, or
+        the control entity as a `number` / `input_number`?"""
+        if self._is_setpoint_register(device_id, entity_id):
+            return True
+        dev = next(
+            (d for d in self.devices if d.get(CONF_DEVICE_ID) == device_id),
+            None,
+        )
+        return (
+            dev is not None
+            and dev.get(CONF_DEVICE_TYPE) in ECO_SETPOINT_TYPES
+            and entity_id == (dev.get(CONF_ENTITY_CONTROL, "") or "")
+            and entity_id.split(".", 1)[0] in ("number", "input_number")
+        )
+
     def _local_override_active(self, device_id: str) -> bool:
         """(#140) True solange die Steuerung dieses Geräts wegen einer
         erkannten manuellen Übersteuerung pausiert ist. Nach Ablauf
@@ -2272,6 +2290,19 @@ class CommandDispatcherMixin:
                         "hold: %s reverted (%r → %r), re-writing",
                         entity_id, expected, actual,
                     )
+                elif (
+                    expected is not None
+                    and self._states_match(actual, expected, domain)
+                    and self._is_temperature_setpoint(device_id, entity_id)
+                    and time.time()
+                    - self.state.last_own_write_at.get(entity_id, 0.0)
+                    < ALWAYS_SETPOINT_REFRESH_S
+                ):
+                    # ALWAYS on a heat-pump setpoint that already shows
+                    # the commanded value: refresh at most once per
+                    # ALWAYS_SETPOINT_REFRESH_S, not every tick.
+                    await asyncio.sleep(HOLD_POLL_INTERVAL)
+                    continue
                 await self._write_entity_control(
                     entity_id, domain, value, on, verbose=False,
                     device_id=device_id,
