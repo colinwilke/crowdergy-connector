@@ -976,14 +976,10 @@ async def test_hold_loop_auto_slows_down_when_value_is_not_taken_over(
     hass.states.async_set("switch.kessel", "off")
     calls = async_mock_service(hass, "switch", "turn_on")
     delays: list = []
-    real_time = time.time
+    # Die Abweichung gilt hier nicht als Nutzer-Eingriff (#140).
+    coord._is_foreign_drift = lambda *_a, **_kw: False
 
-    with patch(_SLEEP, _recording_sleep(delays, 10)), patch.object(
-        time, "time", lambda: real_time()
-    ):
-        # Eigener Write liegt im Echo-Fenster, damit die Abweichung nicht
-        # als Nutzer-Eingriff gilt.
-        coord._is_foreign_drift = lambda *_a, **_kw: False
+    with patch(_SLEEP, _recording_sleep(delays, 10)):
         await _run_until_stopped(
             coord._hold_loop("d1", "switch.kessel", "on", "switch", True,
                              ENTITY_CONTROL_HOLD_AUTO)
