@@ -42,6 +42,7 @@ from pytest_homeassistant_custom_component.common import (
 )
 
 from custom_components.theothergas.const import (
+    ALWAYS_SETPOINT_REFRESH_S,
     CHARGE_MODE_HOLD_INITIAL_DELAY,
     CHARGE_MODE_HOLD_INTERVAL,
     CHARGE_MODE_HOLD_MAX_BACKOFF,
@@ -1045,3 +1046,74 @@ async def test_hold_loop_always_never_slows_down(hass: HomeAssistant):
 
     assert delays == [HOLD_INITIAL_DELAY] + [HOLD_POLL_INTERVAL] * 5
     assert len(calls) == 5
+
+
+def _warmwater_number_device(hold: str) -> dict:
+    return {
+        CONF_DEVICE_ID: "ww",
+        CONF_DEVICE_TYPE: "warmwater",
+        CONF_ENTITY_CONTROL: "number.ww_soll",
+        CONF_ENTITY_CONTROL_HOLD: hold,
+    }
+
+
+async def _run_ww_hold(hass, coord, ticks: int, on_value: str = "55"):
+    calls = async_mock_service(hass, "number", "set_value")
+    with patch(_SLEEP, _breaking_sleep(ticks)):
+        await _run_until_stopped(
+            coord._hold_loop("ww", "number.ww_soll", on_value, "number", True,
+                             ENTITY_CONTROL_HOLD_ALWAYS)
+        )
+    return calls
+
+
+async def test_hold_always_refreshes_heat_pump_setpoint_at_most_hourly(
+    hass: HomeAssistant,
+):
+    """Feldfall: Warmwasser auf „immer", die Entity zeigt den Sollwert —
+    statt alle 30 s wird höchstens stündlich aufgefrischt."""
+    coord = make_coordinator(
+        hass, [_warmwater_number_device(ENTITY_CONTROL_HOLD_ALWAYS)],
+    )
+    coord.state.active_state["ww"] = True
+    coord.state.last_sse_event_at = time.time()
+    hass.states.async_set("number.ww_soll", "55.0", {"min": 10, "max": 60})
+    # Der Kommando-Write liegt gerade zurück.
+    coord.state.last_own_write_at["number.ww_soll"] = time.time()
+    assert await _run_ww_hold(hass, coord, 20) == []
+
+    # Eine Stunde später: genau eine Auffrischung, dann wieder Ruhe.
+    coord.state.last_own_write_at["number.ww_soll"] = (
+        time.time() - ALWAYS_SETPOINT_REFRESH_S - 1
+    )
+    calls = await _run_ww_hold(hass, coord, 20)
+    assert [c.data["value"] for c in calls] == [55.0]
+
+
+async def test_hold_always_still_repairs_a_visible_deviation_at_once(
+    hass: HomeAssistant,
+):
+    coord = make_coordinator(
+        hass, [_warmwater_number_device(ENTITY_CONTROL_HOLD_ALWAYS)],
+    )
+    coord.state.active_state["ww"] = True
+    coord.state.last_sse_event_at = time.time()
+    coord.state.last_own_write_at["number.ww_soll"] = time.time()
+    hass.states.async_set("number.ww_soll", "35.0", {"min": 10, "max": 60})
+    calls = await _run_ww_hold(hass, coord, 2)
+    assert [c.data["value"] for c in calls] == [55.0]
+
+
+async def test_hold_always_on_a_switch_is_not_limited(hass: HomeAssistant):
+    coord = make_coordinator(hass, [_heating_switch_device(ENTITY_CONTROL_HOLD_ALWAYS)])
+    coord.state.active_state["d1"] = True
+    coord.state.last_sse_event_at = time.time()
+    coord.state.last_own_write_at["switch.kessel"] = time.time()
+    hass.states.async_set("switch.kessel", "on")
+    calls = async_mock_service(hass, "switch", "turn_on")
+    with patch(_SLEEP, _breaking_sleep(5)):
+        await _run_until_stopped(
+            coord._hold_loop("d1", "switch.kessel", "on", "switch", True,
+                             ENTITY_CONTROL_HOLD_ALWAYS)
+        )
+    assert len(calls) == 4

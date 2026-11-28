@@ -200,6 +200,10 @@ Kuration bleiben im Backend, Box-Know-how im privaten Box-Repo.
   (`input_*`) und ALWAYS schreiben blind weiter — ein Helfer zeigt immer
   den letzten Write, nicht das Gerät. Der Steuer-Hold verdoppelt den
   Abstand je nicht übernommenem Re-Write bis `HOLD_REWRITE_MAX_BACKOFF`.
+  ALWAYS frischt einen Temperatur-Sollwert von Heizung/Warmwasser, der
+  schon steht, höchstens alle `ALWAYS_SETPOINT_REFRESH_S` auf (Feld: 2162
+  Writes/Tag auf ein WP-Register); Abweichung und neues Kommando
+  schreiben sofort.
 - **Schreib-Circuit-Breaker** `_write_allowed` (500/h je Entity) sitzt an
   jedem Write-Pfad. **Übersteuerungs-Erkennung nur im AUTO-Hold**
   (ALWAYS ist für Auto-Reset-Register): Drift ohne eigenen Write in

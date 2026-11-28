@@ -194,7 +194,7 @@
           "value_on": "Beispiele: SG-Ready „Erhöht“, Thermostat „heat“, Schalter „on“, Ziel-Temperatur „55“.",
           "value_off": "Beispiele: SG-Ready „Sperre“, Thermostat „off“, Schalter „off“, Ziel-Temperatur „40“.",
           "value_cool_on": "Nur bei Geräten mit Kühlfunktion, z. B. Thermostat „cool“. Leer = kein Kühlen.",
-          "entity_control_hold": "Auto/Immer: alle 30 s erneut schreiben — hält Geräte, die von selbst zurückspringen. Nur einmal: für Geräte, die bei jedem Schreiben eine Aktion auslösen."
+          "entity_control_hold": "Auto: nur neu schreiben, wenn das Gerät einen anderen Wert zeigt. Immer: regelmäßig neu schreiben, auch wenn der Wert schon steht — nur für Geräte, die von selbst zurückspringen, ohne es anzuzeigen. Nur einmal: für Geräte, die bei jedem Schreiben eine Aktion auslösen."
         }
       },
       "device_charge_mode_values": {
@@ -215,7 +215,7 @@
           "charge_mode_value_solar": "Option, die dem Solarüberschuss folgt (z. B. „Solar“, „Eco“).",
           "value_wallbox_phase_1": "Option, die 1-phasiges Laden erzwingt (z. B. \"nur 1\").",
           "value_wallbox_phase_3": "Option, die 3-phasiges Laden erzwingt (z. B. \"nur 3\"). \"Auto\" nicht mappen.",
-          "entity_control_hold": "Auto/Immer: alle 30 s erneut schreiben. Nur einmal: einmal schreiben."
+          "entity_control_hold": "Auto: nur bei Abweichung neu schreiben. Immer: regelmäßig neu schreiben. Nur einmal: einmal schreiben."
         }
       },
       "device_battery_values": {
@@ -294,8 +294,8 @@
       },
       "entity_control_hold": {
         "options": {
-          "auto": "Automatisch (alle 30 s)",
-          "always": "Immer (alle 30 s)",
+          "auto": "Automatisch (nur bei Abweichung)",
+          "always": "Immer (regelmäßig neu schreiben)",
           "never": "Nur einmal schreiben"
         }
       }
@@ -474,7 +474,7 @@
           "value_on": "Beispiele: SG-Ready „Erhöht“, Thermostat „heat“, Schalter „on“, Ziel-Temperatur „55“.",
           "value_off": "Beispiele: SG-Ready „Sperre“, Thermostat „off“, Schalter „off“, Ziel-Temperatur „40“.",
           "value_cool_on": "Nur bei Geräten mit Kühlfunktion, z. B. Thermostat „cool“. Leer = kein Kühlen.",
-          "entity_control_hold": "Auto/Immer: alle 30 s erneut schreiben. Nur einmal: einmal schreiben."
+          "entity_control_hold": "Auto: nur bei Abweichung neu schreiben. Immer: regelmäßig neu schreiben. Nur einmal: einmal schreiben."
         }
       },
       "add_device_charge_mode_values": {
@@ -495,7 +495,7 @@
           "charge_mode_value_solar": "Option, die dem Solarüberschuss folgt (z. B. „Solar“, „Eco“).",
           "value_wallbox_phase_1": "Option, die 1-phasiges Laden erzwingt (z. B. \"nur 1\").",
           "value_wallbox_phase_3": "Option, die 3-phasiges Laden erzwingt (z. B. \"nur 3\"). \"Auto\" nicht mappen.",
-          "entity_control_hold": "Auto/Immer: alle 30 s erneut schreiben. Nur einmal: einmal schreiben."
+          "entity_control_hold": "Auto: nur bei Abweichung neu schreiben. Immer: regelmäßig neu schreiben. Nur einmal: einmal schreiben."
         }
       },
       "add_device_battery_values": {
@@ -646,7 +646,7 @@
           "value_on": "Beispiele: SG-Ready „Erhöht“, Thermostat „heat“, Schalter „on“, Ziel-Temperatur „55“.",
           "value_off": "Beispiele: SG-Ready „Sperre“, Thermostat „off“, Schalter „off“, Ziel-Temperatur „40“.",
           "value_cool_on": "Nur bei Geräten mit Kühlfunktion, z. B. Thermostat „cool“. Leer = kein Kühlen.",
-          "entity_control_hold": "Auto/Immer: alle 30 s erneut schreiben. Nur einmal: einmal schreiben."
+          "entity_control_hold": "Auto: nur bei Abweichung neu schreiben. Immer: regelmäßig neu schreiben. Nur einmal: einmal schreiben."
         }
       },
       "edit_device_charge_mode_values": {
@@ -667,7 +667,7 @@
           "charge_mode_value_solar": "Option, die dem Solarüberschuss folgt (z. B. „Solar“, „Eco“).",
           "value_wallbox_phase_1": "Option, die 1-phasiges Laden erzwingt (z. B. \"nur 1\").",
           "value_wallbox_phase_3": "Option, die 3-phasiges Laden erzwingt (z. B. \"nur 3\"). \"Auto\" nicht mappen.",
-          "entity_control_hold": "Auto/Immer: alle 30 s erneut schreiben. Nur einmal: einmal schreiben."
+          "entity_control_hold": "Auto: nur bei Abweichung neu schreiben. Immer: regelmäßig neu schreiben. Nur einmal: einmal schreiben."
         }
       },
       "edit_device_battery_values": {
@@ -735,8 +735,8 @@
       },
       "entity_control_hold": {
         "options": {
-          "auto": "Automatisch (alle 30 s)",
-          "always": "Immer (alle 30 s)",
+          "auto": "Automatisch (nur bei Abweichung)",
+          "always": "Immer (regelmäßig neu schreiben)",
           "never": "Nur einmal schreiben"
         }
       }
